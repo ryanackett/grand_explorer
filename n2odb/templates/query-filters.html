@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% block head %}
+
+    <!--- basic page needs
+    ================================================== -->
+    <meta charset="utf-8">
+    <title>About - Calvin</title>
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <!-- mobile specific metas
+    ================================================== -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CSS
+    ================================================== -->
+    <link rel="stylesheet" href="css/vendor.css">
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- script
+    ================================================== -->
+    <script src="js/modernizr.js"></script>
+    <script defer src="js/fontawesome/all.min.js"></script>
+
+    <!-- favicons
+    ================================================== -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+
+</head>
+
+{% endblock %}
+{% block content %}
+
+
+
+    <!-- content
+    ================================================== -->
+    <section class="s-content">
+
+        <div class="row">
+            <div class="column large-12">
+
+                <article class="s-content__entry">
+
+                    <div class="s-content__media">
+                        <img src="images/thumbs/about/about-1050.jpg" 
+                                srcset="images/thumbs/about/about-2100.jpg 2100w, 
+                                        images/thumbs/about/about-1050.jpg 1050w, 
+                                        images/thumbs/about/about-525.jpg 525w" sizes="(max-width: 2100px) 100vw, 2100px" alt="">
+
+                    </div> <!-- end s-content__media -->
+
+                    <div class="s-content__entry-header">
+                        <h1 class="s-content__title">Which features are you interested in filtering by?</h1>
+                    </div> <!-- end s-content__entry-header -->
+
+                    <div class="s-content__primary">
+
+                        <div class="s-content__page-content" style="text-align: center;">
+
+                            <button id="ins" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Flux Instrument</button>
+                            <button id="env" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Environmental Data</button>
+                            <button id="mgmt" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Management</button>
+                            <button id="till" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Tillage</button>
+
+                            <button hidden=True id="fert" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Fertilizer Form</button>
+                            <button hidden=True id="cc" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Cover Crop</button>
+                            <button hidden=True id="cont" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Continent</button>
+                            <button hidden=True id="map" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Mean Annual Precip</button>
+                            <button hidden=True id="mat" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Mean Annual Temp</button>
+                            <button hidden=True id="soil" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Soil Texture</button>
+
+
+                            <br>
+                            <br>
+                            <br>
+                            <br>
+                            <br>
+
+                            <button id="submit" type="button" class="btn btn-outline-primary btn-lg" onclick="getSelected()">Submit</button>
+                        </div> <!-- end s-entry__page-content -->
+
+                    </div> <!-- end s-content__primary -->
+                </article> <!-- end entry -->
+
+            </div> <!-- end column -->
+        </div> <!-- end row -->
+
+    </section> <!-- end s-content -->
+
+<form id="selectedForm" method="POST" action="/get-data/">
+  {% csrf_token %}
+  <input type="hidden" name="selected" value=""/>
+</form>
+
+<script>
+    function setColor(btn) {
+        console.log("running")
+        console.log(btn.style.backgroundColor)
+        if (btn.style.backgroundColor == "#6c757d") {
+            btn.style.backgroundColor = "#82968c"
+            console.log("color changed")
+        }
+        else if (btn.style.backgroundColor == "rgb(108, 117, 125)") {
+            btn.style.backgroundColor = "#82968c"
+            console.log("color changed")
+        }
+        else {
+            btn.style.backgroundColor = "#6c757d"
+            console.log("color not changed")
+        }
+    }
+</script>
+
+<script>
+    function getSelected() {
+        btn = document.getElementById("submit")
+        btn.style.backgroundColor = "#007bff"
+
+        ins = document.getElementById("ins")
+        env = document.getElementById("env")
+        mgmt = document.getElementById("mgmt")
+        till = document.getElementById("till")
+        fert = document.getElementById("fert")
+        cc = document.getElementById("cc")
+        cont = document.getElementById("cont")
+        map = document.getElementById("map")
+        mat = document.getElementById("mat")
+        soil = document.getElementById("soil")
+
+        var selected = []
+        if (ins.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("ins")
+        }
+        if (mgmt.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("mgmt")
+        }
+        if (till.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("till")
+        }
+        if (fert.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("fert")
+        }
+        if (cc.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("cc")
+        }
+        if (cont.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("cont")
+        }
+        if (map.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("map")
+        }
+        if (mat.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("mat")
+        }
+        if (soil.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("soil")
+        }
+        if (env.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("env")
+        }
+        console.log(selected)
+
+        var selectedForm = document.forms['selectedForm'];
+        selectedForm.elements["selected"].value = selected;
+        document.getElementById("selectedForm").submit()
+    }
+</script>
+
+
+{% endblock %}

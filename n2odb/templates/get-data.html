@@ -1,0 +1,670 @@
+{% extends 'base.html' %}
+{% block head %}
+    {% load static %}
+
+    <!--- basic page needs
+    ================================================== -->
+    <meta charset="utf-8">
+    <title>About - Calvin</title>
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <!-- mobile specific metas
+    ================================================== -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CSS
+    ================================================== -->
+    <link rel="stylesheet" href="{% static 'css/mobiscroll.javascript.min.css' %}">
+
+    <!-- script
+    ================================================== -->
+    <script defer src="{% static 'js/fontawesome/all.min.js' %}"></script>
+    <script src="{% static 'js/mobiscroll.javascript.min.js' %}"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/bbbootstrap/libraries@main/choices.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/bbbootstrap/libraries@main/choices.min.js"></script>
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/mapdata/custom/world-robinson-highres.js"></script>
+    <script src="https://code.highcharts.com/maps/modules/map.js"></script>
+    <script src="https://code.highcharts.com/maps/modules/accessibility.js"></script>
+    <!-- Flag sprites service provided by Martijn Lafeber, https://github.com/lafeber/world-flags-sprite/blob/master/LICENSE -->
+    <link rel="stylesheet" type="text/css" href="https://github.com/downloads/lafeber/world-flags-sprite/flags32.css">
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script type="module">
+        import {
+            Grid,
+            html
+        } from "https://unpkg.com/gridjs?module";
+    </script>
+
+
+    <!-- favicons
+    ================================================== -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+
+    <style type="text/css">
+                body {
+            margin: 0;
+            padding: 0;
+        }
+
+        button {
+            display: inline-block;
+            margin: 5px 5px 0 0;
+            padding: 10px 30px;
+            outline: 0;
+            border: 0;
+            cursor: pointer;
+            background: #5185a8;
+            color: #fff;
+            text-decoration: none;
+            font-family: arial, verdana, sans-serif;
+            font-size: 14px;
+            font-weight: 100;
+        }
+
+        input {
+            width: 100%;
+            margin: 0 0 5px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 0;
+            font-family: arial, verdana, sans-serif;
+            font-size: 14px;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+        }
+
+        .mbsc-page {
+            padding: 1em;
+        }
+
+    </style>
+
+</head>
+
+{% endblock %}
+{% block content %}
+
+
+
+    <!-- content
+    ================================================== -->
+    <section class="s-content row" style="text-align:center; padding-bottom:5vh">
+        {% load get_dictionary_items %}
+        <div class="d-flex justify-content-center mt-100 multiselecter col-md-11">
+            {% for key in keys %}
+            <div class="col-md-2">
+                <select id="{{key}}" placeholder="Select {{ labels_dict|get_dictionary_items:key }}" multiple>
+                    {% for item in dropdown_dict|get_dictionary_items:key %}
+                    <option value={{item}}>{{item}}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="col-md-1">
+            <button id="submit" type="button" class="btn btn-outline-primary btn-lg" onclick="getSelected()">Submit</button>
+        </div>
+
+        <br>
+        <br>
+        <br>
+	</section>
+
+    <section class="s-content container" style="text-align:center; padding-bottom:5vh; max-width: 100vw">
+        <ul class="nav nav-pills mb-3 nav-fill" id="pills-tab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="pills-home-tab" data-bs-toggle="pill" data-bs-target="#pills-home" type="button" role="tab" aria-controls="pills-home" aria-selected="true">Map</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-profile-tab" data-bs-toggle="pill" data-bs-target="#pills-profile" type="button" role="tab" aria-controls="pills-profile" aria-selected="false">Data</button>
+            </li>
+        </ul>
+        <div class="tab-content row" id="pills-tabContent">
+            <div class="tab-pane fade show active" id="pills-home" role="tabpanel" aria-labelledby="pills-home-tab">
+                <div id="container" class="col-md-9"></div>
+                <div id="info" class="col-md-3">
+                    <h2></h2>
+                    <div class="subheader">Click Points to View Site Overview</div>
+                    <div id="country-chart"></div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="pills-profile" role="tabpanel" aria-labelledby="pills-profile-tab">
+                <div class="d-flex align-items-start">
+                    <div class="nav flex-column nav-pills me-3" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                        <button class="nav-link active" id="v-pills-home-tab" data-bs-toggle="pill" data-bs-target="#v-pills-home" type="button" role="tab" aria-controls="v-pills-home" aria-selected="true">Publication</button>
+                        <button class="nav-link" id="v-pills-profile-tab" data-bs-toggle="pill" data-bs-target="#v-pills-profile" type="button" role="tab" aria-controls="v-pills-profile" aria-selected="false">Site</button>
+                        <button class="nav-link" id="v-pills-messages-tab" data-bs-toggle="pill" data-bs-target="#v-pills-messages" type="button" role="tab" aria-controls="v-pills-messages" aria-selected="false">Treatment</button>
+                        <button class="nav-link" id="v-pills-settings-tab" data-bs-toggle="pill" data-bs-target="#v-pills-settings" type="button" role="tab" aria-controls="v-pills-settings" aria-selected="false">Replication</button>
+                    </div>
+                    <div class="tab-content" id="v-pills-tabContent">
+                        <div class="tab-pane fade show active" id="v-pills-home" role="tabpanel" aria-labelledby="v-pills-home-tab"></div>
+
+                            <!--
+                            <div class="table-responsive">
+                                <table class="table table-striped table-bordered mx-auto w-auto fixed_header">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">#</th>
+                                            <th scope="col">Title</th>
+                                            <th scope="col">Lead Author</th>
+                                            <th scope="col">Publication Year</th>
+                                            <th scope="col">Citation</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for row in Publication %}
+                                        <tr>
+                                            <th scope="row">{{row.PubID}}</th>
+                                            <td>{{row.PubTitle}}</td>
+                                            <td>{{row.LeadAuthor}}</td>
+                                            <td>{{row.PubYear}}</td>
+                                            <td>{{row.Citation}}</td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            -->
+                        <div class="tab-pane fade" id="v-pills-profile" role="tabpanel" aria-labelledby="v-pills-profile-tab"></div>
+
+                        <div class="tab-pane fade" id="v-pills-messages" role="tabpanel" aria-labelledby="v-pills-messages-tab"></div>
+
+                        <div class="tab-pane fade" id="v-pills-settings" role="tabpanel" aria-labelledby="v-pills-settings-tab"></div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <script>
+        var Publication = JSON.parse("{{json_pub|escapejs}}")
+        var Site = JSON.parse("{{json_site|escapejs}}")
+        var Treatment = JSON.parse("{{json_treatment|escapejs}}")
+        var Replication = JSON.parse("{{json_rep|escapejs}}")
+
+        var data = []
+        for (var i = 0; i < Publication.length; ++i) {
+            var newrow = [Publication[i].PubID, Publication[i].PubTitle, Publication[i].LeadAuthor, Publication[i].PubYear, Publication[i].Citation]
+            data.push(newrow)
+        }
+
+        window.pubtable = new gridjs.Grid({
+            columns: [{
+                name: "#",
+                width: '5%'
+            }, {
+                name: "Title",
+                width: '20%'
+            }, {
+                name: "Lead Author"
+            }, {
+                name: "Pub Year"
+            }, {
+                name: "Citation",
+                width: '50%'
+            }],
+            data: data,
+            search: true,
+            sort: true,
+            fixedHeader: true,
+            resizable: true,
+            height: '80vh',
+            style: {
+                th: {
+                  height: '5vh'
+                },
+            }
+        }).render(document.getElementById("v-pills-home"))
+
+        var data = []
+        for (var i = 0; i < Site.length; ++i) {
+            var newrow = [Site[i].SiteID, Site[i].Latitude, Site[i].Longitude, Site[i].MAP, Site[i].MAT]
+            data.push(newrow)
+        }
+
+        window.sitetable = new gridjs.Grid({
+            columns: ["#", "Latitude", "Longitude", "Mean Annual Precipitation", "Mean Annual Temperature"],
+            data: data,
+            search: true,
+            sort: true,
+            fixedHeader: true,
+            resizable: true,
+            height: '80vh',
+            style: {
+                th: {
+                  height: '5vh'
+                },
+            }
+        }).render(document.getElementById("v-pills-profile"))
+
+        var data = []
+        for (var i = 0; i < Treatment.length; ++i) {
+            var newrow = [Treatment[i].TreatmentID, Treatment[i].PrimaryCrop, Treatment[i].SecondaryCrop,
+                Treatment[i].CoverCrop, Treatment[i].Management, Treatment[i].Tillage, Treatment[i].FluxInstrument,]
+            data.push(newrow)
+        }
+
+        window.treatmenttable = new gridjs.Grid({
+            columns: ["#", "Primary Crop", "Secondary Crop", "Cover Crop", "Management", "Tillage", "Flux Instrument"],
+            data: data,
+            search: true,
+            sort: true,
+            fixedHeader: true,
+            resizable: true,
+            height: '80vh',
+            style: {
+                th: {
+                  height: '5vh'
+                },
+            }
+        }).render(document.getElementById("v-pills-messages"))
+
+        var data = []
+        for (var i = 0; i < Replication.length; ++i) {
+            var newrow = [Replication[i].RepID, Replication[i].Air_T_Meas.toString(), Replication[i].Precip_Meas.toString(),
+                Replication[i].Soil_T_Meas.toString(), Replication[i].VWC_Meas.toString(), Replication[i].WFPS_Meas.toString()]
+            data.push(newrow)
+        }
+
+        window.reptable = new gridjs.Grid({
+            columns: ["#", "Air Temp Measurement", "Precipitation Measurement", "Soil Temp Measurement", "VWC Measurement",
+                "WFPS Measurement"],
+            data: data,
+            search: true,
+            sort: true,
+            fixedHeader: true,
+            resizable: true,
+            height: '80vh',
+            style: {
+                th: {
+                  height: '5vh'
+                },
+            }
+        }).render(document.getElementById("v-pills-settings"))
+    </script>
+
+
+    <script>
+        function UpdateTable (update_data) {
+            console.log(update_data)
+            var Publication = JSON.parse(update_data.Pub_update)
+            var Site = JSON.parse(update_data.Site_update)
+            var Treatment = JSON.parse(update_data.Treatment_update)
+            var Replication = JSON.parse(update_data.Rep_update)
+
+            var data = []
+            for (var i = 0; i < Publication.length; ++i) {
+                var newrow = [Publication[i].PubID, Publication[i].PubTitle, Publication[i].LeadAuthor, Publication[i].PubYear, Publication[i].Citation]
+                data.push(newrow)
+            }
+            document.getElementById("v-pills-home") &&
+            window.pubtable.updateConfig({
+                data: data,
+            }).forceRender()
+
+            var data = []
+            for (var i = 0; i < Site.length; ++i) {
+                var newrow = [Site[i].SiteID, Site[i].Latitude, Site[i].Longitude, Site[i].MAP, Site[i].MAT]
+                data.push(newrow)
+            }
+            document.getElementById("v-pills-profile") &&
+            window.sitetable.updateConfig({
+                data: data,
+            }).forceRender()
+
+            var data = []
+            for (var i = 0; i < Treatment.length; ++i) {
+                var newrow = [Treatment[i].TreatmentID, Treatment[i].PrimaryCrop, Treatment[i].SecondaryCrop,
+                    Treatment[i].CoverCrop, Treatment[i].Management, Treatment[i].Tillage, Treatment[i].FluxInstrument,]
+                data.push(newrow)
+            }
+            document.getElementById("v-pills-messages") &&
+            window.treatmenttable.updateConfig({
+                data: data,
+            }).forceRender()
+
+            var data = []
+            for (var i = 0; i < Replication.length; ++i) {
+                var newrow = [Replication[i].RepID, Replication[i].Air_T_Meas.toString(), Replication[i].Precip_Meas.toString(),
+                    Replication[i].Soil_T_Meas.toString(), Replication[i].VWC_Meas.toString(), Replication[i].WFPS_Meas.toString()]
+                data.push(newrow)
+            }
+            document.getElementById("v-pills-settings") &&
+            window.reptable.updateConfig({
+                data: data,
+            }).forceRender()
+
+            // Update map
+            var siteData = JSON.parse(update_data.Site_update)
+            console.log(siteData)
+
+            sitePoints = []
+            for (let i = 0; i < siteData.length; i++) {
+                dict = {};
+
+                dict['lat'] = siteData[i]['Latitude']
+                dict['lon'] = siteData[i]['Longitude']
+                dict['title'] = siteData[i]['Longitude']
+                dict['map'] = siteData[i]['MAP']
+                dict['mat'] = siteData[i]['MAT']
+                sitePoints.push(dict)
+            }
+            console.log(sitePoints)
+            // window.mapChart.series[0].remove();
+            // window.mapChart.addSeries(sitePoints)
+            var chart = window.mapChart
+            //for (var i = chart.series.length-1; i>=0; i--) {
+            //    console.log(chart.series[i])
+            //    chart.series[2].remove();
+            //}
+
+            chart.series[2].setData(sitePoints)
+            chart.redraw();
+            console.log("finish")
+
+
+        }
+    </script>
+
+    <script>
+        function getSelected() {
+            var selectedArray = [];
+            selected = document.querySelectorAll('.choices__item')
+            console.log(selected)
+            console.log(selected.length)
+            for (let i = 0; i < selected.length; i++) {
+                console.log(selected[i])
+                item = selected[i]
+                value = item.getAttribute('role');
+                if (value == "option") {
+                    continue
+                }
+                else {
+                    if (item.hasAttribute('data-value')) {
+                        innertext = String(item.innerText)
+                        console.log()
+                        selectedValue = innertext.slice(0, -11)
+                        selectedArray.push(selectedValue)
+                    }
+                }
+            }
+            selectedList = selectedArray.toString()
+            console.log(selectedList)
+            var flag = 1;
+            const csrftoken = getCookie('csrftoken');
+            $.ajax({
+                type: "POST",
+                url:'/get-data/',
+                headers:{
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrftoken,
+                },
+                data:{selectedArray: selectedList},
+                success: UpdateTable
+            })
+            console.log(selectedArray)
+        }
+    </script>
+
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+
+    <script>
+        $(document).ready(function(){
+             var multipleCancelButton = new Choices('#ins', {
+                removeItemButton: true,
+                maxItemCount:5,
+                searchResultLimit:5,
+                renderChoiceLimit:5
+             });
+
+             var multipleCancelButton = new Choices('#mgmt', {
+                  removeItemButton: true,
+                  maxItemCount: 5,
+                  searchResultLimit: 5,
+                  renderChoiceLimit: 5
+             });
+
+             var multipleCancelButton = new Choices('#env', {
+                  removeItemButton: true,
+                  maxItemCount: 5,
+                  searchResultLimit: 5,
+                  renderChoiceLimit: 5
+             });
+
+             var multipleCancelButton = new Choices('#till', {
+                  removeItemButton: true,
+                  maxItemCount: 5,
+                  searchResultLimit: 5,
+                  renderChoiceLimit: 5
+             });
+
+             var multipleCancelButton = new Choices('#fert', {
+                  removeItemButton: true,
+                  maxItemCount: 5,
+                  searchResultLimit: 5,
+                  renderChoiceLimit: 5
+             });
+
+             var multipleCancelButton = new Choices('#map', {
+                  removeItemButton: true,
+                  maxItemCount: 5,
+                  searchResultLimit: 5,
+                  renderChoiceLimit: 5
+             });
+
+             var multipleCancelButton = new Choices('#mat', {
+                  removeItemButton: true,
+                  maxItemCount: 5,
+                  searchResultLimit: 5,
+                  renderChoiceLimit: 5
+             });
+
+
+         });
+    </script>
+<script>
+    (async () => {
+      const topology = await fetch(
+        'https://code.highcharts.com/mapdata/custom/world-highres.topo.json'
+      ).then(response => response.json());
+
+      var siteData = JSON.parse("{{json_site|escapejs}}")
+      console.log(siteData)
+
+      sitePoints = []
+      for (let i = 0; i < siteData.length; i++) {
+        dict = {};
+
+        dict['lat'] = siteData[i]['Latitude']
+        dict['lon'] = siteData[i]['Longitude']
+        dict['title'] = siteData[i]['Longitude']
+        dict['map'] = siteData[i]['MAP']
+        dict['mat'] = siteData[i]['MAT']
+        sitePoints.push(dict)
+      }
+      console.log(sitePoints)
+
+      // Wrap point.select to get to the total selected points
+      Highcharts.wrap(Highcharts.Point.prototype, 'select', function (proceed) {
+        proceed.apply(this, Array.prototype.slice.call(arguments, 1));
+        const points = this.series.chart.getSelectedPoints();
+        if (points.length) {
+          if (points.length === 1) {
+            document.querySelector('#info h2').innerHTML = "<h1 style='margin-top:0 !important' >Site Information</h1><br>";
+            document.querySelector('#info .subheader').innerHTML = points[0].title;
+            document.querySelector('#info .subheader').innerHTML = "<h2>Mean Annual Precipitation: " + points[0].map +
+                " mm</h2><br><h2>Mean Annual Temperature: " + points[0].mat + " C</h2>"
+          }
+
+        }
+      });
+
+      // Initiate the map chart
+      window.mapChart = Highcharts.mapChart('container', {
+        chart: {
+            map: topology
+        },
+        title: {
+          text: 'Research Sites Included in Query'
+        },
+        mapNavigation: {
+          enabled: true,
+          buttonOptions: {
+            verticalAlign: 'bottom'
+          }
+        },
+        accessibility: {
+            point: {
+                valueDescriptionFormat: '{xDescription}. Lat: {point.lat:.2f}, lon: {point.lon:.2f}.'
+            }
+        },
+        tooltip: {
+            headerFormat: '',
+            pointFormat: '<b>{point.name}</b><br>Lat: {point.lat}, Lon: {point.lon}'
+        },
+        colorAxis: {
+          type: 'logarithmic',
+          endOnTick: false,
+          startOnTick: false,
+          min: 50000
+        },
+        series: [{
+          name: 'Sites',
+            borderColor: '#A0A0A0',
+            nullColor: 'rgba(200, 200, 200, 0.3)',
+            showInLegend: false
+        }, {
+            name: 'Separators',
+            type: 'mapline',
+            nullColor: '#707070',
+            showInLegend: false,
+            enableMouseTracking: false,
+            accessibility: {
+                enabled: false
+            }
+        }, {
+            // Specify points using lat/lon
+            color: Highcharts.getOptions().colors[1],
+            type: 'mappoint',
+            name: 'Cities',
+            accessibility: {
+                point: {
+                    valueDescriptionFormat: '{xDescription}. Lat: {point.lat:.2f}, lon: {point.lon:.2f}.'
+                }
+            },
+          data: sitePoints,
+          allowPointSelect: true,
+          cursor: 'pointer',
+          borderWidth: 0.5
+        }]
+      });
+    })();
+</script>
+
+<style>
+    .multiselecter{max-width:100vw}
+    .choices__input{width:90% !important; text-align:center; margin-left:auto; margin-right:auto}
+    .choices__item{background-color:#82968c !important; border:#6c757d !important; max-height:4vh !important}
+    .choices__button{border-left: 1px solid #6c757d !important;max-height:3vh !important; padding-left:0px !important}
+</style>
+
+<style>
+    * {
+      font-family: sans-serif;
+    }
+
+    #wrapper {
+      height: 500px;
+      width: 1000px;
+      margin: 0 auto;
+      padding: 0;
+      overflow: visible;
+    }
+
+    #container {
+      float: left;
+      height: 75vh;
+      width: 60vw;
+      padding-left: 10vw;
+      margin: 5vh 0 0;
+    }
+
+    #info {
+      float: left;
+      width: 25vw;
+      padding-left: 20px;
+      margin: 5vh 0 0;
+    }
+
+    #info h2 {
+      display: inline;
+      font-size: 13pt;
+      text-transform: none;
+    }
+
+    #info .f32 .flag {
+      vertical-align: bottom !important;
+    }
+
+    #info h4 {
+      margin: 1em 0 0;
+      font-size: 12pt;
+      text-transform: none;
+    }
+
+    @media screen and (max-width: 1000px) {
+      #wrapper,
+      #container,
+      #info {
+        float: none;
+        width: 100%;
+        height: auto;
+        margin: 0.5em 0;
+        padding: 0;
+        border: none;
+      }
+    }
+    td, th {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .nav-pills {
+        background-color: #DCDCDC
+    }
+
+    .highcharts-title {
+        font-size: 3vh !important;
+        font-family: var(--font-2) !important
+    }
+</style>
+
+
+
+
+{% endblock %}

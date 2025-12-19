@@ -1,0 +1,213 @@
+
+{% extends 'base.html' %}
+{% block head %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById("page1").classList.add('current');
+            console.log("trying");
+            var masonry = document.getElementsByClassName("masonry");
+            console.log(masonry);
+            var pages = masonry.length;
+            console.log(pages);
+            var i = 0;
+            while(i < pages){
+                var currentMasonryId = masonry[i].id;
+                console.log(currentMasonryId)
+                if(currentMasonryId == "masonry1"){
+                    i += 1;
+                    continue;
+                }
+                console.log("here")
+                document.getElementById(currentMasonryId).style.display = "none";
+                i += 1;
+            }
+        }, false);
+        function scrollPage(goPage){
+            var changeInd = "change";
+            if(goPage == "next"){
+                var x = document.getElementsByClassName("pgn__num current");
+                console.log(x[0]);
+                var currentPageId = x[0].id;
+                var currentPage = currentPageId.slice(-1);
+                console.log(currentPage);
+                var goPageNum = Number(currentPage) + 1;
+                var goPage = "page" + String(goPageNum);
+                document.getElementById(goPage).classList.add('current');
+                document.getElementById(currentPageId).classList.remove('current');
+            } else if(goPage == "prev"){
+                var x = document.getElementsByClassName("pgn__num current");
+                console.log(x[0]);
+                var currentPageId = x[0].id;
+                var currentPage = currentPageId.slice(-1);
+                console.log(currentPage);
+                var goPageNum = Number(currentPage) - 1;
+                var goPage = "page" + String(goPageNum);
+                document.getElementById(goPage).classList.add('current');
+                document.getElementById(currentPageId).classList.remove('current');
+            } else {
+                var x = document.getElementsByClassName("pgn__num current");
+                console.log(x[0]);
+                var currentPageId = x[0].id;
+                if(goPage == currentPageId){
+                    console.log("nochange");
+                    changeInd = "nochange";
+                }
+                var currentPage = currentPageId.slice(-1);
+                console.log(currentPage);
+                document.getElementById(currentPageId).classList.remove('current');
+                document.getElementById(goPage).classList.add('current');
+            }
+            if (changeInd == "change"){
+                goMasonryNum = goPage.slice(-1);
+                prevMasonryNum = currentPage
+                console.log(prevMasonryNum);
+                goMasonryId = "masonry" + goMasonryNum;
+                prevMasonryId = "masonry" + prevMasonryNum;
+                goMasonryJQ = "#" + goMasonryId;
+                prevMasonryJQ = "#" + prevMasonryId;
+                console.log("prev = " + prevMasonryId);
+                console.log("show = " + goMasonryId);
+                if(Number(goMasonryNum) > Number(prevMasonryNum)){
+                    console.log("forward")
+                    $(prevMasonryJQ).toggle({ direction: "left" },350);
+                    $(goMasonryJQ).animate({width:'toggle'},350);
+                } else{
+                    console.log("backward")
+                    $(prevMasonryJQ).animate({width:'toggle'},350);
+                    $(goMasonryJQ).toggle({ direction: "right" },350);
+                }
+                window.location.href = "#blog-section"
+            }
+        }
+    </script>
+    <style>
+        /* All the snapping stuff */
+        .scroll-container {
+          width: 90vw;
+          max-height: 30rem;
+          margin: 3rem auto;
+          display: flex;
+          overflow-x: scroll;
+          scroll-snap-type: x mandatory;
+        }
+
+        .snap-section {
+          height: 100%;
+          flex: 0 0 100%;
+          scroll-snap-align: center;
+        }
+    </style>
+{% endblock %}
+{% block content %}
+    <!-- hero
+    ================================================== -->
+    <section id="hero" class="container-fluid" style="height:105vh">
+        <section class="row" style="height:105vh">
+            <div class="col-md-8">
+                <img src="static/images/farms.jpg" style="height:100vh">
+
+            </div> <!-- end s-hero__slide -->
+            <div class="col-md-3" style="padding:1.5vw">
+                <div class="row h-50" >
+                    <div class="column"></div>
+                </div>
+                <div class="row" style="margin-top:auto;margin-bottom:0">
+                    <h1 class="display-1" style="color:white; font-size:8rem">Global <br>Repository for<br>Agricultural <br>N<sub>2</sub>O <br>Data</h1>
+                </div>
+            </div>
+            <div class="s-hero__social hide-on-mobile-small col-md-1">
+                <p>Follow  ------</p>
+                <br>
+                <br>
+                <br>
+                <ul class="s-hero__social-icons">
+                    <li><a href="https://twitter.com/ryan_ackett"><i class="fab fa-twitter" aria-hidden="true"></i></a></li>
+                    <li><a href="#0"><i class="fab fa-instagram" aria-hidden="true"></i></a></li>
+                </ul>
+            </div>
+        </section> <!-- end s-hero__slider -->
+
+
+
+        <!--  Home page slider if I want to add more landing pages
+        <div class="nav-arrows s-hero__nav-arrows">
+            <button class="s-hero__arrow-prev">
+                <svg viewBox="0 0 15 15" xmlns="http://www.w3.org/2000/svg" width="15" height="15"><path d="M1.5 7.5l4-4m-4 4l4 4m-4-4H14" stroke="currentColor"></path></svg>
+            </button>
+            <button class="s-hero__arrow-next">
+               <svg viewBox="0 0 15 15" xmlns="http://www.w3.org/2000/svg" width="15" height="15"><path d="M13.5 7.5l-4-4m4 4l-4 4m4-4H1" stroke="currentColor"></path></svg>
+            </button>
+        </div>-->
+
+    </section>
+
+
+    <!-- content
+    ================================================== -->
+    <section id="page1" class="s-content s-content--no-top-padding" id="blog-section">
+
+        <!-- masonry
+        ================================================== -->
+        <div class="s-bricks" style="padding: 0 !important;">
+            <container>
+                {% for limit in limits_list %}
+                <div id="masonry{{limit.pagenum}}" class="masonry" style="margin-bottom: 0 !important;">
+                    <div class="bricks-wrapper h-group">
+                        <div class="grid-sizer"></div>
+                        <div class="lines">
+                            <span></span>
+                        </div>
+                        {% with stringEnd=limit.end|stringformat:"s" %}
+                        {% with stringStart=limit.start|stringformat:"s" %}
+                        {% with sliceStr=stringStart|add:":"|add:stringEnd %}
+                        {% for summary in summaries|slice:sliceStr %}
+                        <article class="brick entry" data-aos="fade-up">
+                            <div class="entry__thumb">
+                                <a href="{{ summary.slug }}" class="thumb-link">
+                                    <img src="{{ summary.thumbnail.url }}">
+                                </a>
+                            </div> <!-- end entry__thumb -->
+                            <div class="entry__text">
+                                <div class="entry__header">
+                                    <h1 class="entry__title"><a href="entries/{{ summary.slug }}.html">{{ summary.title }}</a></h1>
+
+                                    <div class="entry__meta">
+                                        <span class="byline">By:
+                                            <span class='author'>
+                                                <a href="https://www.dreamhost.com/r.cgi?287326">{{ summary.author }}</a>
+                                            </span>
+                                        </span>
+                                        <span class="cat-links">
+                                            <p>{{ summary.date }}</p>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="entry__excerpt">
+                                    <p>
+                                    {{ summary.blurb }}
+                                    </p>
+                                </div>
+                                <a class="entry__more-link" href="{{ summary.slug }}">Learn More</a>
+                            </div> <!-- end entry__text -->
+                        </article> <!-- end article -->
+                        {% endfor %}
+                        {% endwith %}
+                        {% endwith %}
+                        {% endwith %}
+                    </div> <!-- end brick-wrapper -->
+
+                </div> <!-- end masonry -->
+                {% endfor %}
+            </container>
+
+
+        </div> <!-- end s-bricks -->
+
+    </section> <!-- end s-content -->
+
+{% endblock %}
+
+
+
+
+
