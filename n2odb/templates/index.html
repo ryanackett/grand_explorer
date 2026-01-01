@@ -97,24 +97,49 @@
           scroll-snap-align: center;
         }
     </style>
+    <style>
+        .big-cap {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+    </style>
+    <style>
+        /* Replace .class-name-of-random-ul with the actual class you found */
+        .slick-dots {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            pointer-events: none !important;
+        }
+    </style>
 {% endblock %}
 {% block content %}
     <!-- hero
     ================================================== -->
     <section id="hero" class="container-fluid" style="height:105vh">
-        <section class="row" style="height:105vh">
-            <div class="col-md-8">
-                <img src="static/images/farms.jpg" style="height:100vh">
-
-            </div> <!-- end s-hero__slide -->
-            <div class="col-md-3" style="padding:1.5vw">
-                <div class="row h-50" >
-                    <div class="column"></div>
-                </div>
-                <div class="row" style="margin-top:auto;margin-bottom:0">
-                    <h1 class="display-1" style="color:white; font-size:8rem">Global <br>Repository for<br>Agricultural <br>N<sub>2</sub>O <br>Data</h1>
+        <div class="s-hero__slider">
+            <div class="s-hero__slide">
+                <div class="s-hero__slide-bg" style="background-image: url('static/images/farms.jpg');"></div>    
+                <div class="row s-hero__slide-content animate-this">
+                    <div class="column">
+                        <h1 class="s-hero__slide-text">
+                            <a>
+                                <span class="big-cap">G</span>lobal <br> 
+                                <span class="big-cap">R</span>epository for <br> 
+                                <span class="big-cap">A</span>gricultural <br> 
+                                <span class="big-cap">N</span>2O <br> 
+                                <span class="big-cap">D</span>ata
+                            </a>
+                        </h1>
+                    </div>
                 </div>
             </div>
+
+            </div> <!-- end s-hero__slide -->
+
+
             <div class="s-hero__social hide-on-mobile-small col-md-1">
                 <p>Follow  ------</p>
                 <br>
@@ -140,70 +165,6 @@
         </div>-->
 
     </section>
-
-
-    <!-- content
-    ================================================== -->
-    <section id="page1" class="s-content s-content--no-top-padding" id="blog-section">
-
-        <!-- masonry
-        ================================================== -->
-        <div class="s-bricks" style="padding: 0 !important;">
-            <container>
-                {% for limit in limits_list %}
-                <div id="masonry{{limit.pagenum}}" class="masonry" style="margin-bottom: 0 !important;">
-                    <div class="bricks-wrapper h-group">
-                        <div class="grid-sizer"></div>
-                        <div class="lines">
-                            <span></span>
-                        </div>
-                        {% with stringEnd=limit.end|stringformat:"s" %}
-                        {% with stringStart=limit.start|stringformat:"s" %}
-                        {% with sliceStr=stringStart|add:":"|add:stringEnd %}
-                        {% for summary in summaries|slice:sliceStr %}
-                        <article class="brick entry" data-aos="fade-up">
-                            <div class="entry__thumb">
-                                <a href="{{ summary.slug }}" class="thumb-link">
-                                    <img src="{{ summary.thumbnail.url }}">
-                                </a>
-                            </div> <!-- end entry__thumb -->
-                            <div class="entry__text">
-                                <div class="entry__header">
-                                    <h1 class="entry__title"><a href="entries/{{ summary.slug }}.html">{{ summary.title }}</a></h1>
-
-                                    <div class="entry__meta">
-                                        <span class="byline">By:
-                                            <span class='author'>
-                                                <a href="https://www.dreamhost.com/r.cgi?287326">{{ summary.author }}</a>
-                                            </span>
-                                        </span>
-                                        <span class="cat-links">
-                                            <p>{{ summary.date }}</p>
-                                        </span>
-                                    </div>
-                                </div>
-                                <div class="entry__excerpt">
-                                    <p>
-                                    {{ summary.blurb }}
-                                    </p>
-                                </div>
-                                <a class="entry__more-link" href="{{ summary.slug }}">Learn More</a>
-                            </div> <!-- end entry__text -->
-                        </article> <!-- end article -->
-                        {% endfor %}
-                        {% endwith %}
-                        {% endwith %}
-                        {% endwith %}
-                    </div> <!-- end brick-wrapper -->
-
-                </div> <!-- end masonry -->
-                {% endfor %}
-            </container>
-
-
-        </div> <!-- end s-bricks -->
-
-    </section> <!-- end s-content -->
 
 {% endblock %}
 

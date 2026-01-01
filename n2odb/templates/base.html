@@ -61,12 +61,21 @@
 
                 <h3 class="s-header__nav-heading h6">Navigate to</h3>
 
-                <ul class="s-header__nav">
-                    <li class="current" style="margin-left:0"><a href="/" title="">ANDES Home</a></li>
-                    <li> </li><li> </li>
-                    <li><a href="/query-filters" class="{{smoothscroll}}" title="">Get Data</a></li>
-                    <li><a href="#0" title="">Submit Data</a></li>
-                    <li class="has-children">
+                <ul class="s-header__nav d-flex align-items-center w-100 list-unstyled mb-0">
+        
+                    <li class="current">
+                        <a href="/" title="" class="text-decoration-none font-weight-bold">GRAND Explorer</a>
+                    </li>
+
+                    <li class="ms-auto">
+                        <a href="/query-filters" class="{{smoothscroll}}" title="">Explore Data</a>
+                    </li>
+                    
+                    <li class="mx-4"> 
+                        <a href="#0" title="">Submit Data</a>
+                    </li>
+
+                    <li class="has-children position-relative me-auto">
                         <a href="#0" title="">About</a>
                         <ul class="sub-menu">
                             <li><a href="about">About</a></li>
@@ -74,11 +83,17 @@
                             <li><a href="category.html">Contact</a></li>
                         </ul>
                     </li>
+
+                    <li class="d-flex align-items-center">
+                        <script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#72a4f2', 'D1D21RDPZR');kofiwidget2.draw();</script> 
+                    </li>
+
                 </ul>
 
                 <a href="#0" title="Close Menu" class="s-header__overlay-close close-mobile-menu">Close</a>
-
+                
             </nav> <!-- end s-header__nav-wrap -->
+            
 
         </div> <!-- end s-header__navigation -->
 

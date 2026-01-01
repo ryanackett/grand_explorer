@@ -1,0 +1,32 @@
+services:
+  db:
+    image: mysql:8.0
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./db_data:/var/lib/mysql
+    env_file:
+      - ../.env
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: ..
+    #working_dir: /workspaces/fluxapp
+    command: sleep infinity
+    #command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ..:/workspaces/fluxapp:Z
+    ports:
+      - "8001:8000"
+    env_file:
+      - ../.env
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mysql_data:

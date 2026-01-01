@@ -96,27 +96,32 @@
     ================================================== -->
     <section class="s-content row" style="text-align:center; padding-bottom:5vh">
         {% load get_dictionary_items %}
-        <div class="d-flex justify-content-center mt-100 multiselecter col-md-11">
+        <div class="d-flex justify-content-center flex-wrap mt-100 multiselecter col-md-11">
             {% for key in keys %}
-            <div class="col-md-2">
-                <select id="{{key}}" placeholder="Select {{ labels_dict|get_dictionary_items:key }}" multiple>
-                    {% for item in dropdown_dict|get_dictionary_items:key %}
-                    <option value={{item}}>{{item}}</option>
-                    {% endfor %}
-                </select>
-            </div>
+                <div class="col-md-3 mb-3"> <select id="{{key}}" placeholder="Select {{ labels_dict|get_dictionary_items:key }}" multiple>
+                        {% for item in dropdown_dict|get_dictionary_items:key %}
+                        <option value={{item}}>{{item}}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if forloop.counter|divisibleby:3 and not forloop.last %}
+                    <div class="w-100"></div>
+                {% endif %}
             {% endfor %}
+
+            <div class="col-md-1">
+                <button id="submit" type="button" class="btn btn-outline-primary btn-lg ms-2" onclick="getSelected()">Submit</button>
+            </div>
         </div>
-        <div class="col-md-1">
-            <button id="submit" type="button" class="btn btn-outline-primary btn-lg" onclick="getSelected()">Submit</button>
-        </div>
+        
 
         <br>
         <br>
         <br>
 	</section>
 
-    <section class="s-content container" style="text-align:center; padding-bottom:5vh; max-width: 100vw">
+    <section class="s-content container" style="text-align:center; padding-bottom:5vh; padding-top:0vh; max-width: 100vw">
         <ul class="nav nav-pills mb-3 nav-fill" id="pills-tab" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="pills-home-tab" data-bs-toggle="pill" data-bs-target="#pills-home" type="button" role="tab" aria-controls="pills-home" aria-selected="true">Map</button>
@@ -456,32 +461,18 @@
                   renderChoiceLimit: 5
              });
 
-             var multipleCancelButton = new Choices('#till', {
-                  removeItemButton: true,
-                  maxItemCount: 5,
-                  searchResultLimit: 5,
-                  renderChoiceLimit: 5
-             });
-
              var multipleCancelButton = new Choices('#fert', {
                   removeItemButton: true,
-                  maxItemCount: 5,
-                  searchResultLimit: 5,
-                  renderChoiceLimit: 5
+                  maxItemCount: 15,
+                  searchResultLimit: 15,
+                  renderChoiceLimit: 15
              });
 
-             var multipleCancelButton = new Choices('#map', {
+             var multipleCancelButton = new Choices('#crop', {
                   removeItemButton: true,
-                  maxItemCount: 5,
-                  searchResultLimit: 5,
-                  renderChoiceLimit: 5
-             });
-
-             var multipleCancelButton = new Choices('#mat', {
-                  removeItemButton: true,
-                  maxItemCount: 5,
-                  searchResultLimit: 5,
-                  renderChoiceLimit: 5
+                  maxItemCount: 15,
+                  searchResultLimit: 15,
+                  renderChoiceLimit: 15
              });
 
 

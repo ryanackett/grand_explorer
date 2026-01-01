@@ -63,15 +63,17 @@
 
                             <button id="ins" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Flux Instrument</button>
                             <button id="env" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Environmental Data</button>
-                            <button id="mgmt" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Management</button>
-                            <button id="till" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Tillage</button>
+                            <button id="cont" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Continent</button>
+                            <button id="crop" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Crop</button>
+                            <button id="mgmt" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Sustainable Management</button>
+                            <button id="fert" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Fertilizer Type</button>
 
                             <button hidden=True id="fert" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Fertilizer Form</button>
-                            <button hidden=True id="cc" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Cover Crop</button>
+                            <button hidden=True id="crop" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Crop</button>
                             <button hidden=True id="cont" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Continent</button>
-                            <button hidden=True id="map" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Mean Annual Precip</button>
-                            <button hidden=True id="mat" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Mean Annual Temp</button>
-                            <button hidden=True id="soil" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Soil Texture</button>
+                            <button hidden=True id="ins" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Instrument</button>
+                            <button hidden=True id="env" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Environmental Data</button>
+                            <button hidden=True id="mgmt" type="button" class="btn btn-secondary" style="background-color:#6c757d" onclick="setColor(this)">Sustainable Management</button>
 
 
                             <br>
@@ -123,13 +125,9 @@
         ins = document.getElementById("ins")
         env = document.getElementById("env")
         mgmt = document.getElementById("mgmt")
-        till = document.getElementById("till")
         fert = document.getElementById("fert")
-        cc = document.getElementById("cc")
+        crop = document.getElementById("crop")
         cont = document.getElementById("cont")
-        map = document.getElementById("map")
-        mat = document.getElementById("mat")
-        soil = document.getElementById("soil")
 
         var selected = []
         if (ins.style.backgroundColor == "rgb(130, 150, 140)") {
@@ -138,26 +136,14 @@
         if (mgmt.style.backgroundColor == "rgb(130, 150, 140)") {
             selected = selected.concat("mgmt")
         }
-        if (till.style.backgroundColor == "rgb(130, 150, 140)") {
-            selected = selected.concat("till")
-        }
         if (fert.style.backgroundColor == "rgb(130, 150, 140)") {
             selected = selected.concat("fert")
         }
-        if (cc.style.backgroundColor == "rgb(130, 150, 140)") {
-            selected = selected.concat("cc")
+        if (crop.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("crop")
         }
         if (cont.style.backgroundColor == "rgb(130, 150, 140)") {
             selected = selected.concat("cont")
-        }
-        if (map.style.backgroundColor == "rgb(130, 150, 140)") {
-            selected = selected.concat("map")
-        }
-        if (mat.style.backgroundColor == "rgb(130, 150, 140)") {
-            selected = selected.concat("mat")
-        }
-        if (soil.style.backgroundColor == "rgb(130, 150, 140)") {
-            selected = selected.concat("soil")
         }
         if (env.style.backgroundColor == "rgb(130, 150, 140)") {
             selected = selected.concat("env")
