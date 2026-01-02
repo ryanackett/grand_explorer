@@ -46,307 +46,147 @@
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <link rel="manifest" href="site.webmanifest">
 
-    <style type="text/css">
-                body {
-            margin: 0;
-            padding: 0;
-        }
+   <style type="text/css">
+        /* --- GLOBAL BASICS --- */
+        body { margin: 0; padding: 0; overflow-x: hidden; }
 
+        /* Buttons & Inputs */
         button {
-            display: inline-block;
-            margin: 5px 5px 0 0;
-            padding: 10px 30px;
-            outline: 0;
-            border: 0;
-            cursor: pointer;
-            background: #5185a8;
-            color: #fff;
-            text-decoration: none;
-            font-family: arial, verdana, sans-serif;
-            font-size: 14px;
-            font-weight: 100;
+            display: inline-block; margin: 5px 5px 0 0; padding: 10px 30px;
+            outline: 0; border: 0; cursor: pointer; background: #5185a8;
+            color: #fff; text-decoration: none; font-family: arial, sans-serif;
+            font-size: 14px; font-weight: 100;
         }
-
         input {
-            width: 100%;
-            margin: 0 0 5px 0;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 0;
-            font-family: arial, verdana, sans-serif;
-            font-size: 14px;
+            width: 100%; margin: 0 0 5px 0; padding: 10px;
+            border: 1px solid #ccc; font-family: arial, sans-serif;
+            font-size: 14px; box-sizing: border-box; -webkit-appearance: none;
+        }
+
+        /* --- RESPONSIVE LAYOUT LOGIC --- */
+        
+        /* DEFAULT (MOBILE): The "Stacked" View */
+        .map-row {
+            height: auto !important;
+            overflow: visible !important;
+        }
+        .map-col {
+            height: 50vh;  
+            min-height: 400px;
+        }
+        .sidebar-col {
+            height: auto !important; 
+            overflow: visible !important; 
+        }
+
+        /* DESKTOP (Screens > 768px): The "Locked" View */
+        @media (min-width: 768px) {
+            .map-row {
+                height: 95vh !important;
+                overflow: hidden !important;
+            }
+            .map-col { height: 100%; }
+            .sidebar-col {
+                height: 100% !important; 
+                overflow-y: auto !important; 
+            }
+        }
+
+        /* --- SIDEBAR & CARD STYLING --- */
+        
+        #info, .info-panel {
+            width: 100% !important;
+            padding: 20px;
             box-sizing: border-box;
-            -webkit-appearance: none;
+            background: #f8f9fa;
+            border-left: 1px solid #dee2e6;
+            
+            /* 1. Force Global Left Align */
+            text-align: left !important; 
+            align-items: flex-start !important;
         }
 
-        .mbsc-page {
-            padding: 1em;
+        /* Header Card */
+        .exp-header {
+            background: white; padding: 20px; border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 25px;
+            border-top: 4px solid #2c3e50; width: 100%; box-sizing: border-box;
+            text-align: left; /* Ensure text inside stays left */
+        }
+        .exp-title {
+            font-size: 1.5rem; font-weight: 700; color: #2c3e50;
+            margin-bottom: 10px; line-height: 1.3;
+        }
+        /* FIX: HEADER ICONS SPACING */
+        /* 1. Add space after EVERY icon in the header (between icon and its number) */
+        .stat-badge {
+            margin-right: 10px; /* Increased from 5px to 8px for better spacing */
         }
 
+        /* Treatment Cards */
+        .treatment-card {
+            background: white; border-left: 5px solid #5185a8;
+            padding: 15px; border-radius: 6px; margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08); width: 100%; box-sizing: border-box;
+            
+            /* 2. Flexbox alignment fix */
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start; /* Forces content to the left */
+            text-align: left;
+        }
+
+        .t-name {
+            font-weight: 700; 
+            font-size: 1.3rem; 
+            color: #333;
+            margin-bottom: 0; /* Remove bottom margin so it aligns with icons */
+            line-height: 1.2;
+        }
+        .t-header {
+            display: flex;
+            justify-content: space-between; /* Pushes Name left, Icons right */
+            align-items: center;            /* Vertically centers them */
+            width: 100%;
+            margin-bottom: 8px;             /* Space below the header */
+            border-bottom: 1px solid #f0f0f0; /* Optional: Subtle divider line */
+            padding-bottom: 5px;
+        }
+        .t-actions {
+            display: flex;
+            gap: 12px;
+            white-space: nowrap; /* Prevents icons from wrapping vertically */
+        }
+
+        .action-icon {
+            font-size: 1.7rem;
+            cursor: pointer;
+            color: #5185a8;
+            transition: all 0.2s;
+        }
+        .action-icon:hover {
+            color: #2c3e50;
+            transform: scale(1.15);
+        }
+
+        .t-detail {
+            font-size: 1.3rem; color: #555; margin-top: 6px; /* A bit more breathing room */
+            display: flex; 
+            align-items: center; /* Vertically center icon with text */
+            width: 100%;
+        }
+
+        /* 3. Icon Spacing Fix */
+        .icon-width { 
+            width: 20px;        /* Fixed width for alignment */
+            text-align: center; 
+            margin-right: 15px; /* Increased from 5px to 15px for cleaner look */
+            color: #2c7bb6;     /* Optional: Tint icons blue */
+        }
     </style>
 
-</head>
-
-{% endblock %}
-{% block content %}
-
-
-
-    <!-- content
-    ================================================== -->
-    <section class="s-content row" style="text-align:center; padding-bottom:5vh">
-        {% load get_dictionary_items %}
-        <div class="d-flex justify-content-center flex-wrap mt-100 multiselecter col-md-11">
-            {% for key in keys %}
-                <div class="col-md-3 mb-3"> <select id="{{key}}" placeholder="Select {{ labels_dict|get_dictionary_items:key }}" multiple>
-                        {% for item in dropdown_dict|get_dictionary_items:key %}
-                        <option value={{item}}>{{item}}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                {% if forloop.counter|divisibleby:3 and not forloop.last %}
-                    <div class="w-100"></div>
-                {% endif %}
-            {% endfor %}
-
-            <div class="col-md-1">
-                <button id="submit" type="button" class="btn btn-outline-primary btn-lg ms-2" onclick="getSelected()">Submit</button>
-            </div>
-        </div>
-        
-
-        <br>
-        <br>
-        <br>
-	</section>
-
-    <section class="s-content container" style="text-align:center; padding-bottom:5vh; padding-top:0vh; max-width: 100vw">
-        <ul class="nav nav-pills mb-3 nav-fill" id="pills-tab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="pills-home-tab" data-bs-toggle="pill" data-bs-target="#pills-home" type="button" role="tab" aria-controls="pills-home" aria-selected="true">Map</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="pills-profile-tab" data-bs-toggle="pill" data-bs-target="#pills-profile" type="button" role="tab" aria-controls="pills-profile" aria-selected="false">Data</button>
-            </li>
-        </ul>
-        <div class="tab-content row" id="pills-tabContent">
-            <div class="tab-pane fade show active" id="pills-home" role="tabpanel" aria-labelledby="pills-home-tab">
-                <div id="container" class="col-md-9"></div>
-                <div id="info" class="col-md-3">
-                    <h2></h2>
-                    <div class="subheader">Click Points to View Site Overview</div>
-                    <div id="country-chart"></div>
-                </div>
-            </div>
-            <div class="tab-pane fade" id="pills-profile" role="tabpanel" aria-labelledby="pills-profile-tab">
-                <div class="d-flex align-items-start">
-                    <div class="nav flex-column nav-pills me-3" id="v-pills-tab" role="tablist" aria-orientation="vertical">
-                        <button class="nav-link active" id="v-pills-home-tab" data-bs-toggle="pill" data-bs-target="#v-pills-home" type="button" role="tab" aria-controls="v-pills-home" aria-selected="true">Publication</button>
-                        <button class="nav-link" id="v-pills-profile-tab" data-bs-toggle="pill" data-bs-target="#v-pills-profile" type="button" role="tab" aria-controls="v-pills-profile" aria-selected="false">Site</button>
-                        <button class="nav-link" id="v-pills-messages-tab" data-bs-toggle="pill" data-bs-target="#v-pills-messages" type="button" role="tab" aria-controls="v-pills-messages" aria-selected="false">Treatment</button>
-                        <button class="nav-link" id="v-pills-settings-tab" data-bs-toggle="pill" data-bs-target="#v-pills-settings" type="button" role="tab" aria-controls="v-pills-settings" aria-selected="false">Replication</button>
-                    </div>
-                    <div class="tab-content" id="v-pills-tabContent">
-                        <div class="tab-pane fade show active" id="v-pills-home" role="tabpanel" aria-labelledby="v-pills-home-tab"></div>
-
-                            <!--
-                            <div class="table-responsive">
-                                <table class="table table-striped table-bordered mx-auto w-auto fixed_header">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">#</th>
-                                            <th scope="col">Title</th>
-                                            <th scope="col">Lead Author</th>
-                                            <th scope="col">Publication Year</th>
-                                            <th scope="col">Citation</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                    {% for row in Publication %}
-                                        <tr>
-                                            <th scope="row">{{row.PubID}}</th>
-                                            <td>{{row.PubTitle}}</td>
-                                            <td>{{row.LeadAuthor}}</td>
-                                            <td>{{row.PubYear}}</td>
-                                            <td>{{row.Citation}}</td>
-                                        </tr>
-                                    {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                            -->
-                        <div class="tab-pane fade" id="v-pills-profile" role="tabpanel" aria-labelledby="v-pills-profile-tab"></div>
-
-                        <div class="tab-pane fade" id="v-pills-messages" role="tabpanel" aria-labelledby="v-pills-messages-tab"></div>
-
-                        <div class="tab-pane fade" id="v-pills-settings" role="tabpanel" aria-labelledby="v-pills-settings-tab"></div>
-
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </section>
-
-    <script>
-        var Publication = JSON.parse("{{json_pub|escapejs}}")
-        var Site = JSON.parse("{{json_site|escapejs}}")
-        var Treatment = JSON.parse("{{json_treatment|escapejs}}")
-        var Replication = JSON.parse("{{json_rep|escapejs}}")
-
-        var data = []
-        for (var i = 0; i < Publication.length; ++i) {
-            var newrow = [Publication[i].PubID, Publication[i].PubTitle, Publication[i].LeadAuthor, Publication[i].PubYear, Publication[i].Citation]
-            data.push(newrow)
-        }
-
-        window.pubtable = new gridjs.Grid({
-            columns: [{
-                name: "#",
-                width: '5%'
-            }, {
-                name: "Title",
-                width: '20%'
-            }, {
-                name: "Lead Author"
-            }, {
-                name: "Pub Year"
-            }, {
-                name: "Citation",
-                width: '50%'
-            }],
-            data: data,
-            search: true,
-            sort: true,
-            fixedHeader: true,
-            resizable: true,
-            height: '80vh',
-            style: {
-                th: {
-                  height: '5vh'
-                },
-            }
-        }).render(document.getElementById("v-pills-home"))
-
-        var data = []
-        for (var i = 0; i < Site.length; ++i) {
-            var newrow = [Site[i].SiteID, Site[i].Latitude, Site[i].Longitude, Site[i].MAP, Site[i].MAT]
-            data.push(newrow)
-        }
-
-        window.sitetable = new gridjs.Grid({
-            columns: ["#", "Latitude", "Longitude", "Mean Annual Precipitation", "Mean Annual Temperature"],
-            data: data,
-            search: true,
-            sort: true,
-            fixedHeader: true,
-            resizable: true,
-            height: '80vh',
-            style: {
-                th: {
-                  height: '5vh'
-                },
-            }
-        }).render(document.getElementById("v-pills-profile"))
-
-        var data = []
-        for (var i = 0; i < Treatment.length; ++i) {
-            var newrow = [Treatment[i].TreatmentID, Treatment[i].PrimaryCrop, Treatment[i].SecondaryCrop,
-                Treatment[i].CoverCrop, Treatment[i].Management, Treatment[i].Tillage, Treatment[i].FluxInstrument,]
-            data.push(newrow)
-        }
-
-        window.treatmenttable = new gridjs.Grid({
-            columns: ["#", "Primary Crop", "Secondary Crop", "Cover Crop", "Management", "Tillage", "Flux Instrument"],
-            data: data,
-            search: true,
-            sort: true,
-            fixedHeader: true,
-            resizable: true,
-            height: '80vh',
-            style: {
-                th: {
-                  height: '5vh'
-                },
-            }
-        }).render(document.getElementById("v-pills-messages"))
-
-        var data = []
-        for (var i = 0; i < Replication.length; ++i) {
-            var newrow = [Replication[i].RepID, Replication[i].Air_T_Meas.toString(), Replication[i].Precip_Meas.toString(),
-                Replication[i].Soil_T_Meas.toString(), Replication[i].VWC_Meas.toString(), Replication[i].WFPS_Meas.toString()]
-            data.push(newrow)
-        }
-
-        window.reptable = new gridjs.Grid({
-            columns: ["#", "Air Temp Measurement", "Precipitation Measurement", "Soil Temp Measurement", "VWC Measurement",
-                "WFPS Measurement"],
-            data: data,
-            search: true,
-            sort: true,
-            fixedHeader: true,
-            resizable: true,
-            height: '80vh',
-            style: {
-                th: {
-                  height: '5vh'
-                },
-            }
-        }).render(document.getElementById("v-pills-settings"))
-    </script>
-
-
-    <script>
+        <script>
         function UpdateTable (update_data) {
-            console.log(update_data)
-            var Publication = JSON.parse(update_data.Pub_update)
-            var Site = JSON.parse(update_data.Site_update)
-            var Treatment = JSON.parse(update_data.Treatment_update)
-            var Replication = JSON.parse(update_data.Rep_update)
-
-            var data = []
-            for (var i = 0; i < Publication.length; ++i) {
-                var newrow = [Publication[i].PubID, Publication[i].PubTitle, Publication[i].LeadAuthor, Publication[i].PubYear, Publication[i].Citation]
-                data.push(newrow)
-            }
-            document.getElementById("v-pills-home") &&
-            window.pubtable.updateConfig({
-                data: data,
-            }).forceRender()
-
-            var data = []
-            for (var i = 0; i < Site.length; ++i) {
-                var newrow = [Site[i].SiteID, Site[i].Latitude, Site[i].Longitude, Site[i].MAP, Site[i].MAT]
-                data.push(newrow)
-            }
-            document.getElementById("v-pills-profile") &&
-            window.sitetable.updateConfig({
-                data: data,
-            }).forceRender()
-
-            var data = []
-            for (var i = 0; i < Treatment.length; ++i) {
-                var newrow = [Treatment[i].TreatmentID, Treatment[i].PrimaryCrop, Treatment[i].SecondaryCrop,
-                    Treatment[i].CoverCrop, Treatment[i].Management, Treatment[i].Tillage, Treatment[i].FluxInstrument,]
-                data.push(newrow)
-            }
-            document.getElementById("v-pills-messages") &&
-            window.treatmenttable.updateConfig({
-                data: data,
-            }).forceRender()
-
-            var data = []
-            for (var i = 0; i < Replication.length; ++i) {
-                var newrow = [Replication[i].RepID, Replication[i].Air_T_Meas.toString(), Replication[i].Precip_Meas.toString(),
-                    Replication[i].Soil_T_Meas.toString(), Replication[i].VWC_Meas.toString(), Replication[i].WFPS_Meas.toString()]
-                data.push(newrow)
-            }
-            document.getElementById("v-pills-settings") &&
-            window.reptable.updateConfig({
-                data: data,
-            }).forceRender()
-
             // Update map
             var siteData = JSON.parse(update_data.Site_update)
             console.log(siteData)
@@ -374,60 +214,17 @@
             chart.series[2].setData(sitePoints)
             chart.redraw();
             console.log("finish")
-
-
         }
     </script>
 
-    <script>
-        function getSelected() {
-            var selectedArray = [];
-            selected = document.querySelectorAll('.choices__item')
-            console.log(selected)
-            console.log(selected.length)
-            for (let i = 0; i < selected.length; i++) {
-                console.log(selected[i])
-                item = selected[i]
-                value = item.getAttribute('role');
-                if (value == "option") {
-                    continue
-                }
-                else {
-                    if (item.hasAttribute('data-value')) {
-                        innertext = String(item.innerText)
-                        console.log()
-                        selectedValue = innertext.slice(0, -11)
-                        selectedArray.push(selectedValue)
-                    }
-                }
-            }
-            selectedList = selectedArray.toString()
-            console.log(selectedList)
-            var flag = 1;
-            const csrftoken = getCookie('csrftoken');
-            $.ajax({
-                type: "POST",
-                url:'/get-data/',
-                headers:{
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': csrftoken,
-                },
-                data:{selectedArray: selectedList},
-                success: UpdateTable
-            })
-            console.log(selectedArray)
-        }
-    </script>
-
-    <script>
+   <script>
+        // 1. The Helper to get the CSRF Token (Keep this, it's good)
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {
                 const cookies = document.cookie.split(';');
                 for (let i = 0; i < cookies.length; i++) {
                     const cookie = cookies[i].trim();
-                    // Does this cookie string begin with the name we want?
                     if (cookie.substring(0, name.length + 1) === (name + '=')) {
                         cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                         break;
@@ -436,226 +233,746 @@
             }
             return cookieValue;
         }
+
+        // 2. The New Filter Function
+        function submitFilter() {
+            var filterData = {
+                instruments: $('#ins').val() || [], 
+                management:  $('#mgmt').val() || [],
+                environment: $('#env').val() || [],
+                fertilizer:  $('#fert').val() || [],
+                crops:       $('#crop').val() || []
+            };
+
+            console.log("Sending Filter Data:", filterData);
+            const csrftoken = getCookie('csrftoken');
+
+            $.ajax({
+                type: "POST",
+                url: '/get-data/', 
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/json' 
+                },
+                data: JSON.stringify(filterData), 
+                success: function(response) {
+                    console.log("Response received");
+
+                    // 1. UPDATE CARDS (Keep your existing logic)
+                    // If you have a separate function to update the list below the map, call it here.
+                    // var flatTreatments = [];
+                    // if (response.json_treatment) flatTreatments = JSON.parse(response.json_treatment);
+                    // createCards(flatTreatments); 
+
+                    // 2. UPDATE MAP
+                    var experiments = [];
+                    try {
+                        if (response.json_experiments) {
+                            experiments = JSON.parse(response.json_experiments);
+                        }
+                    } catch (e) { console.error("Error parsing experiments:", e); }
+
+                    // We need a registry to track jitter, just like in the initial load
+                    var coordRegistry = {};
+
+                    var mapPoints = experiments.map(function(exp) {
+                        if (!exp.Lat || !exp.Lon) return null;
+
+                        var lat = parseFloat(exp.Lat);
+                        var lon = parseFloat(exp.Lon);
+                        
+                        // JITTER LOGIC (Spiral Match)
+                        // matches your initial load logic to ensure dots don't stack
+                        var coordKey = lat.toFixed(4) + "_" + lon.toFixed(4);
+                        if (coordRegistry[coordKey]) {
+                            coordRegistry[coordKey]++;
+                            var count = coordRegistry[coordKey];
+                            var angle = count * 2.4; 
+                            var radius = 0.8 * Math.sqrt(count); 
+                            lat += Math.cos(angle) * radius;
+                            lon += Math.sin(angle) * radius;
+                        } else {
+                            coordRegistry[coordKey] = 1;
+                        }
+
+                        var primaryName = exp.PubTitle || exp.SiteName;
+
+                        return {
+                            // 1. Coordinates
+                            lat: lat,
+                            lon: lon,
+                            
+                            // 2. Identifiers
+                            name: primaryName, // Used for Sidebar Header
+                            
+                            // 3. Tooltip Data
+                            pub_title: exp.PubTitle,
+                            site_name: exp.SiteName,
+                            real_lat: parseFloat(exp.Lat).toFixed(4),
+                            real_lon: parseFloat(exp.Lon).toFixed(4),
+
+                            // 4. SIDEBAR DATA (This was missing!)
+                            Treatments: exp.TreatmentIDs || [],
+                            Citation: exp.Citation,
+                            MAP: exp.MAP,
+                            MAT: exp.MAT
+                        };
+                    }).filter(p => p !== null); // Remove any nulls
+
+                    // Update Series
+                    if (window.mapChart) {
+                        var pointSeries = window.mapChart.series.find(s => s.type === 'mappoint');
+                        if (pointSeries) {
+                            pointSeries.setData(mapPoints, true);
+                        } else {
+                            // Fallback
+                            window.mapChart.series[window.mapChart.series.length - 1].setData(mapPoints, true);
+                        }
+                    }
+                },
+                error: function(xhr, errmsg, err) {
+                    console.log("Error:", errmsg);
+                }
+            });
+        }
+
+        // 3. Initialize Choices.js and Bind the Button
+        $(document).ready(function(){
+            // Initialize your dropdowns
+            new Choices('#ins', { removeItemButton: true, maxItemCount:5 });
+            new Choices('#mgmt', { removeItemButton: true, maxItemCount:5 });
+            new Choices('#env', { removeItemButton: true, maxItemCount:5 });
+            new Choices('#fert', { removeItemButton: true, maxItemCount:15 });
+            new Choices('#crop', { removeItemButton: true, maxItemCount:15 });
+
+            // Bind the SUBMIT button to the function
+            // REPLACE '#filter-btn-id' with the actual ID of your Filter/Submit button
+            $('#filter-btn-id').on('click', function(e) {
+                e.preventDefault();
+                submitFilter();
+            });
+        });
     </script>
+
 
     <script>
-        $(document).ready(function(){
-             var multipleCancelButton = new Choices('#ins', {
-                removeItemButton: true,
-                maxItemCount:5,
-                searchResultLimit:5,
-                renderChoiceLimit:5
-             });
+        (async () => {
+        // 1. Fetch Map Topology
+        const topology = await fetch(
+            'https://code.highcharts.com/mapdata/custom/world-highres.topo.json'
+        ).then(response => response.json());
 
-             var multipleCancelButton = new Choices('#mgmt', {
-                  removeItemButton: true,
-                  maxItemCount: 5,
-                  searchResultLimit: 5,
-                  renderChoiceLimit: 5
-             });
-
-             var multipleCancelButton = new Choices('#env', {
-                  removeItemButton: true,
-                  maxItemCount: 5,
-                  searchResultLimit: 5,
-                  renderChoiceLimit: 5
-             });
-
-             var multipleCancelButton = new Choices('#fert', {
-                  removeItemButton: true,
-                  maxItemCount: 15,
-                  searchResultLimit: 15,
-                  renderChoiceLimit: 15
-             });
-
-             var multipleCancelButton = new Choices('#crop', {
-                  removeItemButton: true,
-                  maxItemCount: 15,
-                  searchResultLimit: 15,
-                  renderChoiceLimit: 15
-             });
-
-
-         });
-    </script>
-<script>
-    (async () => {
-      const topology = await fetch(
-        'https://code.highcharts.com/mapdata/custom/world-highres.topo.json'
-      ).then(response => response.json());
-
-      var siteData = JSON.parse("{{json_site|escapejs}}")
-      console.log(siteData)
-
-      sitePoints = []
-      for (let i = 0; i < siteData.length; i++) {
-        dict = {};
-
-        dict['lat'] = siteData[i]['Latitude']
-        dict['lon'] = siteData[i]['Longitude']
-        dict['title'] = siteData[i]['Longitude']
-        dict['map'] = siteData[i]['MAP']
-        dict['mat'] = siteData[i]['MAT']
-        sitePoints.push(dict)
-      }
-      console.log(sitePoints)
-
-      // Wrap point.select to get to the total selected points
-      Highcharts.wrap(Highcharts.Point.prototype, 'select', function (proceed) {
-        proceed.apply(this, Array.prototype.slice.call(arguments, 1));
-        const points = this.series.chart.getSelectedPoints();
-        if (points.length) {
-          if (points.length === 1) {
-            document.querySelector('#info h2').innerHTML = "<h1 style='margin-top:0 !important' >Site Information</h1><br>";
-            document.querySelector('#info .subheader').innerHTML = points[0].title;
-            document.querySelector('#info .subheader').innerHTML = "<h2>Mean Annual Precipitation: " + points[0].map +
-                " mm</h2><br><h2>Mean Annual Temperature: " + points[0].mat + " C</h2>"
-          }
-
+        // 2. Parse Data
+        try {
+            var experimentData = JSON.parse("{{json_experiments|default:'[]'|escapejs}}");
+        } catch (e) {
+            console.error("JSON Parsing failed:", e);
+            var experimentData = []; 
         }
-      });
 
-      // Initiate the map chart
-      window.mapChart = Highcharts.mapChart('container', {
-        chart: {
-            map: topology
-        },
-        title: {
-          text: 'Research Sites Included in Query'
-        },
-        mapNavigation: {
-          enabled: true,
-          buttonOptions: {
-            verticalAlign: 'bottom'
-          }
-        },
-        accessibility: {
-            point: {
-                valueDescriptionFormat: '{xDescription}. Lat: {point.lat:.2f}, lon: {point.lon:.2f}.'
+        var mapPoints = [];
+        var coordRegistry = {}; 
+
+        for (let i = 0; i < experimentData.length; i++) {
+            var ex = experimentData[i];
+            if (!ex.Lat || !ex.Lon) continue;
+
+            var lat = parseFloat(ex.Lat);
+            var lon = parseFloat(ex.Lon);
+
+            // Jitter Logic
+            var coordKey = lat.toFixed(4) + "_" + lon.toFixed(4);
+            if (coordRegistry[coordKey]) {
+                coordRegistry[coordKey]++;
+                var count = coordRegistry[coordKey];
+                var angle = count * 2.4; 
+                var radius = 0.8 * Math.sqrt(count); 
+                lat += Math.cos(angle) * radius;
+                lon += Math.sin(angle) * radius;
+            } else {
+                coordRegistry[coordKey] = 1;
             }
-        },
-        tooltip: {
-            headerFormat: '',
-            pointFormat: '<b>{point.name}</b><br>Lat: {point.lat}, Lon: {point.lon}'
-        },
-        colorAxis: {
-          type: 'logarithmic',
-          endOnTick: false,
-          startOnTick: false,
-          min: 50000
-        },
-        series: [{
-          name: 'Sites',
+
+            var primaryName = ex.PubTitle || ex.SiteName;
+
+            var point = {
+                lat: lat, 
+                lon: lon, 
+                name: primaryName,
+                
+                // Tooltip Data
+                pub_title: ex.PubTitle,
+                site_name: ex.SiteName,
+                real_lat: parseFloat(ex.Lat).toFixed(4),
+                real_lon: parseFloat(ex.Lon).toFixed(4),
+
+                // Sidebar Data
+                ExperimentID: ex.ExperimentID,
+                MAP: ex.MAP,
+                MAT: ex.MAT,
+                Citation: ex.Citation,
+                // Ensure Treatments is an array.
+                // Assuming objects look like: { id: "123", name: "T1", crop: "Corn", mgmt: "Till" }
+                Treatments: ex.TreatmentIDs || [] 
+            };
+            mapPoints.push(point);
+        }
+
+        // 3. Handle Clicks (Sidebar UI Generation)
+        Highcharts.wrap(Highcharts.Point.prototype, 'select', function (proceed) {
+            proceed.apply(this, Array.prototype.slice.call(arguments, 1));
+            const points = this.series.chart.getSelectedPoints();
+            
+            if (points.length === 1) {
+                var p = points[0]; 
+                var displayTitle = p.pub_title || p.name;
+                var displaySite = p.site_name || "Unknown Site";
+
+                // Prepare list for "Add All"
+                var allTreatmentIds = [];
+                if (p.Treatments) {
+                    allTreatmentIds = p.Treatments.map(t => t.id || t.TreatmentID); 
+                }
+
+                // --- HEADER CARD ---
+                var html = `
+                    <div class="info-panel">
+                        <div class="exp-header">
+                            <div class="exp-title">${displayTitle}</div>
+                            <div style="font-size: 1.3rem; color: #6c757d; margin-bottom: 12px;">
+                                <i class="fas fa-map-marker-alt"></i> ${displaySite}
+                            </div>
+                            
+                            <div class="d-flex flex-wrap">
+                                <div class="stat-badge" title="Mean Annual Precip">
+                                    <i class="fas fa-tint text-primary" style="margin-right:5px;"></i> ${p.MAP} mm
+                                </div>
+                                <div class="stat-badge" title="Mean Annual Temp">
+                                    <i class="fas fa-thermometer-half text-danger" style="margin-right:5px;"></i> ${p.MAT} °C
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top:12px; font-size:1.3rem; color:#888; border-top:1px solid #eee; padding-top:8px; line-height:1.4;">
+                                <strong>Citation:</strong> ${p.Citation}
+                            </div>
+
+                            <div class="btn-add-all" onclick='CartManager.add(${JSON.stringify(allTreatmentIds)})'>
+                                <i class="fas fa-shopping-cart"></i> Add All to Data Cart
+                            </div>
+                        </div>
+
+                        <h6 style="text-transform:uppercase; color:#999; font-weight:600; letter-spacing:1px; font-size:1.5rem; margin-bottom:15px;">
+                            Included Treatments (${p.Treatments.length})
+                        </h6>
+                `;
+
+                // --- TREATMENT CARDS ---
+                if (p.Treatments && p.Treatments.length > 0) {
+                    p.Treatments.forEach(function(t) {
+                        var tID = t.id || t.TreatmentID;
+                        
+                        html += `
+                            <div class="treatment-card">
+                                
+                                <div class="t-header">
+                                    <div class="t-name">${t.name}</div>
+                                    
+                                    <div class="t-actions">
+                                        <i id="graph-${tID}" 
+                                        class="fas fa-chart-line action-icon" 
+                                        title="Visualize Data" 
+                                        onclick="openGraphViz('${tID}')"></i>
+                                        
+                                        <i id="cart-${tID}" 
+                                        class="fas fa-cart-plus action-icon" 
+                                        title="Add to Cart" 
+                                        onclick="CartManager.add('${tID}')"></i>
+                                    </div>
+                                </div>
+
+                                <div class="t-detail">
+                                    <span class="icon-width"><i class="fas fa-seedling text-success"></i></span>
+                                    <strong>Crop:</strong>&nbsp; ${t.crop}
+                                </div>
+                                <div class="t-detail">
+                                    <span class="icon-width"><i class="fas fa-tools text-secondary"></i></span>
+                                    <strong>Mgmt:</strong>&nbsp; ${t.mgmt}
+                                </div>
+
+                            </div>
+                        `;
+                    });
+                } else {
+                    html += `<div class="text-muted p-3">No specific treatment data recorded.</div>`;
+                }
+
+                html += `</div>`; 
+                document.getElementById('info').innerHTML = html;
+            }
+        });
+
+        // 4. Initiate Map
+        window.mapChart = Highcharts.mapChart('container', {
+            chart: { 
+                map: topology,
+                backgroundColor: '#f8f9fa',
+                margin: [0, 0, 0, 0],
+                spacing: [0, 0, 0, 0],
+            },
+            mapNavigation: { 
+                enabled: true, 
+                enableMouseWheelZoom: false,
+                buttonOptions: { verticalAlign: 'bottom' } 
+            },
+            title: { text: null },
+            legend: { enabled: false },
+            mapView: { zoom: 2 },
+            
+            tooltip: {
+                useHTML: true,
+                backgroundColor: 'rgba(255,255,255,0.95)',
+                padding: 10,
+                headerFormat: '', 
+                pointFormatter: function () {
+                    var p = this;
+                    var html = '<div style="font-size: 14px; font-weight: bold; margin-bottom: 4px; color: #333; max-width: 250px; white-space: normal;">' + 
+                            (p.pub_title || 'Untitled Publication') + 
+                            '</div>';
+                    html += '<div style="font-size: 12px; color: #666;">' + 
+                            (p.site_name || 'Site') + ', ' + 
+                            p.real_lat + ', ' + p.real_lon + 
+                            '</div>';
+                    return html;
+                }
+            },
+            colorAxis: { min: 0, minColor: '#E6E7E8', maxColor: '#005645' },
+            series: [{
+            name: 'Basemap',
             borderColor: '#A0A0A0',
             nullColor: 'rgba(200, 200, 200, 0.3)',
             showInLegend: false
-        }, {
-            name: 'Separators',
-            type: 'mapline',
-            nullColor: '#707070',
-            showInLegend: false,
-            enableMouseTracking: false,
-            accessibility: {
-                enabled: false
-            }
-        }, {
-            // Specify points using lat/lon
-            color: Highcharts.getOptions().colors[1],
-            type: 'mappoint',
-            name: 'Cities',
-            accessibility: {
-                point: {
-                    valueDescriptionFormat: '{xDescription}. Lat: {point.lat:.2f}, lon: {point.lon:.2f}.'
+            }, {
+                name: 'Separators',
+                type: 'mapline',
+                nullColor: '#707070',
+                showInLegend: false,
+                enableMouseTracking: false
+            }, {
+                type: 'mappoint',
+                name: 'Experiments',
+                color: '#5185a8',
+                data: mapPoints,
+                allowPointSelect: true,
+                cursor: 'pointer',
+                borderWidth: 1,
+                borderColor: 'white',
+                dataLabels: { enabled: false }
+            }]
+        });
+        })();
+    </script>
+
+    <style>
+        .multiselecter{max-width:100%%}
+        .choices__input{width:90% !important; text-align:center; margin-left:auto; margin-right:auto}
+        .choices__item{background-color:#82968c !important; border:#6c757d !important; max-height:4vh !important}
+        .choices__button{border-left: 1px solid #6c757d !important;max-height:3vh !important; padding-left:0px !important}
+    </style>
+
+    <style>
+        * {
+        font-family: sans-serif;
+        }
+
+        #wrapper {
+        height: 500px;
+        width: 1000px;
+        margin: 0 auto;
+        padding: 0;
+        overflow: visible;
+        }
+
+        #container {
+        float: left;
+        height: 75vh;
+        width: 60vw;
+        padding-left: 1vw;
+        margin: 5vh 0 0;
+        }
+
+        #info {
+        float: left;
+        width: 25vw;
+        padding-left: 20px;
+        margin: 0vh 0 0;
+        }
+
+        #info h2 {
+        display: inline;
+        font-size: 13pt;
+        text-transform: none;
+        }
+
+        #info .f32 .flag {
+        vertical-align: bottom !important;
+        }
+
+        #info h4 {
+        margin: 1em 0 0;
+        font-size: 12pt;
+        text-transform: none;
+        }
+
+        @media screen and (max-width: 1000px) {
+        #wrapper,
+        #container,
+        #info {
+            float: none;
+            width: 100%;
+            height: auto;
+            margin: 0.5em 0;
+            padding: 0;
+            border: none;
+        }
+        }
+        td, th {
+        text-align: center;
+        vertical-align: middle;
+        }
+
+        .nav-pills {
+            background-color: #DCDCDC
+        }
+
+        .highcharts-title {
+            font-size: 3vh !important;
+            font-family: var(--font-2) !important
+        }
+    </style>
+
+    <script>
+        const CartManager = {
+            // LocalStorage Key (keeps data persistent even if they refresh)
+            key: 'grand_explorer_cart_v1', 
+
+            // 1. Get current list from storage
+            getCart: function() {
+                const stored = localStorage.getItem(this.key);
+                return stored ? JSON.parse(stored) : [];
+            },
+
+            // 2. Add ID(s) to the cart
+            add: function(ids) {
+                // Ensure we're always working with an array, even if a single ID is passed
+                if (!Array.isArray(ids)) ids = [ids];
+                
+                let cart = this.getCart();
+                let addedCount = 0;
+
+                ids.forEach(id => {
+                    // Prevent duplicates
+                    if (!cart.includes(id)) {
+                        cart.push(id);
+                        addedCount++;
+                    }
+                });
+
+                // Save back to storage
+                localStorage.setItem(this.key, JSON.stringify(cart));
+                
+                // Update the UI
+                this.updateBadge();
+                
+                // User Feedback
+                if (addedCount > 0) {
+                    // You can replace this with a nice toast notification later
+                    alert(`Added ${addedCount} dataset(s) to your cart.`); 
+                } else {
+                    alert("This dataset is already in your cart.");
                 }
             },
-          data: sitePoints,
-          allowPointSelect: true,
-          cursor: 'pointer',
-          borderWidth: 0.5
-        }]
-      });
-    })();
-</script>
 
-<style>
-    .multiselecter{max-width:100vw}
-    .choices__input{width:90% !important; text-align:center; margin-left:auto; margin-right:auto}
-    .choices__item{background-color:#82968c !important; border:#6c757d !important; max-height:4vh !important}
-    .choices__button{border-left: 1px solid #6c757d !important;max-height:3vh !important; padding-left:0px !important}
-</style>
+            // 3. Update the Navbar Badge
+            updateBadge: function() {
+                const cart = this.getCart();
+                const badge = document.getElementById('cart-badge');
+                
+                if (badge) {
+                    badge.innerText = cart.length;
+                    // Show badge only if items exist
+                    badge.style.display = cart.length > 0 ? 'block' : 'none';
+                }
+            },
 
-<style>
-    * {
-      font-family: sans-serif;
-    }
+            // 4. Clear Cart (Useful for testing or reset)
+            clear: function() {
+                localStorage.removeItem(this.key);
+                this.updateBadge();
+            }
+        };
 
-    #wrapper {
-      height: 500px;
-      width: 1000px;
-      margin: 0 auto;
-      padding: 0;
-      overflow: visible;
-    }
+        // Initialize the badge as soon as the DOM is ready
+        document.addEventListener("DOMContentLoaded", function() {
+            CartManager.updateBadge();
+        });
+    </script>
 
-    #container {
-      float: left;
-      height: 75vh;
-      width: 60vw;
-      padding-left: 10vw;
-      margin: 5vh 0 0;
-    }
+    <script>
+        function openGraphViz(treatmentId) {
+            // 1. UI Reset
+            $('#graphModal').modal('show');
+            $('#graph-loading').show();
+            $('#graph-container').hide().empty();
+            $('#graphModalTitle').text('Loading Data...');
 
-    #info {
-      float: left;
-      width: 25vw;
-      padding-left: 20px;
-      margin: 5vh 0 0;
-    }
+            const csrftoken = getCookie('csrftoken');
 
-    #info h2 {
-      display: inline;
-      font-size: 13pt;
-      text-transform: none;
-    }
+            // 2. AJAX Request
+            $.ajax({
+                type: "POST",
+                url: '/get-data/', 
+                headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+                data: JSON.stringify({
+                    action: "fetch_graph", 
+                    treatment_id: treatmentId
+                }),
+                success: function(response) {
+                    $('#graph-loading').hide();
+                    
+                    if (response.error) {
+                        $('#graph-container').show().html('<div class="alert alert-warning">' + response.error + '</div>');
+                        return;
+                    }
 
-    #info .f32 .flag {
-      vertical-align: bottom !important;
-    }
+                    $('#graph-container').show();
+                    $('#graphModalTitle').text(response.title);
 
-    #info h4 {
-      margin: 1em 0 0;
-      font-size: 12pt;
-      text-transform: none;
-    }
+                    // 3. COLOR MAPPING
+                    const colorMap = {
+                        'N2O Flux': '#000000',               
+                        'Nitrogen Applied': '#28a745',       
+                        'Water Filled Pore Space': '#00008B',
+                        'Volumetric Water Content': '#00008B',
+                        'Soil Temp': '#FF0000',              
+                        'Air Temp': '#FF0000',               
+                        'Precipitation': '#87CEFA'           
+                    };
 
-    @media screen and (max-width: 1000px) {
-      #wrapper,
-      #container,
-      #info {
-        float: none;
-        width: 100%;
-        height: auto;
-        margin: 0.5em 0;
-        padding: 0;
-        border: none;
-      }
-    }
-    td, th {
-      text-align: center;
-      vertical-align: middle;
-    }
+                    response.series.forEach(function(s) {
+                        if (colorMap[s.name]) {
+                            s.color = colorMap[s.name];
+                        }
+                    });
 
-    .nav-pills {
-        background-color: #DCDCDC
-    }
+                    // 4. DYNAMIC AXIS LABEL LOGIC
+                    let moistureLabel = 'Moisture'; 
+                    const hasWFPS = response.series.some(s => s.name === 'Water Filled Pore Space');
+                    const hasVWC = response.series.some(s => s.name === 'Volumetric Water Content');
+                    
+                    if (hasWFPS) moistureLabel = 'WFPS';
+                    else if (hasVWC) moistureLabel = 'VWC';
 
-    .highcharts-title {
-        font-size: 3vh !important;
-        font-family: var(--font-2) !important
-    }
-</style>
+                    // 5. STYLE DEFINITIONS
+                    const labelStyle = { color: '#000000', fontSize: '12px', fontWeight: 'bold' };
+                    const titleStyle = { color: '#000000', fontSize: '14px', fontWeight: 'bold' };
 
+                    // 6. RENDER CHART
+                    Highcharts.chart('graph-container', {
+                        chart: {
+                            zoomType: 'x',
+                            alignTicks: false,
+                            // FIX 1: Reserve fixed space on the right so both graphs align perfectly
+                            marginRight: 150, 
+                            style: { fontFamily: 'sans-serif' }
+                        },
+                        title: { text: null },
+                        credits: { enabled: false },
 
+                        // DISABLE TOOLTIPS (As requested)
+                        tooltip: { enabled: false },
 
+                        // LARGE LEGEND (As requested)
+                        legend: {
+                            enabled: true,
+                            itemStyle: {
+                                color: '#000000',
+                                fontSize: '16px',
+                                fontWeight: 'bold'
+                            },
+                            symbolHeight: 16,
+                            symbolWidth: 16,
+                            itemDistance: 20
+                        },
+
+                        // --- X AXIS ---
+                        xAxis: { 
+                            type: 'datetime', 
+                            title: { text: 'Date', style: titleStyle },
+                            labels: { style: labelStyle },
+                            lineColor: '#000000',
+                            tickColor: '#000000'
+                        },
+
+                        // --- Y AXES ---
+                        yAxis: [
+                            // --- TOP PANE ---
+                            { // 0: Flux (Left)
+                                title: { text: 'N2O Flux (g N/ha/d)', style: titleStyle },
+                                labels: { format: '{value}', style: labelStyle },
+                                height: '45%',
+                                lineWidth: 1, lineColor: '#000000', tickColor: '#000000', tickWidth: 1
+                            },
+                            { // 1: Nitrogen Applied (Right)
+                                title: { text: 'Nitrogen Applied (kg N per ha)', style: titleStyle },
+                                labels: { format: '{value}', style: labelStyle },
+                                height: '45%',
+                                opposite: true,
+                                offset: 0 // Keep tight to graph
+                            },
+
+                            // --- BOTTOM PANE ---
+                            { // 2: Moisture (Left)
+                                title: { text: moistureLabel, style: titleStyle },
+                                labels: { format: '{value}', style: labelStyle },
+                                top: '55%', height: '45%', offset: 0,
+                                lineWidth: 1, lineColor: '#000000', tickColor: '#000000', tickWidth: 1
+                            },
+                            { // 3: Temp (Right - Inner)
+                                title: { text: 'Temp', style: titleStyle },
+                                labels: { 
+                                    format: '{value}°C', 
+                                    style: labelStyle,
+                                    x: 5 // Pull labels slightly closer to axis line
+                                },
+                                top: '55%', height: '45%', opposite: true,
+                                offset: 0, // FIX 2: Hug the graph edge
+                                gridLineWidth: 0 // Cleaner look
+                            },
+                            { // 4: Precip (Right - Outer)
+                                title: { text: 'Precip', style: titleStyle },
+                                labels: { format: '{value}mm', style: labelStyle },
+                                top: '55%', height: '45%', opposite: true,
+                                offset: 60, // FIX 3: Push this axis out by 60px to avoid overlap
+                                gridLineWidth: 0
+                            }
+                        ],
+
+                        // --- PLOT OPTIONS ---
+                        plotOptions: {
+                            series: {
+                                states: {
+                                    inactive: { opacity: 1 },
+                                    hover: { enabled: false }
+                                }
+                            },
+                            column: { 
+                                zIndex: 1, // Bottom Layer (Bars)
+                                borderWidth: 0, 
+                                pointWidth: 10, 
+                                shadow: false 
+                            },
+                            scatter: { 
+                                zIndex: 10, // Top Layer (Markers)
+                                marker: { radius: 4, symbol: 'circle' } 
+                            },
+                            line: { zIndex: 10 }
+                        },
+
+                        series: response.series 
+                    });
+                },
+                error: function(xhr, errmsg, err) {
+                    $('#graph-loading').hide();
+                    $('#graph-container').show().html('<div class="alert alert-danger">Error fetching data.</div>');
+                }
+            });
+        }
+    </script>
+
+</head>
 
 {% endblock %}
+{% block content %}
+
+
+
+    <!-- content
+    ================================================== -->
+    <section class="s-content row" style="text-align:center; padding-bottom:5vh">
+        {% load get_dictionary_items %}
+        <div class="d-flex justify-content-center flex-wrap mt-100 multiselecter col-md-11">
+            {% for key in keys %}
+                <div class="col-md-3 mb-3"> <select id="{{key}}" placeholder="Select {{ labels_dict|get_dictionary_items:key }}" multiple>
+                        {% for item in dropdown_dict|get_dictionary_items:key %}
+                        <option value="{{item}}">{{item}}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if forloop.counter|divisibleby:3 and not forloop.last %}
+                    <div class="w-100"></div>
+                {% endif %}
+            {% endfor %}
+
+            <div class="col-md-1">
+                <button id="submit" type="button" class="btn btn-outline-primary btn-lg ms-2" onclick="submitFilter()">Filter</button>
+            </div>
+        </div>
+        
+
+        <br>
+        <br>
+        <br>
+	</section>
+
+    <section class="s-content container" style="text-align:center; padding-bottom:5vh; padding-top:0vh; max-width: 100%">
+
+        <div class="container-fluid p-0">
+            <div class="row g-0 map-row">
+                
+                <div class="col-md-8 map-col">
+                    <div id="container" style="width:100%; height:100%;"></div>
+                </div>
+
+                <div class="col-md-4 sidebar-col" style="background: #f8f9fa;">
+                    <div id="info">
+                        <div class="text-muted p-4 text-center" style="margin-top: 20%;">
+                            Select a point on the map to view details.
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+
+{% block modal_root %}
+<div class="modal fade" id="graphModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document" style="max-width: 95%;"> 
+        <div class="modal-content">
+        
+            <div class="modal-header">
+                <h5 class="modal-title" id="graphModalTitle">Data Visualization</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="$('#graphModal').modal('hide')">
+                <span aria-hidden="true" style="font-size: 5rem; line-height: 0.8;">&times;</span>
+                </button>
+            </div>
+
+            <div class="modal-body" style="max-height: 85vh; overflow-y: auto;">
+                
+                <div id="graph-loading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Fetching dataset...</p>
+                </div>
+                
+                <div id="graph-container" style="width: 100%; height: 65vh; min-height: 500px; display: none;"></div>
+            
+            </div>
+        </div> 
+    </div> 
+</div>
+{% endblock %}
+
+    {% endblock %}

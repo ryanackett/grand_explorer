@@ -106,7 +106,7 @@ class RawMeasurement(models.Model):
 
 class RawMeasurementTreatment(models.Model):
     rawtreatmentid = models.AutoField(db_column='RawTreatmentID', primary_key=True)  # Field name made lowercase.
-    repid = models.ForeignKey('Replication', models.DO_NOTHING, db_column='RepID')  # Field name made lowercase.
+    treatmentid = models.ForeignKey('Treatment', models.DO_NOTHING, db_column='TreatmentID', related_name='measurements')
     date = models.DateField(db_column='Date')  # Field name made lowercase.
     n2oflux = models.FloatField(db_column='N2OFlux', blank=True, null=True)  # Field name made lowercase.
     vwc = models.FloatField(db_column='VWC', blank=True, null=True)  # Field name made lowercase.

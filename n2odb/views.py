@@ -7,6 +7,9 @@ from django.template import Template, Context
 from json import dumps
 from django.http import JsonResponse
 import json
+from django.db.models import F
+from collections import defaultdict
+import datetime
 
 
 def index(request): 
@@ -22,59 +25,139 @@ def query_filters(request):
     })
 
 def get_data(request):
+    # -------------------------------------------------------------------------
+    # PART 1: AJAX REQUEST (Filtering Map Data)
+    # -------------------------------------------------------------------------
     if request.method == "POST" and request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        data_from_post = request.POST['selectedArray']
-        selectedList = data_from_post.split(",")
-        ins_options = list(
-                Treatment.objects.values_list('FluxInstrument', flat=True).distinct())
-        ins_selected = []
-        env_options = ['Soil VWC', 'Soil WFPS', 'Soil Temp', 'Air Temp', 'Precipitation']
-        env_selected = []
-        mgmt_options = list(Treatment.objects.values_list('Management', flat=True).distinct())
-        mgmt_selected = []
-        for selection in selectedList:
-            if selection in ins_options:
-                ins_selected.append(selection)
-            if selection in env_options:
-                env_selected.append(selection)
-            if selection in mgmt_options:
-                mgmt_selected.append(selection)
+        try:
+            data = json.loads(request.body)
+        
+            # =========================================================
+            # A. GRAPH REQUEST INTERCEPTOR
+            # Logic: If 'action' is 'fetch_graph', we ignore map filters
+            # =========================================================
+            if data.get('action') == 'fetch_graph':
+                treatment_id = data.get('treatment_id')
+                return get_graph_json(treatment_id)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        # Handle the selected sensors query- Replication table
-        kwargs = {}
-        for item in env_selected:
-            if item == 'Soil VWC':
-                kwargs['VWC_Meas'] = 1
-            if item == 'Soil WFPS':
-                kwargs['WFPS_Meas'] = 1
-            if item == 'Soil Temp':
-                kwargs['Soil_T_Meas'] = 1
-            if item == 'Air Temp':
-                kwargs['Air_T_Meas'] = 1
-            if item == 'Precipitation':
-                kwargs['Precip_Meas'] = 1
-        table_data = Replication.objects.filter(**kwargs).select_related()
+        # 1. Extract Filters
+        selected_ins = data.get('instruments', [])
+        selected_mgmt = data.get('management', [])
+        selected_env = data.get('environment', [])
+        selected_fert = data.get('fertilizer', [])
+        selected_crops = data.get('crops', [])
 
-        # Handle the Primary Crop, Management, Tillage, and Instrument queries, Treatment table
-        if len(ins_selected) > 0:
-            table_data = table_data.filter(TreatmentID__FluxInstrument__in=ins_selected)
-        if len(mgmt_selected) > 0:
-            table_data = table_data.filter(TreatmentID__Management__in=mgmt_selected)
+        # 2. Base Query (Replication)
+        # We assume Replication links to Treatment, but NOT directly to Site.
+        rep_qs = Replication.objects.select_related('TreatmentID').all()
 
-        update_data = {}
-        rep_ids = list(table_data.values('RepID', 'Air_T_Meas', 'Precip_Meas', 'Soil_T_Meas', 'VWC_Meas', 'WFPS_Meas'))
-        update_data['Rep_update'] = dumps(rep_ids)
-        treatment_ids = list(Treatment.objects.filter(TreatmentID__in=table_data).values('TreatmentID', 'PrimaryCrop',
-            'SecondaryCrop', 'CoverCrop', 'Management', 'FluxInstrument'))
-        update_data['Treatment_update'] = dumps(treatment_ids)
-        pub_ids = list(Publication.objects.filter(PubID__in=table_data).values('PubID', 'PubTitle', 'PubYear',
-            'LeadAuthor', 'Citation'))
-        update_data['Pub_update'] = dumps(pub_ids)
-        site_ids = list(Site.objects.filter(SiteID__in=table_data).values('SiteID', 'Latitude', 'Longitude', 'MAP',
-            'MAT'))
-        update_data['Site_update'] = dumps(site_ids)
+        # --- A. Environmental Filters (Replication) ---
+        env_mapping = {
+            'Soil VWC': 'VWC_Meas', 'Soil WFPS': 'WFPS_Meas',
+            'Soil Temp': 'Soil_T_Meas', 'Air Temp':  'Air_T_Meas',
+            'Precipitation': 'Precip_Meas'
+        }
+        for env_label in selected_env:
+            if env_label in env_mapping:
+                rep_qs = rep_qs.filter(**{env_mapping[env_label]: 1})
+
+        # --- B. Treatment Filters ---
+        if selected_ins:
+            rep_qs = rep_qs.filter(TreatmentID__FluxInstrument__in=selected_ins)
+        if selected_mgmt:
+            rep_qs = rep_qs.filter(TreatmentID__Management__in=selected_mgmt)
+        if selected_crops:
+            rep_qs = rep_qs.filter(TreatmentID__PrimaryCrop__in=selected_crops)
+
+        # --- C. Fertilizer Filter ---
+        if selected_fert:
+            rep_qs = rep_qs.filter(
+                TreatmentID__measurements__nitrogentype__in=selected_fert
+            )
+
+        # 3. Retrieve Data 
+        
+        # -- Replications --
+        filtered_reps = list(rep_qs.values(
+            'RepID', 'Air_T_Meas', 'Precip_Meas', 'Soil_T_Meas', 'VWC_Meas', 'WFPS_Meas'
+        ).distinct())
+
+        # -- Treatments --
+        treatment_qs = Treatment.objects.filter(TreatmentID__in=rep_qs.values('TreatmentID'))
+        filtered_treatments = list(treatment_qs.values(
+            'ExperimentID', 'TreatmentID', 'TreatmentName', 'PrimaryCrop', 
+            'SecondaryCrop', 'CoverCrop', 'Management', 'FluxInstrument'
+        ).distinct())
+
+        # -- Sites --
+        # Path: Replication -> Treatment -> Experiment -> Site
+        site_qs = Site.objects.filter(
+            SiteID__in=rep_qs.values('TreatmentID__ExperimentID__SiteID')
+        )
+        filtered_sites = list(site_qs.values(
+            'SiteID', 'Latitude', 'Longitude', 'MAP', 'MAT'
+        ).distinct())
+
+        # -- Publications --
+        # Path: Replication -> Treatment -> Experiment -> Publication
+        pub_qs = Publication.objects.filter(
+            PubID__in=rep_qs.values('TreatmentID__ExperimentID__PubID')
+        )
+        filtered_pubs = list(pub_qs.values(
+            'PubID', 'PubTitle', 'PubYear', 'LeadAuthor', 'Citation'
+        ).distinct())
+
+        # 4. Construct the "Experiment Package"
+        exp_qs = Experiment.objects.filter(
+            ExperimentID__in=treatment_qs.values('ExperimentID')
+        )
+        
+        experiment_data = list(exp_qs.annotate(
+            Lat=F('SiteID__Latitude'),
+            Lon=F('SiteID__Longitude'),
+            SiteName=F('SiteID__Name'), 
+            MAP=F('SiteID__MAP'),
+            MAT=F('SiteID__MAT'),
+            PubTitle=F('PubID__PubTitle'),
+            Citation=F('PubID__Citation')
+        ).values(
+            'ExperimentID', 'ExperimentName', 
+            'Lat', 'Lon', 'SiteName', 'MAP', 'MAT', 'PubTitle', 'Citation'
+        ))
+
+        # Group Treatments by ExperimentID
+        treatment_map = defaultdict(list)
+        for t in filtered_treatments:
+            row = {
+                'id': t['TreatmentID'],
+                'name': t['TreatmentName'] if t['TreatmentName'] else "Unnamed Treatment",
+                'crop': t['PrimaryCrop'],
+                'mgmt': t['Management'],
+                'ins': t.get('FluxInstrument')
+            }
+            treatment_map[t['ExperimentID']].append(row)
+
+        for exp in experiment_data:
+            exp['TreatmentIDs'] = treatment_map.get(exp['ExperimentID'], [])
+
+        # 5. Return JSON (Using consistent keys)
+        update_data = {
+            'json_rep': json.dumps(filtered_reps),
+            'json_treatment': json.dumps(filtered_treatments),
+            'json_site': json.dumps(filtered_sites),
+            'json_pub': json.dumps(filtered_pubs),
+            'json_experiments': json.dumps(experiment_data)
+        }
+        print("No errors")
+        print(update_data['json_experiments'])
         return JsonResponse(update_data)
 
+    # -------------------------------------------------------------------------
+    # PART 2: INITIAL LOAD (GET/POST Request for Dropdowns)
+    # -------------------------------------------------------------------------
     elif request.method == 'POST':
         selectedList = request.POST['selected']
         dropdown_dict = {}
@@ -154,9 +237,191 @@ def get_data(request):
             list(treatmentdata.values('TreatmentID', 'TreatmentName', 'PrimaryCrop', 'SecondaryCrop', 'CoverCrop', 'Management', 'FluxInstrument')))
         dropdown_dict['json_rep'] = dumps(
             list(replicationdata.values('RepID', 'RepName', 'Air_T_Meas', 'Precip_Meas', 'Soil_T_Meas', 'VWC_Meas', 'WFPS_Meas')))
+        
+        # 1. Query Experiments with all related Site and Publication data
+        experiment_qs = Experiment.objects.values(
+            'ExperimentID', 
+            'ExperimentName',
+            # Pull Site Data (via SiteID FK)
+            Lat=F('SiteID__Latitude'),
+            Lon=F('SiteID__Longitude'),
+            SiteName=F('SiteID__Name'),
+            MAP=F('SiteID__MAP'),
+            MAT=F('SiteID__MAT'),
+            # Pull Publication Data (via PubID FK)
+            PubTitle=F('PubID__PubTitle'),
+            Citation=F('PubID__Citation')
+        )
+
+        # Convert to a list so we can modify it
+        experiment_data = list(experiment_qs)
+
+        # 2. Query ALL Treatments separately (fetching only what we need)
+        treatments = Treatment.objects.values(
+            'ExperimentID',
+            'TreatmentID', 
+            'TreatmentName', 
+            'PrimaryCrop', 
+            'Management'
+        )
+
+        # 3. Group Treatments by ExperimentID using a Python dictionary
+        # This is much faster than running a sub-query for every single experiment
+        treatment_map = defaultdict(list)
+        for t in treatments:
+            row = {
+                'id': t['TreatmentID'],
+                'name': t['TreatmentName'] if t['TreatmentName'] else "Unnamed Treatment",
+                'crop': t['PrimaryCrop'],
+                'mgmt': t['Management']
+            }
+            treatment_map[t['ExperimentID']].append(row)
+
+        # 4. Attach the Treatment list to each Experiment object
+        for exp in experiment_data:
+            # Look up the list of treatments using the ID, default to empty list if none
+            exp['TreatmentIDs'] = treatment_map.get(exp['ExperimentID'], [])
+
+        # 5. Add to your dropdown_dict for the frontend
+        dropdown_dict['json_experiments'] = dumps(experiment_data)
+        print(dropdown_dict['json_experiments'])
+        
+        
         return render(request, 'get-data.html', dropdown_dict)
+
+
+def get_graph_json(treatment_id):
+    try:
+        # 1. Verify Treatment
+        treatment = Treatment.objects.filter(pk=treatment_id).first()
+        if not treatment:
+            return JsonResponse({'error': f'Treatment ID {treatment_id} not found.'})
+
+        # 2. Define All Possible Columns
+        fields_map = {
+            'n2oflux': 'N2O Flux',
+            'nitrogenapplied': 'Nitrogen Applied',
+            'wfps': 'WFPS',
+            'vwc': 'Volumetric Water Content',
+            'soilt': 'Soil Temp',
+            'airt': 'Air Temp',
+            'precip': 'Precipitation'
+        }
+
+        # 3. Fetch Data
+        columns_to_fetch = ['date'] + list(fields_map.keys())
+        
+        data_rows = RawMeasurementTreatment.objects.filter(
+            treatmentid=treatment
+        ).values(*columns_to_fetch).order_by('date')
+
+        if not data_rows.exists():
+             return JsonResponse({'error': 'No raw measurement data recorded for this treatment.'})
+
+        # 4. Initialize Containers
+        raw_series = {key: [] for key in fields_map.keys()}
+
+        # 5. Process Rows
+        for row in data_rows:
+            date_val = row['date']
+            if not date_val: continue
+            
+            # Combine Date + Midnight Time -> Timestamp
+            dt = datetime.datetime.combine(date_val, datetime.time.min)
+            timestamp = dt.timestamp() * 1000
+
+            for field in fields_map.keys():
+                val = row.get(field)
+                if val is not None:
+                    raw_series[field].append([timestamp, float(val)])
+                else:
+                    raw_series[field].append([timestamp, None])
+
+        # 6. Apply Priority Logic & Build Series
+        final_series = []
+
+        # --- A. Top Graph (Flux + Nitrogen) ---
+        if any(p[1] is not None for p in raw_series['n2oflux']):
+            final_series.append({
+                'name': 'N2O Flux',
+                'data': raw_series['n2oflux'],
+                'type': 'scatter',  # Already scatter
+                'yAxis': 0,
+                'tooltip': {'valueSuffix': ' g N/ha/d'} 
+            })
+        
+        if any(p[1] is not None for p in raw_series['nitrogenapplied']):
+            final_series.append({
+                'name': 'Nitrogen Applied',
+                'data': raw_series['nitrogenapplied'],
+                'type': 'column',
+                'yAxis': 1,
+                'tooltip': {'valueSuffix': ' kg N/ha'}
+            })
+
+        # --- B. Bottom Graph (Moisture + Temp + Precip) ---
+        
+        # Priority: WFPS > VWC
+        has_wfps = any(p[1] is not None for p in raw_series['wfps'])
+        has_vwc = any(p[1] is not None for p in raw_series['vwc'])
+        
+        if has_wfps:
+            final_series.append({
+                'name': 'Water Filled Pore Space',
+                'data': raw_series['wfps'],
+                'type': 'scatter',  # CHANGED: line -> scatter
+                'yAxis': 2,
+                'tooltip': {'valueSuffix': '%'}
+            })
+        elif has_vwc:
+            final_series.append({
+                'name': 'Volumetric Water Content',
+                'data': raw_series['vwc'],
+                'type': 'scatter',  # CHANGED: line -> scatter
+                'yAxis': 2,
+                'tooltip': {'valueSuffix': ' v/v'}
+            })
+
+        # Priority: SoilT > AirT
+        has_soilt = any(p[1] is not None for p in raw_series['soilt'])
+        has_airt = any(p[1] is not None for p in raw_series['airt'])
+
+        if has_soilt:
+            final_series.append({
+                'name': 'Soil Temp',
+                'data': raw_series['soilt'],
+                'type': 'scatter',  # CHANGED: line -> scatter
+                'yAxis': 3,
+                'tooltip': {'valueSuffix': ' °C'}
+            })
+        elif has_airt:
+            final_series.append({
+                'name': 'Air Temp',
+                'data': raw_series['airt'],
+                'type': 'scatter',  # CHANGED: line -> scatter
+                'yAxis': 3,
+                'tooltip': {'valueSuffix': ' °C'}
+            })
+
+        # Precip (Remains Column/Bar)
+        if any(p[1] is not None for p in raw_series['precip']):
+            final_series.append({
+                'name': 'Precipitation',
+                'data': raw_series['precip'],
+                'type': 'column',
+                'yAxis': 4,
+                'tooltip': {'valueSuffix': ' mm'}
+            })
+
+        return JsonResponse({
+            'title': f"Data for {treatment.TreatmentName}", 
+            'series': final_series
+        })
+
+    except Exception as e:
+        print(f"DEBUG ERROR: {e}") 
+        return JsonResponse({'error': f"Server Error: {str(e)}"})
 
 def submit_data(request):
     return render(request, 'submit_data.html', {
     })
-# Create your views here.
