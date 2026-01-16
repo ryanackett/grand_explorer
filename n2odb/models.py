@@ -7,10 +7,11 @@ class User(AbstractUser):
 
 class Publication(models.Model):
     PubID = models.AutoField(db_column='PubID', primary_key=True)  # Field name made lowercase.
-    PubTitle = models.CharField(db_column='PubTitle', max_length=255)  # Field name made lowercase.
-    LeadAuthor = models.CharField(db_column='LeadAuthor', max_length=32)  # Field name made lowercase.
-    Citation = models.CharField(db_column='Citation', max_length=500)  # Field name made lowercase.
-    PubYear = models.IntegerField(db_column='PubYear')  # Field name made lowercase.
+    PubTitle = models.CharField(db_column='PubTitle', max_length=255, blank=True, null=True)  # Field name made lowercase.
+    LeadAuthor = models.CharField(db_column='LeadAuthor', max_length=32, blank=True, null=True)  # Field name made lowercase.
+    Citation = models.CharField(db_column='Citation', max_length=500, blank=True, null=True)  # Field name made lowercase.
+    PubYear = models.IntegerField(db_column='PubYear', blank=True, null=True)  # Field name made lowercase.
+    Link = models.CharField(db_column='Link', max_length=255, blank=True, null=True)  # Field name made lowercase.
     class Meta:
         db_table = 'Publication'
 
@@ -22,7 +23,10 @@ class Site(models.Model):
     MAP = models.FloatField(db_column='MAP', blank=True, null=True)  # Field name made lowercase.
     MAT = models.FloatField(db_column='MAT', blank=True, null=True)  # Field name made lowercase.
     Gracenet = models.BooleanField(db_column='Gracenet', blank=False, null=True)
-    Name = models.CharField(db_column='Name', max_length=255, blank=True, null=True)  # Field name made lowercase.
+    # OLD Field
+    #Name = models.CharField(db_column='Name', max_length=255, blank=True, null=True)  # Field name made lowercase.
+    # New Field
+    SiteName = models.CharField(db_column='SiteName', max_length=255, blank=True, null=True)  # Field name made lowercase.
     class Meta:
         db_table = 'Site'
 
@@ -48,6 +52,10 @@ class Treatment(models.Model):
     SandMean = models.FloatField(db_column='SandMean', blank=True, null=True)  # Field name made lowercase.
     SiltMean = models.FloatField(db_column='SiltMean', blank=True, null=True)  # Field name made lowercase.
     ClayMean = models.FloatField(db_column='ClayMean', blank=True, null=True)  # Field name made lowercase.
+    TreatmentDescription = models.TextField(db_column='TreatmentDescription', blank=True, null=True)
+    pHMean = models.FloatField(db_column='pH', blank=True, null=True)  # Field name made lowercase.
+    BulkDensityMean = models.FloatField(db_column='BulkDensity', blank=True, null=True)
+    SOMMean = models.FloatField(db_column='SOMMean', blank=True, null=True)   
     class Meta:
         db_table = 'Treatment'
 
@@ -115,40 +123,40 @@ class RawMeasurementTreatment(models.Model):
     airt = models.FloatField(db_column='AirT', blank=True, null=True)  # Field name made lowercase.
     precip = models.FloatField(db_column='Precip', blank=True, null=True)  # Field name made lowercase.
     nitrogenapplied = models.FloatField(db_column='NitrogenApplied')  # Field name made lowercase.
-    nitrogenform = models.CharField(db_column='NitrogenForm', max_length=64)  # Field name made lowercase.
-    nitrogentype = models.CharField(db_column='NitrogenType', max_length=45)  # Field name made lowercase.
-    plantedcrop = models.CharField(db_column='PlantedCrop', max_length=32)  # Field name made lowercase.
-    harvest = models.IntegerField(db_column='Harvest')  # Field name made lowercase.
-    tillage = models.IntegerField(db_column='Tillage')  # Field name made lowercase.
-    irrigationapplied = models.FloatField(db_column='IrrigationApplied')  # Field name made lowercase.
-    hmtruth = models.BooleanField(db_column='HMTruth', blank=False, null=True)
+    nitrogenform = models.CharField(db_column='NitrogenForm', blank=True, null=True, max_length=64)  # Field name made lowercase.
+    nitrogentype = models.CharField(db_column='NitrogenType', blank=True, null=True, max_length=45)  # Field name made lowercase.
+    plantedcrop = models.CharField(db_column='PlantedCrop', max_length=32, blank=True, null=True,)  # Field name made lowercase.
+    harvest = models.IntegerField(db_column='Harvest', blank=True, null=True)  # Field name made lowercase.
+    tillage = models.IntegerField(db_column='Tillage', blank=True, null=True)  # Field name made lowercase.
+    irrigationapplied = models.FloatField(db_column='IrrigationApplied', blank=True, null=True)  # Field name made lowercase.
+    hmtruth = models.BooleanField(db_column='HMTruth', blank=True, null=True)
     airtmax = models.FloatField(db_column='AirTMax', blank=True, null=True)  # Field name made lowercase.
     airtmin = models.FloatField(db_column='AirTMin', blank=True, null=True)  # Field name made lowercase.
     soilnh4 = models.FloatField(db_column='SoilNH4', blank=True, null=True)  # Field name made lowercase.
     soilno3 = models.FloatField(db_column='SoilNO3', blank=True, null=True)  # Field name made lowercase.
     management = models.CharField(db_column='Management', max_length=45, blank=True, null=True)  # Field name made lowercase.
-    doy = models.IntegerField(db_column='DOY')  # Field name made lowercase.
+    doy = models.IntegerField(db_column='DOY', blank=True, null=True)  # Field name made lowercase.
     vwccalculated = models.FloatField(db_column='VWCCalculated', blank=True, null=True)  # Field name made lowercase.
     wfpscalculated = models.FloatField(db_column='WFPSCalculated', blank=True, null=True)  # Field name made lowercase.
-    hmmcd = models.BooleanField(db_column='HMMCD', blank=False, null=True)
+    hmmcd = models.BooleanField(db_column='HMMCD', blank=True, null=True)
     mcdscores = models.CharField(db_column='MCDscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
-    hmknn = models.BooleanField(db_column='HMKNN', blank=False, null=True)
+    hmknn = models.BooleanField(db_column='HMKNN', blank=True, null=True)
     knnscores = models.CharField(db_column='KNNscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
     fluxstandarderror = models.FloatField(db_column='FluxStandardError', blank=True, null=True)  # Field name made lowercase.
     fluxconfidenceint = models.FloatField(db_column='FluxConfidenceInt', blank=True, null=True)  # Field name made lowercase.
-    hmiqr = models.BooleanField(db_column='HMIQR', blank=False, null=True)
+    hmiqr = models.BooleanField(db_column='HMIQR', blank=True, null=True)
     madscores = models.CharField(db_column='MADscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
-    hmmad = models.BooleanField(db_column='HMMAD', blank=False, null=True)
-    hmlof = models.BooleanField(db_column='HMLOF', blank=False, null=True)
+    hmmad = models.BooleanField(db_column='HMMAD', blank=True, null=True)
+    hmlof = models.BooleanField(db_column='HMLOF', blank=True, null=True)
     lofscores = models.CharField(db_column='LOFscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
-    hmabod = models.BooleanField(db_column='HMABOD', blank=False, null=True)
+    hmabod = models.BooleanField(db_column='HMABOD', blank=True, null=True)
     abodscores = models.CharField(db_column='ABODscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
-    hmiforest = models.BooleanField(db_column='HMIForest', blank=False, null=True)
+    hmiforest = models.BooleanField(db_column='HMIForest', blank=True, null=True)
     iforestscores = models.CharField(db_column='IForestscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
-    hmarima = models.BooleanField(db_column='HMARIMA', blank=False, null=True)
+    hmarima = models.BooleanField(db_column='HMARIMA', blank=True, null=True)
     arimascores = models.CharField(db_column='ARIMAscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
-    hm75percentile = models.BooleanField(db_column='HM75Percentile', blank=False, null=True)
-    hmhbos = models.BooleanField(db_column='HMHBOS', blank=False, null=True)
+    hm75percentile = models.BooleanField(db_column='HM75Percentile', blank=True, null=True)
+    hmhbos = models.BooleanField(db_column='HMHBOS', blank=True, null=True)
     hbosscores = models.CharField(db_column='HBOSscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
     class Meta:
         db_table = 'RawMeasurementTreatment'

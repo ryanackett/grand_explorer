@@ -3429,7 +3429,7 @@ button::-moz-focus-inner, input::-moz-focus-inner {
     --logo-width: 96px;
     --logo-height: 24px;
     z-index: 100;
-    background-color: rgba(130, 150, 140, 1) !important;
+    background-color: #7a9c80 !important;
     width: 100%;
     height: var(--header-height);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -4146,7 +4146,7 @@ body.search-is-visible {
 .s-hero__slide-content {
     height: 100%;
     max-width: var(--width-wide);
-    padding-top: calc(6 * var(--space));
+    padding-top: calc(1 * var(--space));
     padding-bottom: 20vh;
     position: relative;
 }
@@ -4193,7 +4193,7 @@ body.search-is-visible {
     font-weight: 400;
     line-height: 1.091;
     letter-spacing: -.01em;
-    color: white;
+    color: #7a9c80;
     margin-top: 0;
     text-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     position: relative;
@@ -4209,7 +4209,7 @@ body.search-is-visible {
 .s-hero__social {
     font-size: var(--text-xs);
     font-weight: 400;
-    color: white;
+    color: #7a9c80;
     text-align: right;
     position: absolute;
     right: 4rem;
@@ -4236,6 +4236,7 @@ body.search-is-visible {
     list-style: none;
     margin-left: 0;
     font-size: 2.4rem;
+    
 }
 
 .s-hero__social-icons li {
@@ -4245,7 +4246,7 @@ body.search-is-visible {
 }
 
 .s-hero__social-icons a {
-    color: white;
+    color: #7a9c80
 }
 
 .s-hero__social-icons a svg {

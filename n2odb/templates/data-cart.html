@@ -1,0 +1,810 @@
+{% extends 'base.html' %} 
+
+{% block content %}
+
+
+<script src="/static/js/jquery-3.5.0.min.js"></script>
+<script src="/static/js/plugins.js"></script>
+<script src="/static/js/main.js"></script>
+
+<script>
+    // This forcibly deletes the old Highcharts loaded by plugins.js
+    // ensuring your new version can load fresh without Error #16.
+    if (window.Highcharts) { 
+        console.warn("Old Highcharts detected in plugins.js - Nuking it.");
+        delete window.Highcharts; 
+    }
+    
+    // This kills any module loaders (like AMD/RequireJS) that templates use 
+    // which often hide Highcharts from the global scope.
+    if (window.define && window.define.amd) { 
+        window.define.amd = null; 
+    }
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+<script src="https://code.highcharts.com/highcharts.js"></script>
+<script src="https://code.highcharts.com/highcharts-more.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script src="https://code.highcharts.com/modules/histogram-bellcurve.js"></script>
+<script src="https://code.highcharts.com/maps/modules/map.js"></script>
+<script src="https://code.highcharts.com/mapdata/custom/world.js"></script>
+<script src="https://code.highcharts.com/modules/accessibility.js"></script>
+
+<style>
+    :root {
+        --sage-green: #7A9E7E;
+        --forest-green: #3B523D;
+        --cream-bg: #F4F1EA;
+        --text-dark: #333638;
+        --navbar-height: 80px; /* ADJUST THIS if your navbar is taller/shorter */
+    }
+
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--cream-bg);
+    }
+
+    /* Base Layout */
+    .workbench-container {
+        display: grid;
+        grid-template-columns: 350px 1fr; 
+        /* FIX: Push content down to avoid Navbar overlap */
+        margin-top: var(--navbar-height); 
+        min-height: calc(100vh - var(--navbar-height)); 
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        background-color: #E8E5DE;
+    }
+
+    /* Sidebar Styling */
+    .cart-sidebar {
+        background-color: #E8E5DE;
+        border-right: 1px solid #dcd9d2;
+        display: flex;
+        flex-direction: column;
+        padding: 2rem;
+        /* FIX: Make sidebar stick correctly below navbar */
+        height: calc(100vh - var(--navbar-height)); 
+        position: sticky;
+        top: var(--navbar-height);
+        overflow-y: auto;
+        box-sizing: border-box;
+    }
+
+    .cart-header {
+        border-bottom: 2px solid var(--sage-green);
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Cart Item Card */
+    .cart-item {
+        background: white;
+        padding: 1rem;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 0.8rem;
+        border-left: 4px solid var(--sage-green);
+        position: relative;
+    }
+
+    .item-title { font-weight: bold; color: var(--forest-green); font-size: 1.2rem; margin-right: 3rem; margin-bottom: 4px; line-height: 1.4;}
+    .item-meta { font-size: 1.2rem; color: #666; line-height: 1.4; }
+    
+    .btn-remove {
+        position: absolute;
+        top: 10px; right: 10px;
+        color: #cc5555;
+        cursor: pointer;
+        padding: 5px;
+    }
+
+    /* Actions */
+    .cart-actions { margin-top: auto; padding-top: 2rem; }
+    .btn-download {
+        width: 100%;
+        padding: 1rem;
+        background-color: var(--forest-green);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        transition: background 0.2s;
+    }
+    .btn-download:hover { background-color: #2a3d2c; }
+
+    /* Dashboard Area */
+    .dashboard-area { 
+        padding: 2rem; 
+        background-color: #E8E5DE;
+        /* Ensure dashboard scrolls independently if needed, or let body scroll */
+    }
+
+    .dash-header { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: flex-end; 
+        margin-bottom: 2rem; 
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+    
+    .dash-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+        visibility: hidden; 
+    }
+
+    /* Loading State */
+    #dash-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 300px;
+        width: 100%;
+        color: #999;
+    }
+
+    /* Widget Cards */
+    .widget {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+        border: 1px solid #eee;
+    }
+
+    .widget-title {
+        font-size: 2rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #999;
+        font-weight: 700;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 8px;
+    }
+
+    .w-large { grid-column: span 2; }
+    .w-full { grid-column: span 3; }
+
+    .highcharts-a11y-proxy-element {
+        font-size: 3rem !important;
+    }
+
+    #soil-chart {
+        /* Critical: Gives Plotly vertical room to draw the triangle */
+        height: 250px !important; 
+        aspect-ratio: 1 / 1 !important;
+
+        /* Optional: Centers the div if the parent is a flexbox */
+        margin: 0 auto;
+        display: block;
+    }
+
+    /* --- RESPONSIVE MOBILE STYLES --- */
+    @media (max-width: 900px) {
+        
+        /* 1. CONTAINER: Switch to Flex Column */
+        .workbench-container {
+            display: flex;             /* Flex allows easier ordering than Grid */
+            flex-direction: column;    /* Stack vertically */
+            height: auto;              /* Let the page grow naturally */
+            min-height: 0;             /* Reset min-height */
+            overflow-x: hidden;        /* Prevent horizontal scrollbar */
+            width: 100%;               /* Ensure it doesn't exceed screen */
+            background-color: #E8E5DE;
+        }
+
+        /* 2. SIDEBAR: Unstick and full width */
+        .cart-sidebar {
+            width: 100%;
+            height: auto;              /* Allow it to grow with content */
+            position: relative;        /* Remove 'sticky' behavior */
+            top: 0;
+            border-right: none;
+            border-bottom: 2px solid #dcd9d2; /* Divider below cart */
+            padding: 1rem;             /* Reduce padding to save space */
+            
+            /* OPTIONAL: Move Sidebar to bottom? Uncomment below: */
+            /* order: 2; */ 
+        }
+
+        /* 3. DASHBOARD: Full width & Reorder */
+        .dashboard-area {
+            width: 100%;
+            padding: 1rem;             /* Reduce padding */
+            
+            /* OPTIONAL: If moving Sidebar to bottom, uncomment below: */
+            /* order: 1; */
+        }
+
+        /* 4. GRID RESET: Force single column for widgets */
+        .dash-grid {
+            display: flex;             /* Switch grid to flex column for simplicity */
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* 5. WIDGETS: The "Too Wide" Fix */
+        .widget, .w-large, .w-full {
+            width: 100%;               /* Force full width */
+            min-width: 0;              /* CRITICAL: Allows flex/grid items to shrink */
+            box-sizing: border-box;    /* Includes padding in width calculation */
+            margin: 0;
+        }
+
+        /* 6. CHARTS: Force containment */
+        .highcharts-container, .plotly-graph-div {
+            width: 100% !important;
+            max-width: 100vw;          /* Hard limit */
+        }
+    }
+</style>
+
+<div class="workbench-container">
+    <aside class="cart-sidebar">
+        <div class="cart-header">
+            <h2 style="margin:0; font-family:'Georgia', serif; color: var(--forest-green);">Selected Datasets</h2>
+            <div id="sidebar-stats" style="margin-top:5px; font-size:2rem; color:#666;">Initializing...</div>
+        </div>
+
+        <div class="cart-actions">
+            <button class="btn-download" onclick="downloadCSV()">
+                <i class="fas fa-download"></i> Download Dataset
+            </button>
+            <div style="text-align:center; margin-top:15px; margin-bottom:3rem; ">
+                <a href="#" onclick="CartManager.clear(); return false;" style="color:#999; font-size:2rem; text-decoration: underline;">Clear Cart & Start Over</a>
+            </div>
+        </div>
+
+         <div id="cart-list-container"></div>
+    </aside>
+
+    <main class="dashboard-area">
+        <div class="dash-header">
+            <div>
+                <h1 style="margin:0; font-family:'Georgia', serif; color: var(--forest-green);">Analysis Dashboard</h1>
+            </div>
+            <div style="text-align: right;">
+                <div id="total-rows-display" style="font-size: 2rem; font-family: 'Georgia'; color: var(--forest-green);">--</div>
+            </div>
+        </div>
+
+        <div id="dash-loading">
+            <i class="fas fa-circle-notch fa-spin fa-3x" style="color: var(--sage-green);"></i>
+            <p style="margin-top: 15px;">Crunching the numbers...</p>
+        </div>
+
+        <div class="dash-grid" id="dash-content">
+            <div class="widget w-large">
+                <div class="widget-title">Geographic Coverage</div>
+                <div id="map-chart" style="height: 250px;"></div>
+            </div>
+
+            <div class="widget">
+                <div class="widget-title">Hot Moments</div>
+                <div id="hmmad-chart" style="height: 200px;"></div>
+            </div>
+
+            <div class="widget w-large">
+                <div class="widget-title">Primary Crop Distribution</div>
+                <div id="crop-chart" style="height: 200px;"></div>
+            </div>
+
+            <div class="widget">
+                <div class="widget-title">Soil Texture</div>
+                <div id="soil-chart" style="height: 200px;"></div>
+            </div>
+
+            <div class="widget w-full">
+                <div class="widget-title">N2O Flux Magnitude Distribution</div>
+                <div id="hist-chart" style="height: 300px;"></div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    // --- CART MANAGER (Embedded to ensure availability) ---
+    const CartManager = {
+        key: 'grand_explorer_cart_v1', 
+
+        getCart: function() {
+            const stored = localStorage.getItem(this.key);
+            return stored ? JSON.parse(stored) : [];
+        },
+
+        clear: function() {
+            if(confirm("Are you sure you want to clear your cart?")) {
+                localStorage.removeItem(this.key);
+                location.reload();
+            }
+        },
+        
+        // Note: 'add' function is not needed on this page, but 'getCart' is essential.
+    };
+
+    // --- MAIN PAGE LOGIC ---
+    document.addEventListener("DOMContentLoaded", function() {
+        initCartPage();
+    });
+
+    async function initCartPage() {
+        const loadingDiv = document.getElementById('dash-loading');
+        const contentDiv = document.getElementById('dash-content');
+        const listContainer = document.getElementById('cart-list-container');
+
+        // 1. Check for Items
+        const ids = CartManager.getCart();
+        
+        if (!ids || ids.length === 0) {
+            listContainer.innerHTML = "<p style='color:#666; font-style:italic;'>Your cart is empty.</p>";
+            loadingDiv.innerHTML = `
+                <div style="text-align:center">
+                    <i class="fas fa-shopping-basket fa-3x" style="color:#ccc;"></i>
+                    <p style="margin-top:20px;">Your cart is empty.</p>
+                    <a href="/query-filters" style="color:var(--forest-green); font-weight:bold;">Go Explore Data</a>
+                </div>`;
+            return;
+        }
+
+        // 2. Fetch Data
+        try {
+            const response = await fetch('/api/cart-data/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            });
+
+            if (!response.ok) throw new Error(`Server Error (${response.status})`);
+            
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+
+            // 3. Success: Swap Loader for Content
+            loadingDiv.style.display = 'none';
+            contentDiv.style.visibility = 'visible';
+            contentDiv.style.display = 'grid'; 
+
+            renderSidebar(data.sidebar_list, data.total_rows);
+            renderCharts(data);
+
+        } catch (e) {
+            console.error(e);
+            loadingDiv.innerHTML = `
+                <div style="color:#cc5555; text-align:center;">
+                    <i class="fas fa-exclamation-triangle fa-2x"></i>
+                    <p><strong>Error loading analytics</strong><br>${e.message}</p>
+                    <button onclick="location.reload()" style="padding:5px 10px; cursor:pointer;">Try Again</button>
+                </div>`;
+        }
+    }
+
+    function renderSidebar(list, totalRows) {
+        document.getElementById('sidebar-stats').innerText = `${list.length} Treatments | ~${(totalRows * 0.0005).toFixed(1)} MB`;
+        document.getElementById('total-rows-display').innerText = totalRows.toLocaleString() + " N2O Flux Measurements";
+
+        const container = document.getElementById('cart-list-container');
+        container.innerHTML = '';
+        
+        list.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'cart-item';
+            div.innerHTML = `
+                <div class="item-title">${item.publication}</div>
+                <div class="item-meta">
+                    <i class="fas fa-map-marker-alt"></i> ${item.location} <br>
+                    <span style="color:#888;">${item.name} • ${item.crop} • ${item.mgmt}</span>
+                </div>
+                <i class="fas fa-trash btn-remove" onclick="removeCartItem('${item.id}')" title="Remove"></i>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function removeCartItem(id) {
+        let cart = CartManager.getCart();
+        cart = cart.filter(x => String(x) !== String(id));
+        localStorage.setItem(CartManager.key, JSON.stringify(cart));
+        location.reload(); 
+    }
+
+    function renderCharts(data) {
+        // --- 1. Map Chart (The "Force Load" Fix) ---
+        const mapContainer = document.getElementById('map-chart');
+        
+        // Internal function to actually draw the map once data is found
+        const drawMap = (mapDefinition) => {
+            Highcharts.mapChart('map-chart', {
+                chart: {
+                    map: mapDefinition, // Use the data we found
+                    backgroundColor: 'transparent',
+                    spacingbottom: 20
+                },
+                title: { text: '' },
+                mapNavigation: {
+                    enabled: true,
+                    buttonOptions: { verticalAlign: 'bottom' }
+                },
+                legend: { enabled: false },
+                tooltip: { pointFormat: '{point.name}: <b>{point.z}</b> rows' },
+                series: [{
+                    name: 'Basemap',
+                    borderColor: '#ccc',
+                    nullColor: '#f0f4f0',
+                    color: '#e0e0e0',
+                    enableMouseTracking: false 
+                }, {
+                    type: 'mappoint',
+                    name: 'Experiments',
+                    color: '#3B523D',
+                    data: data.map_data,
+                    minSize: 6,
+                    maxSize: 20,
+                    marker: {
+                        lineWidth: 1,
+                        lineColor: '#ffffff',
+                        symbol: 'circle'
+                    },
+                    dataLabels: {
+                        enabled: false,
+                        format: '{point.name}',
+                        style: { 
+                            fontSize: '10px', 
+                            fontWeight: 'normal', 
+                            textOutline: '3px white', // Strong halo to read against map lines
+                            color: '#333'
+                        },
+                        y: -15, // Pushes text UP above the dot
+                        allowOverlap: false, // Prevents text crashing into other text
+                        padding: 0
+                    }
+                }]
+            });
+        };
+
+        // STEP A: Check if the map is already available via <script> tag
+        if (Highcharts.maps && Highcharts.maps['custom/world']) {
+            console.log("Using local map script.");
+            drawMap(Highcharts.maps['custom/world']);
+        } 
+        // STEP B: If missing, fetch it manually (Bypasses the error)
+        else {
+            console.log("Local map script not found. Fetching from CDN...");
+            fetch('https://code.highcharts.com/mapdata/custom/world.topo.json')
+                .then(response => {
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    return response.json();
+                })
+                .then(topology => {
+                    console.log("Map data fetched successfully.");
+                    drawMap(topology);
+                })
+                .catch(error => {
+                    console.error("Map fetch failed:", error);
+                    mapContainer.innerHTML = "<div style='color:red;padding:20px'>Could not load World Map data. check console.</div>";
+                });
+        }
+
+        // --- 2. Donut (Hot Moments vs Background) ---
+        // Calculate Percentage
+        const hotMoments = data.hmmad_stats.Auto || 0;
+        const background = data.hmmad_stats.Manual || 0;
+        const total = hotMoments + background;
+        const pctString = total > 0 ? ((hotMoments / total) * 100).toFixed(1) + '%' : '0%';
+
+        Highcharts.chart('hmmad-chart', {
+            chart: { 
+                type: 'pie', 
+                height: 200, 
+                backgroundColor: 'transparent',
+                // This event fires every time the chart draws or resizes
+                events: {
+                    render: function() {
+                        const chart = this;
+                        const series = chart.series[0];
+                        
+                        // 1. Calculate the exact center of the Pie slices
+                        // series.center is relative to plot area, so we add plotTop/Left
+                        const centerX = chart.plotLeft + series.center[0];
+                        const centerY = chart.plotTop + series.center[1];
+
+                        // 2. Create the label if it doesn't exist
+                        if (!chart.donutLabel) {
+                            chart.donutLabel = chart.renderer.label(
+                                `<div style="text-align:center;">
+                                    <span style="font-size:1.2rem; color:#7A9E7E; font-weight:bold;">${pctString}</span><br>
+                                    <span style="font-size:11px; color:#666;">Hot Moments</span>
+                                </div>`, 
+                                0, 
+                                0, 
+                                null, 
+                                null, 
+                                null, 
+                                true // useHTML
+                            ).css({
+                                color: '#333',
+                            }).add();
+                        }
+
+                        // 3. Center the label over the calculated coordinates
+                        const labelBox = chart.donutLabel.getBBox();
+                        chart.donutLabel.attr({
+                            x: centerX - (labelBox.width / 2),
+                            y: centerY - (labelBox.height / 2)
+                        });
+                    }
+                }
+            },
+            title: { text: '' }, // Disable standard title
+            plotOptions: { 
+                pie: { 
+                    innerSize: '75%', 
+                    dataLabels: { enabled: false }, 
+                    showInLegend: true 
+                } 
+            },
+            legend: {
+                itemStyle: { fontSize: '1.2rem', color: '#333638' },
+                symbolRadius: 6
+            },
+            colors: ['#7A9E7E', '#cccccc'],
+            series: [{
+                name: 'Rows',
+                data: [
+                    { name: 'Hot Moments', y: hotMoments },
+                    { name: 'Background Emissions', y: background }
+                ]
+            }]
+        });
+
+        // --- 3. Bar (Crops) ---
+        const categories = data.crop_data.map(d => d.PrimaryCrop);
+        const counts = data.crop_data.map(d => d.count);
+        Highcharts.chart('crop-chart', {
+            chart: { type: 'column', height: 200, backgroundColor: 'transparent' },
+            title: { text: '' },
+            xAxis: { 
+                categories: categories,
+                labels: {
+                    style: {
+                        fontSize: '1rem', // Increased font size
+                        fontWeight: '300', // Made slightly bolder
+                        color: '#333'      // Ensure high contrast
+                    }
+                }
+            },
+            yAxis: { title: { text: null } },
+            legend: { enabled: false },
+            series: [{ name: 'Treatments', data: counts, color: '#3B523D' }]
+        });
+
+        // --- 4. Soil Textural Triangle (Plotly Implementation) ---
+        // 1. Prepare Data arrays for Plotly
+        const sandValues = data.soil_stats.map(s => Number(s.Sand));
+        const clayValues = data.soil_stats.map(s => Number(s.Clay));
+        const siltValues = data.soil_stats.map(s => Number(s.Silt));
+        const labels = data.soil_stats.map(s => `${s.Sand}% Sand<br>${s.Clay}% Clay<br>${s.Silt}% Silt`);
+
+        const trace = {
+            type: 'scatterternary',
+            mode: 'markers',
+            hoverinfo: 'text',
+            // In Plotly Ternary:
+            // a = Top Axis (usually Clay)
+            // b = Left Axis (usually Sand)
+            // c = Right Axis (usually Silt)
+            // You may need to swap these to match your specific triangle orientation preference
+            a: clayValues, 
+            b: sandValues, 
+            c: siltValues,
+            text: labels,
+            marker: {
+                symbol: 'circle',
+                color: '#8C5E45',
+                size: 8,
+                opacity: 0.8
+            }
+        };
+
+        const layout = {
+            // Keep margins tight so the triangle remains large
+            margin: { t: 30, l: 30, r: 30, b: 30 },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            
+            // Disable default interaction to keep it static/clean
+            dragmode: false,
+
+            ternary: {
+                sum: 100,
+                // HIDE default titles (we will replace them with rotated annotations)
+                aaxis: { title: '', min: 0.01, tickfont: { size: 10 }, color: '#333' },
+                baxis: { title: '', min: 0.01, tickfont: { size: 10 }, color: '#333' },
+                caxis: { title: '', min: 0.01, tickfont: { size: 10 }, color: '#333' },
+                bgcolor: 'rgba(0,0,0,0)'
+            },
+
+            annotations: [
+                // 1. CLAY LABEL (Left Side, Rotated -60°)
+                {
+                    text: 'Percent Clay',
+                    x: -0.1, // Adjusts horizontal position relative to container
+                    y: 0.60, // Adjusts vertical position
+                    showarrow: false,
+                    textangle: -60,
+                    font: { size: 14, color: '#555' },
+                    xref: 'paper', yref: 'paper'
+                },
+                // 2. SILT LABEL (Right Side, Rotated 60°)
+                {
+                    text: 'Percent Silt',
+                    x: 1.05, 
+                    y: 0.60,
+                    showarrow: false,
+                    textangle: 60,
+                    font: { size: 14, color: '#555' },
+                    xref: 'paper', yref: 'paper'
+                },
+                // 3. SAND LABEL (Bottom Side, Flat)
+                {
+                    text: 'Percent Sand',
+                    x: 0.50, 
+                    y: -0.15, // Pushes it to the very bottom
+                    showarrow: false,
+                    font: { size: 14, color: '#555' },
+                    xref: 'paper', yref: 'paper'
+                }
+            ]
+        };
+
+        // Render
+        Plotly.newPlot('soil-chart', [trace], layout, {
+            displayModeBar: false, 
+            responsive: true // Ensures it scales if you resize the window
+        });
+
+        // 4. RESPONSIVE: 'responsive: true' makes it resize with the browser window
+        Plotly.newPlot('soil-chart', [trace], layout, {displayModeBar: false, responsive: true});
+
+        // --- 5. Histogram (Custom Fixed Bins) ---
+        if (data.flux_values && data.flux_values.length > 0) {
+            
+            // 1. Clean Data
+            const rawValues = data.flux_values.map(Number).filter(n => !isNaN(n));
+            const negatives = rawValues.filter(v => v <= 0);
+            const positives = rawValues.filter(v => v > 0);
+
+            const chartData = [];
+            const categories = [];
+
+            // --- PART A: The "Negative/Zero" Bin ---
+            if (negatives.length > 0) {
+                chartData.push({
+                    y: negatives.length,
+                    color: '#8C5E45', // Brown
+                    name: '≤ 0'
+                });
+                categories.push('≤ 0');
+            }
+
+            // --- PART B: The Custom Positive Bins ---
+            // Define your requested upper limits. 
+            // The logic is: "Is value <= Limit?" (after passing previous limits)
+            const binDefinitions = [
+                { limit: 2.5,  label: '0-2.5' },
+                { limit: 5,    label: '2.5-5' },
+                { limit: 10,   label: '5-10' },
+                { limit: 20,   label: '10-20' },
+                { limit: 50,   label: '20-50' },
+                { limit: 100,  label: '50-100' },
+                { limit: 500,  label: '100-500' },
+                { limit: 1000, label: '500-1000' },
+                { limit: Infinity, label: '1000+' }
+            ];
+
+            // Initialize counts for each custom bin
+            const binCounts = new Array(binDefinitions.length).fill(0);
+
+            // Sort positives into bins
+            positives.forEach(val => {
+                for (let i = 0; i < binDefinitions.length; i++) {
+                    if (val <= binDefinitions[i].limit) {
+                        binCounts[i]++;
+                        break; // Stop once we find the right bucket
+                    }
+                }
+            });
+
+            // Add positive bins to chart data
+            binDefinitions.forEach((def, index) => {
+                // Only show bins that actually have data (Optional: remove 'if' to show empty bins)
+                if (binCounts[index] > 0) {
+                    categories.push(def.label);
+                    chartData.push({
+                        y: binCounts[index],
+                        color: '#7A9E7E', // Green
+                        name: def.label
+                    });
+                }
+            });
+
+            // 2. Render Chart
+            if (chartData.length === 0) {
+                document.getElementById('hist-chart').innerHTML = 
+                    "<div style='text-align:center;color:#ccc;padding-top:20px'>No Data Available</div>";
+            } else {
+                Highcharts.chart('hist-chart', {
+                    chart: { 
+                        type: 'column', 
+                        backgroundColor: 'transparent',
+                        // Reflow ensures it fits the container if hidden initially
+                        events: { load: function() { this.reflow(); } }
+                    },
+                    title: { text: '' },
+                    
+                    xAxis: { 
+                        categories: categories,
+                        title: { text: 'N2O Flux (g N ha-1 day-1)',
+                            style: { fontSize: '1.5rem' } 
+                        },
+                        labels: {
+                            style: { fontSize: '1.2rem' },
+                            autoRotation: [-45, -90]
+                        }
+                    },
+                    
+                    yAxis: { 
+                        type: 'logarithmic', 
+                        title: { text: 'Frequency (Log Scale)',
+                            style: { fontSize: '1.5rem' } 
+                        },
+                        labels: {
+                            style: { fontSize: '1.2rem' },
+
+                        }
+                    },
+
+                    tooltip: {
+                        pointFormat: 'Count: <b>{point.y}</b>'
+                    },
+
+                    plotOptions: {
+                        column: {
+                            // Safety threshold for log axis
+                            threshold: 0.1, 
+                            groupPadding: 0,
+                            pointPadding: 0.05, // Slight gap between bars for readability
+                            borderWidth: 1,
+                            borderColor: 'transparent'
+                        }
+                    },
+
+                    series: [{
+                        name: 'Flux',
+                        data: chartData,
+                        showInLegend: false
+                    }]
+                });
+            }
+
+        } else {
+            document.getElementById('hist-chart').innerHTML = 
+                "<div style='text-align:center; padding-top:40px; color:#999;'>No numeric flux data available.</div>";
+        }
+    }
+
+
+    function downloadCSV() {
+        alert("Download functionality to be implemented.");
+    }
+</script>
+
+
+{% endblock %}

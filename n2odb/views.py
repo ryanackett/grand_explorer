@@ -10,6 +10,8 @@ import json
 from django.db.models import F
 from collections import defaultdict
 import datetime
+from django.db.models import Count, Avg
+from django.views.decorators.csrf import csrf_exempt
 
 
 def index(request): 
@@ -210,12 +212,12 @@ def get_data(request):
         dropdown_dict['dropdown_dict'] = dropdown_dict
 
         labels_dict = {}
-        labels_dict['env'] = 'Environmental Variables'
-        labels_dict['ins'] = 'Flux Instrument'
-        labels_dict['fert'] = 'Fertilizer Form'
-        labels_dict['mgmt'] = 'Management'
-        labels_dict['crop'] = 'Crop'
-        labels_dict['cont'] = 'Continent'
+        labels_dict['env'] = 'Env Covariates (all of these)'
+        labels_dict['ins'] = 'Flux Instrument (any of these)'
+        labels_dict['fert'] = 'Fertilizer Form (any of these)'
+        labels_dict['mgmt'] = 'Management (any of these)'
+        labels_dict['crop'] = 'Crop (any of these)'
+        labels_dict['cont'] = 'Continent (any of these)'
 
         dropdown_dict['labels_dict'] = labels_dict
 
@@ -245,7 +247,7 @@ def get_data(request):
             # Pull Site Data (via SiteID FK)
             Lat=F('SiteID__Latitude'),
             Lon=F('SiteID__Longitude'),
-            SiteName=F('SiteID__Name'),
+            SiteName=F('SiteID__SiteName'),
             MAP=F('SiteID__MAP'),
             MAT=F('SiteID__MAT'),
             # Pull Publication Data (via PubID FK)
@@ -425,3 +427,218 @@ def get_graph_json(treatment_id):
 def submit_data(request):
     return render(request, 'submit_data.html', {
     })
+
+def data_cart(request):
+    return render(request, 'data-cart.html', {
+    })
+
+@csrf_exempt 
+def get_cart_data(request):
+    """
+    API Endpoint: Receives IDs via POST, returns Analytics JSON.
+    Mapped exactly to user provided models.py.
+    """
+    if request.method == 'POST':
+        try:
+            # 1. Parse IDs from Request Body
+            body = json.loads(request.body)
+            raw_ids = body.get('ids', [])
+            treatment_ids = [int(x) for x in raw_ids if str(x).isdigit()]
+
+            # 2. Fetch Treatments
+            # We use select_related to traverse the ForeignKeys defined in your models:
+            # Treatment.ExperimentID -> Experiment.SiteID / Experiment.PubID
+            treatments = Treatment.objects.filter(pk__in=treatment_ids).select_related(
+                'ExperimentID', 
+                'ExperimentID__SiteID',
+                'ExperimentID__PubID'
+            )
+
+            # 3. Fetch Measurements
+            # Your model uses lowercase 'treatmentid' for the foreign key
+            measurements = RawMeasurementTreatment.objects.filter(treatmentid__in=treatments)
+            total_flux_rows = measurements.count()
+            # Now get only the number of rows where N2OFlux is not null
+            total_flux_measurements = measurements.filter(n2oflux__isnull=False).count()
+
+            # --- BUILD WIDGET DATA ---
+
+            # A. Sidebar List
+            sidebar_list = []
+            for t in treatments:
+                # Access related objects via the attributes in your models
+                exp = t.ExperimentID
+                site = exp.SiteID if exp else None
+                pub = exp.PubID if exp else None
+
+                sidebar_list.append({
+                    'id': t.pk,
+                    'name': t.TreatmentName or f"Treatment {t.pk}", 
+                    'crop': t.PrimaryCrop or "Unknown",
+                    'mgmt': t.Management or "Unknown",
+                    'location': site.SiteName if site else "Unknown Site", 
+                    'year': pub.PubYear if pub else "N/A",
+                    'publication': pub.PubTitle if pub else "N/A"
+                })
+
+            # B. Map Data (Grouped by Site)
+            map_data = []
+            # Get unique sites associated with these treatments
+            unique_sites = set()
+            for t in treatments:
+                if t.ExperimentID and t.ExperimentID.SiteID:
+                    unique_sites.add(t.ExperimentID.SiteID)
+            
+            for site in unique_sites:
+                # Find which treatments in the cart belong to this specific site
+                # We filter the 'treatments' list we already fetched
+                site_treatments = [t for t in treatments if t.ExperimentID.SiteID == site]
+                
+                # Count measurements only for those treatments
+                count = measurements.filter(treatmentid__in=site_treatments).count()
+                
+                if count > 0:
+                    map_data.append({
+                        'lat': site.Latitude,   # Model field: Latitude
+                        'lon': site.Longitude,  # Model field: Longitude
+                        'name': site.SiteName,
+                        'z': count
+                    })
+
+            # C. HMMAD Stats (Methodology)
+            hmmad_true = measurements.filter(hmmad=True).count()
+            hmmad_false = total_flux_measurements - hmmad_true
+            
+            # D. Crop Distribution
+            # Model field: PrimaryCrop
+            crop_counts = treatments.values('PrimaryCrop').annotate(count=Count('TreatmentID')).order_by('-count')
+            crop_data = list(crop_counts) 
+
+            # E. Soil Textures of Treatments
+            # Create a list (sand, silt, clay) for each treatment
+            soil_stats = []
+            for t in treatments:
+                sand = t.SandMean if t.SandMean is not None else 0
+                silt = t.SiltMean if t.SiltMean is not None else 0
+                clay = t.ClayMean if t.ClayMean is not None else 0
+                soil_stats.append([sand, silt, clay])
+
+            # Convert each inner list to dictionary for easier frontend use
+            soil_stats = [
+                {'Sand': s[0],
+                 'Silt': s[1],
+                 'Clay': s[2]}
+                for s in soil_stats
+            ]
+
+            # F. Histogram Data (Raw Flux Values)
+            # Model field: n2oflux (lowercase)
+            # We filter out nulls to avoid errors
+            flux_values = list(measurements.filter(n2oflux__isnull=False)
+                               .values_list('n2oflux', flat=True)[:10000])
+
+            # 4. Return JSON
+            data = {
+                'sidebar_list': sidebar_list,
+                'total_rows': total_flux_measurements,
+                'map_data': map_data,
+                'hmmad_stats': {'Auto': hmmad_true, 'Manual': hmmad_false},
+                'crop_data': crop_data,
+                'soil_stats': soil_stats,
+                'flux_values': flux_values
+            }
+            return JsonResponse(data)
+
+        except Exception as e:
+            # Print error to terminal for debugging
+            print(f"API ERROR: {e}")
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'POST method required'}, status=405)
+    """API Endpoint: Receives IDs via POST, returns Analytics JSON."""
+    if request.method == 'POST':
+        try:
+            # 1. Parse IDs from Request Body
+            body = json.loads(request.body)
+            raw_ids = body.get('ids', [])
+            # Validate IDs are integers
+            treatment_ids = [int(x) for x in raw_ids if str(x).isdigit()]
+
+            # 2. Fetch Objects
+            # Use select_related to grab parent Experiment data efficiently
+            treatments = Treatment.objects.filter(pk__in=treatment_ids).select_related('ExperimentID')
+            
+            # 3. Filter Measurements
+            measurements = RawMeasurementTreatment.objects.filter(treatmentid__in=treatments)
+            total_flux_rows = measurements.count()
+
+            # --- BUILD WIDGET DATA ---
+
+            # A. Sidebar List
+            sidebar_list = []
+            for t in treatments:
+                sidebar_list.append({
+                    'id': t.pk,
+                    'name': getattr(t, 'Name', f"Treatment {t.pk}"), 
+                    'crop': getattr(t, 'PrimaryCrop', "Unknown"),
+                    'location': t.ExperimentID.SiteName, 
+                    'year': t.ExperimentID.Year,
+                })
+
+            # B. Map Data (Grouped by Experiment Site)
+            map_data = []
+            experiments = set(t.ExperimentID for t in treatments)
+            for exp in experiments:
+                # Count rows just for this experiment's selected treatments
+                count = measurements.filter(treatment__experiment=exp).count()
+                if count > 0:
+                    map_data.append({
+                        'lat': float(exp.Lat),
+                        'lon': float(exp.Lon),
+                        'name': exp.SiteName,
+                        'z': count # Bubble size
+                    })
+
+            # C. HMMAD (Methodology)
+            # Assuming 1 = Auto, 0 = Manual. Adjust field name if needed.
+            hmmad_auto = measurements.filter(HMMAD=1).count()
+            hmmad_manual = total_flux_rows - hmmad_auto
+            
+            # D. Crop Distribution
+            crop_counts = treatments.values('PrimaryCrop').annotate(count=Count('id')).order_by('-count')
+            crop_data = list(crop_counts) 
+
+            # E. Soil Texture (Average)
+            # Assumes Experiment has Sand/Silt/Clay fields.
+            soil_stats = treatments.aggregate(
+                Sand=Avg('experiment__Sand'),
+                Silt=Avg('experiment__Silt'),
+                Clay=Avg('experiment__Clay')
+            )
+
+            # F. Histogram Data (Raw Flux Values)
+            # Limit to 10,000 points to prevent browser crash if data is huge
+            flux_values = list(measurements.filter(N2OFlux__isnull=False)
+                               .values_list('N2OFlux', flat=True)[:10000])
+
+            # 4. Return JSON
+            data = {
+                'sidebar_list': sidebar_list,
+                'total_rows': total_flux_rows,
+                'map_data': map_data,
+                'hmmad_stats': {'Auto': hmmad_auto, 'Manual': hmmad_manual},
+                'crop_data': crop_data,
+                'soil_stats': soil_stats,
+                'flux_values': flux_values
+            }
+            return JsonResponse(data)
+
+        except Exception as e:
+            # --- ADD THIS PRINT STATEMENT ---
+            print("!!!!!!! API ERROR !!!!!!!")
+            print(e)
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!")
+            # -------------------------------
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'POST method required'}, status=405)

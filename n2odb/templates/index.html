@@ -1,85 +1,7 @@
 
 {% extends 'base.html' %}
 {% block head %}
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById("page1").classList.add('current');
-            console.log("trying");
-            var masonry = document.getElementsByClassName("masonry");
-            console.log(masonry);
-            var pages = masonry.length;
-            console.log(pages);
-            var i = 0;
-            while(i < pages){
-                var currentMasonryId = masonry[i].id;
-                console.log(currentMasonryId)
-                if(currentMasonryId == "masonry1"){
-                    i += 1;
-                    continue;
-                }
-                console.log("here")
-                document.getElementById(currentMasonryId).style.display = "none";
-                i += 1;
-            }
-        }, false);
-        function scrollPage(goPage){
-            var changeInd = "change";
-            if(goPage == "next"){
-                var x = document.getElementsByClassName("pgn__num current");
-                console.log(x[0]);
-                var currentPageId = x[0].id;
-                var currentPage = currentPageId.slice(-1);
-                console.log(currentPage);
-                var goPageNum = Number(currentPage) + 1;
-                var goPage = "page" + String(goPageNum);
-                document.getElementById(goPage).classList.add('current');
-                document.getElementById(currentPageId).classList.remove('current');
-            } else if(goPage == "prev"){
-                var x = document.getElementsByClassName("pgn__num current");
-                console.log(x[0]);
-                var currentPageId = x[0].id;
-                var currentPage = currentPageId.slice(-1);
-                console.log(currentPage);
-                var goPageNum = Number(currentPage) - 1;
-                var goPage = "page" + String(goPageNum);
-                document.getElementById(goPage).classList.add('current');
-                document.getElementById(currentPageId).classList.remove('current');
-            } else {
-                var x = document.getElementsByClassName("pgn__num current");
-                console.log(x[0]);
-                var currentPageId = x[0].id;
-                if(goPage == currentPageId){
-                    console.log("nochange");
-                    changeInd = "nochange";
-                }
-                var currentPage = currentPageId.slice(-1);
-                console.log(currentPage);
-                document.getElementById(currentPageId).classList.remove('current');
-                document.getElementById(goPage).classList.add('current');
-            }
-            if (changeInd == "change"){
-                goMasonryNum = goPage.slice(-1);
-                prevMasonryNum = currentPage
-                console.log(prevMasonryNum);
-                goMasonryId = "masonry" + goMasonryNum;
-                prevMasonryId = "masonry" + prevMasonryNum;
-                goMasonryJQ = "#" + goMasonryId;
-                prevMasonryJQ = "#" + prevMasonryId;
-                console.log("prev = " + prevMasonryId);
-                console.log("show = " + goMasonryId);
-                if(Number(goMasonryNum) > Number(prevMasonryNum)){
-                    console.log("forward")
-                    $(prevMasonryJQ).toggle({ direction: "left" },350);
-                    $(goMasonryJQ).animate({width:'toggle'},350);
-                } else{
-                    console.log("backward")
-                    $(prevMasonryJQ).animate({width:'toggle'},350);
-                    $(goMasonryJQ).toggle({ direction: "right" },350);
-                }
-                window.location.href = "#blog-section"
-            }
-        }
-    </script>
+
     <style>
         /* All the snapping stuff */
         .scroll-container {
@@ -114,57 +36,255 @@
             pointer-events: none !important;
         }
     </style>
+    <style>
+        .s-hero__slide-text {
+            font-size: 3.8rem !important;
+        }
+        .s-hero__slide-bg::before {
+            /* The 0.2 means 20% opacity. 
+            Default is usually 0.5 or 0.8 (much darker). */
+            background-color: rgba(0, 0, 0, 0.0); 
+        }
+        
+        .s-hero__slide-bg::after {
+            /* The 0.2 means 20% opacity. 
+            Default is usually 0.5 or 0.8 (much darker). */
+            background-color: rgba(0, 0, 0, 0.2); 
+        }
+    </style>
+    
+    <style>
+        /* --- Acrostic Layout --- */
+        .grand-title-flex {
+            display: flex;
+            flex-direction: row; /* Keep the big letters side-by-side */
+            align-items: flex-start;
+            justify-content: flex-start;
+            gap: 0rem; /* Space between the columns (G... R... A...) */
+            margin-bottom: 2rem;
+        }
+
+        .letter-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Centers the hanging text under the big letter */
+        }
+
+        /* The Big Letters (G, R, A, N, D) */
+        .big-cap-modern {
+            font-family: "Georgia", serif;
+            font-size: 5rem;
+            font-weight: 700;
+            color: black;
+            line-height: 1;
+            margin-bottom: 0.1rem; /* Gap between big letter and hanging text */
+        }
+
+        /* The Hanging Text (lobal, epository, etc.) */
+        .vertical-text {
+            /* This forces the letters to stack vertically but stay upright */
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            
+            font-family: "Georgia", serif;
+            font-size: 1.5rem; /* Much larger than before */
+            font-weight: 600;
+            color: black;
+            letter-spacing: -2px; /* Tighter spacing for vertical stacking */
+            text-transform: uppercase;
+        }
+
+        /* The "Explorer" Word */
+        .explorer-text {
+            align-self: flex-start; /* Aligns with the top of the G, R, A... */
+            font-family: "Georgia", serif;
+            font-size: 8rem;
+            font-weight: 300;
+            font-style: italic;
+            color: #7a9c80;
+            margin-left: 1rem;
+            opacity: 0.9;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        /* --- Mobile / Small Screen Tweaks --- */
+        @media (max-width: 768px) {
+            /* Center the GRAND letters block */
+            .grand-title-flex {
+                justify-content: center; 
+                gap: 0.5rem; 
+                flex-wrap: wrap;
+            }
+
+            .big-cap-modern { font-size: 3rem; }
+            
+            .vertical-text { 
+                font-size: 0.8rem; 
+                letter-spacing: -1px; 
+            }
+
+            /* Force Explorer to new line below GRAND */
+            .explorer-text {
+                width: 100%;        /* Takes full row width */
+                text-align: center; /* Centers the text */
+                margin-left: 0;     /* Removes left spacing */
+                margin-top: 1rem;   /* Adds spacing above it */
+                font-size: 3.5rem;  /* Slightly smaller for mobile fit */
+            }
+        }
+
+    </style>
+
+    <style>
+        /* --- Button Container (Centers the stack) --- */
+        .hero-btns-container {
+            display: flex;
+            flex-direction: column; /* Stacks them vertically */
+            align-items: center;    /* Centers them horizontally */
+            gap: 1rem;              /* Space between the stacked buttons */
+            margin-top: 3rem;
+            width: 100%;
+        }
+
+        /* --- Individual Button Wrappers --- */
+        .btn-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* --- The Buttons --- */
+        .btn-modern {
+            /* Flexbox here ensures the icon/image and text are perfectly centered vertically */
+            display: inline-flex; 
+            align-items: center;
+            justify-content: center;
+            
+            min-width: 280px; /* Ensures both buttons are roughly the same width */
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-decoration: none;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: none;
+            font-size: 1.2rem;
+        }
+
+        /* Primary Green Button */
+        .btn-modern.primary {
+            background-color: #3B523D !important;
+            color: white !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn-modern.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+            background-color: #2F3E30 !important;
+        }
+
+        /* White Ko-fi Button */
+        .btn-modern.secondary {
+            background-color: #ffffff !important;
+            color: #3B523D !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .btn-modern.secondary:hover {
+            transform: translateY(-2px);
+            background-color: #f0f0f0 !important;
+        }
+
+        /* --- Icon & Image Alignment --- */
+        .btn-modern i {
+            margin-right: 12px;
+            font-size: 2.1rem;
+        }
+
+        .kofi-icon {
+            height: 24px;       /* Fixed height for the logo */
+            width: auto;
+            margin-right: 12px; /* Space between logo and text */
+            display: block;     /* Removes inline spacing quirks */
+            margin-bottom: 0 !important; 
+        }
+    </style>
+
+
+
 {% endblock %}
 {% block content %}
+
     <!-- hero
     ================================================== -->
-    <section id="hero" class="container-fluid" style="height:105vh">
-        <div class="s-hero__slider">
-            <div class="s-hero__slide">
-                <div class="s-hero__slide-bg" style="background-image: url('static/images/farms.jpg');"></div>    
-                <div class="row s-hero__slide-content animate-this">
-                    <div class="column">
-                        <h1 class="s-hero__slide-text">
-                            <a>
-                                <span class="big-cap">G</span>lobal <br> 
-                                <span class="big-cap">R</span>epository for <br> 
-                                <span class="big-cap">A</span>gricultural <br> 
-                                <span class="big-cap">N</span>2O <br> 
-                                <span class="big-cap">D</span>ata
-                            </a>
+<section id="hero" class="container-fluid" style="height:105vh">
+    <div class="s-hero__slider">
+        <div class="s-hero__slide">
+            
+            <div class="s-hero__slide-bg" style="background-image: url('static/images/FluxappBackground.webp');"></div>    
+            <div class="row s-hero__slide-content ">
+
+                <div class="column col-lg-10"> 
+                    <div class="grand-acrostic-wrapper">
+                        <h1 class="grand-title-flex">
+                            <span class="letter-column">
+                                <span class="big-cap-modern">G</span>
+                                <span class="vertical-text">lobal</span>
+                            </span>
+                            <span class="letter-column">
+                                <span class="big-cap-modern">R</span>
+                                <span class="vertical-text">epository for</span>
+                            </span>
+                            <span class="letter-column">
+                                <span class="big-cap-modern">A</span>
+                                <span class="vertical-text">gricultural</span>
+                            </span>
+                            <span class="letter-column">
+                                <span class="big-cap-modern">N</span>
+                                <span class="vertical-text">itrous Oxide</span>
+                            </span>
+                            <span class="letter-column">
+                                <span class="big-cap-modern">D</span>
+                                <span class="vertical-text">ata</span>
+                            </span>
+                            
+                            <span class="explorer-text">Explorer</span>
                         </h1>
                     </div>
+
+                    <p class="lead mt-4 mb-5" style="color: black; max-width: 600px; font-size: 1.5rem; font-family: 'Georgia', serif;">
+                        Open-access data for researchers and scientists.
+                        Explore over 1,000 temporally resolved datasets globally.
+                        Curate and download near model-ready data in minutes.
+                    </p>
+
+                    <div class="hero-btns-container">
+    
+                        <div class="btn-wrapper">
+                            <a href="/query-filters" class="btn-modern primary">
+                                <i class="fas fa-map-marked-alt"></i> 
+                                Launch Data Explorer
+                            </a>
+                        </div>
+
+                        <div class="btn-wrapper">
+                            <a href="https://ko-fi.com/YOUR_LINK_HERE" target="_blank" class="btn-modern secondary">
+                                <img src="https://storage.ko-fi.com/cdn/cup-border.png" alt="Ko-fi" class="kofi-icon">
+                                Support me on Ko-fi
+                            </a>
+                        </div>
+
+                    </div>
                 </div>
-            </div>
 
-            </div> <!-- end s-hero__slide -->
+            </div> </div> </div> 
 
+    </div>
 
-            <div class="s-hero__social hide-on-mobile-small col-md-1">
-                <p>Follow  ------</p>
-                <br>
-                <br>
-                <br>
-                <ul class="s-hero__social-icons">
-                    <li><a href="https://twitter.com/ryan_ackett"><i class="fab fa-twitter" aria-hidden="true"></i></a></li>
-                    <li><a href="#0"><i class="fab fa-instagram" aria-hidden="true"></i></a></li>
-                </ul>
-            </div>
-        </section> <!-- end s-hero__slider -->
-
-
-
-        <!--  Home page slider if I want to add more landing pages
-        <div class="nav-arrows s-hero__nav-arrows">
-            <button class="s-hero__arrow-prev">
-                <svg viewBox="0 0 15 15" xmlns="http://www.w3.org/2000/svg" width="15" height="15"><path d="M1.5 7.5l4-4m-4 4l4 4m-4-4H14" stroke="currentColor"></path></svg>
-            </button>
-            <button class="s-hero__arrow-next">
-               <svg viewBox="0 0 15 15" xmlns="http://www.w3.org/2000/svg" width="15" height="15"><path d="M13.5 7.5l-4-4m4 4l-4 4m4-4H1" stroke="currentColor"></path></svg>
-            </button>
-        </div>-->
-
-    </section>
+</section>
 
 {% endblock %}
 

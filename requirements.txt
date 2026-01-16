@@ -6,3 +6,6 @@ whitenoise
 gunicorn
 dj-database-url==2.1.0
 mysqlclient
+tablib
+diff-match-patch
+django-import-export

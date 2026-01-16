@@ -8,7 +8,7 @@
     <meta charset="utf-8">
     <title>
         {% block title %}
-            Ryan Ackett
+            GRAND Explorer
         {% endblock %}
     </title>
     <meta name="description" content="">
@@ -28,16 +28,126 @@
     ================================================== -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
     <script src="{% static 'js/modernizr.js' %}"></script>
-    <script defer src="{% static 'js/fontawesome/all.min.js' %}"></script>
-    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
 
     <!-- favicons
     ================================================== -->
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/icons8-plant-doodle-32.png' %}">
+    <link rel="icon" type="image/x-icon" sizes="16x16" href="{% static 'images/icons8-plant-doodle-16.png' %}">
     <link rel="manifest" href="site.webmanifest">
+
+    <style>
+        /* --- New Footer Styles --- */
+        .site-footer {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 1. Social Icons (Centered on cream background) */
+        .footer-socials {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .footer-socials a {
+            color: white; /* Muted sage/grey from mockup */
+            font-size: 1.6rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .footer-socials a:hover {
+            color: #3B523D; /* Darker green on hover */
+            transform: translateY(-3px);
+        }
+
+        .s-header__nav li a {
+            font-family: 'Georgia', serif !important;
+            font-weight: 600 !important;
+        }
+
+        /* --- The Cart Pill --- */
+        .cart-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0.5rem 1.7rem;
+            border: 3px solid rgba(255,255,255, 0.4);
+            border-radius: 50px;
+            color: white;
+            text-decoration: none;
+            font-size: 2rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .cart-btn:hover {
+            background-color: rgba(255,255,255, 0.1);
+            border-color: white;
+        }
+
+        .cart-count {
+            background-color: white;
+            color: #7A9E7E;
+            font-size: 1.5rem;
+            font-weight: 800;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+    </style>
+
+    <script>
+        const CartManagerBase = {
+            // LocalStorage Key (keeps data persistent even if they refresh)
+            key: 'grand_explorer_cart_v1', 
+
+            // 1. Get current list from storage
+            getCart: function() {
+                const stored = localStorage.getItem(this.key);
+                return stored ? JSON.parse(stored) : [];
+            },
+
+            // 3. Update the Navbar Badge
+            updateBadgeBase: function() {
+                const cart = this.getCart();
+                const badge = document.getElementById('cart-count');
+                
+                if (badge) {
+                    badge.innerText = cart.length;
+                    // Show badge only if items exist
+                    badge.style.display = cart.length > 0 ? 'block' : 'none';
+                }
+
+            },
+
+            // 4. Clear Cart (Useful for testing or reset)
+            clear: function() {
+                localStorage.removeItem(this.key);
+                this.updateBadge();
+            },
+        };
+        function initCartBase() {
+            console.log("Initializing Cart Manager...");
+            CartManagerBase.updateBadgeBase();
+      }
+        
+
+        // Initialize the badge as soon as the DOM is ready
+        window.addEventListener("load", initCartBase);
+    </script>
+
+ 
 
     {% block head %}
     {% endblock %}
@@ -64,7 +174,12 @@
                 <ul class="s-header__nav d-flex align-items-center w-100 list-unstyled mb-0">
         
                     <li class="current">
-                        <a href="/" title="" class="text-decoration-none font-weight-bold">GRAND Explorer</a>
+                        <a href="/" title="" class="text-decoration-none font-weight-bold"> 
+                           <div class="logo-icon-stack">
+                            <img src="{% static 'images/plant-data-logo.png' %}" alt="Logo Icon" class="logo-icon" style="height: 6rem; width: auto; margin-top: 2rem;">
+                        
+                            <span class="brand-text">GRAND Explorer</span>
+                        </a>
                     </li>
 
                     <li class="ms-auto">
@@ -84,33 +199,11 @@
                         </ul>
                     </li>
 
-                    <li class="d-flex align-items-center">
-                        <script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#72a4f2', 'D1D21RDPZR');kofiwidget2.draw();</script> 
-                    </li>
-                    <li class="nav-item" style="list-style: none; margin-left: 15px;"> <a class="nav-link" href="/data-cart/" style="
-                        color: #ffffff !important; /* Forces White */
-                        font-size: 2rem;         /* Larger text */
-                        font-weight: 600;
-                        display: flex;             /* Aligns Icon + Text */
-                        align-items: center;
-                    ">
-                        <div style="position: relative; margin-right: 8px;">
-                            <i class="fas fa-shopping-cart" style="font-size: 2rem;"></i> <span id="cart-badge" style="
-                                position: absolute;
-                                top: -6px; right: -8px;
-                                background: #e74c3c;
-                                color: white;
-                                border-radius: 50%;
-                                padding: 1px 5px;
-                                font-size: 1rem;
-                                display: none;        /* Hidden if empty */
-                                border: 1px solid #fff; /* White border to separate from icon */
-                            ">0</span>
-                        </div>
-                        
-                        Data Cart
+                    <a href="/data-cart" class="cart-btn">
+                        <i class="fas fa-shopping-cart"></i>
+                        <span>Data Cart</span>
+                        <span id="cart-count" class="cart-badge">0</span>
                     </a>
-                </li>
 
                 </ul>
 
@@ -148,73 +241,28 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17.982 17.983"><path fill="#010101" d="M12.622 13.611l-.209.163A7.607 7.607 0 017.7 15.399C3.454 15.399 0 11.945 0 7.7 0 3.454 3.454 0 7.7 0c4.245 0 7.699 3.454 7.699 7.7a7.613 7.613 0 01-1.626 4.714l-.163.209 4.372 4.371-.989.989-4.371-4.372zM7.7 1.399a6.307 6.307 0 00-6.3 6.3A6.307 6.307 0 007.7 14c3.473 0 6.3-2.827 6.3-6.3a6.308 6.308 0 00-6.3-6.301z"/></svg>
         </a> -->
 
+
+
+
     </header> <!-- end s-header -->
 
 {% block content %} {% endblock %}
 {% block footer %} {% endblock %}
 
-    <!-- footer
-    ================================================== -->
-    <footer class="s-footer">
+<footer class="site-footer">
+        
+    <div class="footer-socials">
+        Follow Ryan Ackett 
+        <a href="https://bsky.app/profile/ryanackett.bsky.social" target="_blank" aria-label="Bluesky">
+            <i class="fa-brands fa-bluesky"></i>
+        </a>
+        <a href="https://www.linkedin.com/in/ryan-ackett/" target="_blank" aria-label="LinkedIn">
+            <i class="fab fa-linkedin-in"></i>
+        </a>
+    </div>
 
-        <div class="s-footer__main">
-            <div class="row">
-                <div class="col-md-3">
-                        <p> </p>
-                </div>
-                <div class="column large-3 medium-6 tab-12 s-footer__info">
-
-                    <h5>About The Site</h5>
-
-                    <p>
-                    My name is Ryan Ackett. I am a graduate researcher, writer,
-                    and agriculturalist. This site is a personal project
-                    intended to share my research with the world and encourage
-                    other researchers to identify climate solutions.
-                    </p>
-
-                </div> <!-- end s-footer__info -->
-
-                <div class="column large-2 medium-3 tab-6 s-footer__social-links">
-
-                    <h5>Follow Me</h5>
-
-                    <ul>
-                        <li><a href="http://twitter.com/ryan_ackett">Twitter</a></li>
-                    </ul>
-
-                </div> <!-- end s-footer__social links -->
-
-                </div> <!-- end s-footer__subscribe -->
-
-            </div> <!-- end row -->
-
-        </div> <!-- end s-footer__main -->
-
-        <div class="s-footer__bottom">
-            <div class="row">
-                <div class="column">
-                    <div class="ss-copyright">
-                        <span>Design by <a href="https://www.styleshout.com/">StyleShout</a></span>
-                    </div> <!-- end ss-copyright -->
-                </div>
-            </div>
-
-            <div class="ss-go-top">
-                <a class="smoothscroll" title="Back to Top" href="#top">
-                    <svg viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" width="15" height="15"><path d="M7.5 1.5l.354-.354L7.5.793l-.354.353.354.354zm-.354.354l4 4 .708-.708-4-4-.708.708zm0-.708l-4 4 .708.708 4-4-.708-.708zM7 1.5V14h1V1.5H7z" fill="currentColor"></path></svg>
-                </a>
-            </div> <!-- end ss-go-top -->
-        </div> <!-- end s-footer__bottom -->
-
-   </footer> <!-- end s-footer -->
-
- <!-- Java Script
-    ================================================== -->
-    <script src="{% static 'js/jquery-3.5.0.min.js' %}"></script>
-    <script src='http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.5/jquery-ui.min.js'></script>
-    <script src="{% static 'js/plugins.js' %}"></script>
-    <script src="{% static 'js/main.js' %}"></script>
-
+</footer>
 </body>
+
+
 </html>

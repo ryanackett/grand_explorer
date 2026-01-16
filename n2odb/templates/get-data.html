@@ -21,14 +21,14 @@
     ================================================== -->
     <script defer src="{% static 'js/fontawesome/all.min.js' %}"></script>
     <script src="{% static 'js/mobiscroll.javascript.min.js' %}"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/bbbootstrap/libraries@main/choices.min.css">
-    <script src="https://cdn.jsdelivr.net/gh/bbbootstrap/libraries@main/choices.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
     <script src="https://code.highcharts.com/highcharts.js"></script>
     <script src="https://code.highcharts.com/mapdata/custom/world-robinson-highres.js"></script>
     <script src="https://code.highcharts.com/maps/modules/map.js"></script>
     <script src="https://code.highcharts.com/maps/modules/accessibility.js"></script>
-    <!-- Flag sprites service provided by Martijn Lafeber, https://github.com/lafeber/world-flags-sprite/blob/master/LICENSE -->
-    <link rel="stylesheet" type="text/css" href="https://github.com/downloads/lafeber/world-flags-sprite/flags32.css">
     <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
     <script type="module">
@@ -125,7 +125,8 @@
 
         /* Treatment Cards */
         .treatment-card {
-            background: white; border-left: 5px solid #5185a8;
+            background: white; 
+            border-left: 2rem solid #5185a8;
             padding: 15px; border-radius: 6px; margin-bottom: 15px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.08); width: 100%; box-sizing: border-box;
             
@@ -185,7 +186,7 @@
         }
     </style>
 
-        <script>
+    <script>
         function UpdateTable (update_data) {
             // Update map
             var siteData = JSON.parse(update_data.Site_update)
@@ -337,17 +338,22 @@
         }
 
         // 3. Initialize Choices.js and Bind the Button
-        $(document).ready(function(){
-            // Initialize your dropdowns
-            new Choices('#ins', { removeItemButton: true, maxItemCount:5 });
-            new Choices('#mgmt', { removeItemButton: true, maxItemCount:5 });
-            new Choices('#env', { removeItemButton: true, maxItemCount:5 });
-            new Choices('#fert', { removeItemButton: true, maxItemCount:15 });
-            new Choices('#crop', { removeItemButton: true, maxItemCount:15 });
+        $(document).ready(function() {
+            // 1. Find ALL selects with our new class, regardless of ID
+            $('.dynamic-filter').each(function() {
+                // Check ID to set specific limits (optional)
+                var limit = (this.id === 'fert' || this.id === 'crop') ? 15 : 5;
 
-            // Bind the SUBMIT button to the function
-            // REPLACE '#filter-btn-id' with the actual ID of your Filter/Submit button
-            $('#filter-btn-id').on('click', function(e) {
+                new Choices(this, {
+                    removeItemButton: true,
+                    maxItemCount: limit,
+                    itemSelectText: '',
+                    shouldSort: false
+                });
+            });
+
+            // 2. Button Click
+            $('#submit').on('click', function(e) {
                 e.preventDefault();
                 submitFilter();
             });
@@ -472,7 +478,7 @@
                         var tID = t.id || t.TreatmentID;
                         
                         html += `
-                            <div class="treatment-card">
+                            <div class="treatment-card" id="card-${tID}">
                                 
                                 <div class="t-header">
                                     <div class="t-name">${t.name}</div>
@@ -508,6 +514,10 @@
 
                 html += `</div>`; 
                 document.getElementById('info').innerHTML = html;
+
+                if (typeof CartManager !== 'undefined') {
+                    CartManager.updateCardBorders();
+                }
             }
         });
 
@@ -573,10 +583,110 @@
     </script>
 
     <style>
-        .multiselecter{max-width:100%%}
+        .multiselecter{max-width:100%}
         .choices__input{width:90% !important; text-align:center; margin-left:auto; margin-right:auto}
         .choices__item{background-color:#82968c !important; border:#6c757d !important; max-height:4vh !important}
         .choices__button{border-left: 1px solid #6c757d !important;max-height:3vh !important; padding-left:0px !important}
+    </style>
+
+    <style>
+        /* 1. LAYOUT UTILS (Kept from your old code) */
+        .multiselecter {
+            max-width: 100%;
+        }
+
+        /* 2. THE CONTAINER (Input Box) */
+        .choices {
+            margin-bottom: 0; /* Remove default bottom margin */
+            overflow: visible; /* Critical: allows menu to float over other elements */
+        }
+
+        .choices__inner {
+            background-color: #fff;
+            border: 1px solid #ced4da;       /* Bootstrap-like gray */
+            border-radius: 6px;              /* Slight rounded corners */
+            min-height: 44px;                /* Comfortable height */
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;                 /* Allows pills to wrap lines */
+        }
+
+        /* Active/Focus State - Sage Green Glow */
+        .choices.is-focused .choices__inner {
+            border-color: #82968c;
+            box-shadow: 0 0 0 3px rgba(130, 150, 140, 0.25); 
+        }
+
+        /* 3. THE SELECTED PILLS (Visible Items) */
+        .choices__list--multiple .choices__item {
+            background-color: #82968c !important; /* Sage Green */
+            border: 1px solid #6c757d !important; /* Darker border for contrast */
+            border-radius: 4px;                   /* Soft edges */
+            color: white !important;
+            
+            /* Layout & Spacing */
+            display: inline-flex;
+            align-items: center;
+            font-size: 14px;
+            padding: 4px 10px;
+            margin: 2px 5px 2px 0;
+            max-height: 32px;                     /* Consistent pill height */
+        }
+
+        /* The "X" Remove Button on the Pill */
+        .choices__list--multiple .choices__item .choices__button {
+            border-left: 1px solid rgba(255,255,255,0.4) !important;
+            margin-left: 8px; 
+            margin-right: -4px;
+            padding-left: 8px;
+            opacity: 0.8;
+        }
+        .choices__list--multiple .choices__item .choices__button:hover {
+            opacity: 1;
+        }
+
+        /* 4. THE DROPDOWN MENU (The List) */
+        .choices__list--dropdown {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15); /* Floating effect */
+            z-index: 99999 !important;               /* Force on top of maps/everything */
+            margin-top: 5px;                         /* Spacing from input */
+        }
+
+        /* The individual options in the dropdown */
+        .choices__list--dropdown .choices__item {
+            color: #333;           /* Dark text for readability */
+            padding: 10px 15px;    /* Larger click targets */
+            font-size: 14px;
+            background-color: #fff;
+            max-height: none !important; /* FIX: Prevents the "crushed" bug */
+        }
+
+        /* Hover effect on dropdown options */
+        .choices__list--dropdown .choices__item--selectable.is-highlighted {
+            background-color: #f0f4f2 !important; /* Very pale sage green */
+            color: #000 !important;
+        }
+
+        /* 5. INPUT FIELD TEXT */
+        /* Ensure the user's typing text is visible */
+        .choices__input {
+            background-color: transparent !important;
+            color: #333;
+            margin-bottom: 0 !important;
+            text-align:center; 
+            margin-left:auto; 
+            margin-right:auto
+        }
+        
+        /* Placeholder text style */
+        .choices__input::placeholder {
+            color: #6c757d;
+            opacity: 0.8;
+        }
     </style>
 
     <style>
@@ -662,59 +772,93 @@
             },
 
             // 2. Add ID(s) to the cart
-            add: function(ids) {
-                // Ensure we're always working with an array, even if a single ID is passed
-                if (!Array.isArray(ids)) ids = [ids];
+            // Replace just the 'add' function inside CartManager:
+            add: function(input) {
+                // 1. Flatten inputs to ensure we have a clean list of IDs, 
+                //    handling both single items (101) and arrays ([101, 102]).
+                const incomingIds = (Array.isArray(input) ? input : [input]).flat();
                 
                 let cart = this.getCart();
                 let addedCount = 0;
 
-                ids.forEach(id => {
-                    // Prevent duplicates
+                incomingIds.forEach(rawId => {
+                    // 2. Force ID to String. 
+                    //    This prevents duplicates where 101 (Number) != "101" (String).
+                    const id = String(rawId);
+
                     if (!cart.includes(id)) {
                         cart.push(id);
                         addedCount++;
                     }
                 });
 
-                // Save back to storage
+                // Save and Update
                 localStorage.setItem(this.key, JSON.stringify(cart));
-                
-                // Update the UI
                 this.updateBadge();
+                this.updateCardBorders();
                 
-                // User Feedback
+                // Feedback logic
                 if (addedCount > 0) {
-                    // You can replace this with a nice toast notification later
-                    alert(`Added ${addedCount} dataset(s) to your cart.`); 
+                    // Using console.log to avoid spamming alerts if adding 20 items
+                    console.log(`Added ${addedCount} items.`);
+                    alert(`Added ${addedCount} dataset(s) to cart.`);
                 } else {
-                    alert("This dataset is already in your cart.");
+                    alert("Selected items are already in your cart.");
                 }
             },
 
             // 3. Update the Navbar Badge
             updateBadge: function() {
                 const cart = this.getCart();
-                const badge = document.getElementById('cart-badge');
+                const badge = document.getElementById('cart-count');
                 
                 if (badge) {
                     badge.innerText = cart.length;
                     // Show badge only if items exist
                     badge.style.display = cart.length > 0 ? 'block' : 'none';
                 }
+
             },
 
             // 4. Clear Cart (Useful for testing or reset)
             clear: function() {
                 localStorage.removeItem(this.key);
                 this.updateBadge();
+            },
+
+            // 5. Update Card Border color
+            updateCardBorders: function() {
+                const cart = this.getCart();
+                console.log("Updating card borders for cart items:", cart);
+                cart.forEach(id => {
+                    const card = document.getElementById(`card-${id}`);
+                    if (card) {
+                        card.style.borderLeft = '2rem solid #28a745'; // Green border for items in cart
+                    }
+                });
             }
         };
+        function initCart() {
+            console.log("Initializing Cart Manager...");
+            CartManager.updateBadge();
+            
+            // Attempt to update borders
+            CartManager.updateCardBorders();
+
+            // DOUBLE CHECK: If the cards are loaded dynamically (e.g. by a map library), 
+            // we might need to try again after a short delay to ensure they exist in the DOM.
+            setTimeout(() => {
+                CartManager.updateCardBorders();
+            }, 500); // Tries again after 0.5 seconds
+            
+            setTimeout(() => {
+                CartManager.updateCardBorders();
+            }, 1500); // Tries again after 1.5 seconds (just to be safe)
+        }
+        
 
         // Initialize the badge as soon as the DOM is ready
-        document.addEventListener("DOMContentLoaded", function() {
-            CartManager.updateBadge();
-        });
+        window.addEventListener("load", initCart);
     </script>
 
     <script>
@@ -902,7 +1046,7 @@
         {% load get_dictionary_items %}
         <div class="d-flex justify-content-center flex-wrap mt-100 multiselecter col-md-11">
             {% for key in keys %}
-                <div class="col-md-3 mb-3"> <select id="{{key}}" placeholder="Select {{ labels_dict|get_dictionary_items:key }}" multiple>
+                <div class="col-md-3 mb-3"> <select id="{{key}}" class="dynamic-filter" data-placeholder="Select {{ labels_dict|get_dictionary_items:key }}" multiple>
                         {% for item in dropdown_dict|get_dictionary_items:key %}
                         <option value="{{item}}">{{item}}</option>
                         {% endfor %}

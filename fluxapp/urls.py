@@ -23,5 +23,7 @@ urlpatterns = [
     path( 'about/', views.about, name ='about'),
     path( 'query-filters/', views.query_filters, name ='query-filters'),
     path( 'get-data/', views.get_data, name ='get-data'),
+    path( 'data-cart/', views.data_cart, name ='data-cart'),
+    path( 'api/cart-data/', views.get_cart_data, name='get_cart_data'),
     path('admin/', admin.site.urls),
 ]
