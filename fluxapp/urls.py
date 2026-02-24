@@ -25,5 +25,9 @@ urlpatterns = [
     path( 'get-data/', views.get_data, name ='get-data'),
     path( 'data-cart/', views.data_cart, name ='data-cart'),
     path( 'api/cart-data/', views.get_cart_data, name='get_cart_data'),
+    path('contact/', views.contact_view, name='contact'),
+    path('team/', views.team_view, name='team'),
     path('admin/', admin.site.urls),
+    path('cart/download-zip/', views.download_zip, name='download_zip'),
+    path('explorer/', include('explorer.urls')),
 ]

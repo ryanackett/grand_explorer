@@ -25,7 +25,8 @@
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
-    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highcharts@11/highmaps.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highcharts@11/modules/exporting.js"></script>
     <script src="https://code.highcharts.com/mapdata/custom/world-robinson-highres.js"></script>
     <script src="https://code.highcharts.com/maps/modules/map.js"></script>
     <script src="https://code.highcharts.com/maps/modules/accessibility.js"></script>
@@ -159,6 +160,10 @@
             white-space: nowrap; /* Prevents icons from wrapping vertically */
         }
 
+        .text-primary {
+            font-family: 'Arial', sans-serif;
+        }
+
         .action-icon {
             font-size: 1.7rem;
             cursor: pointer;
@@ -183,6 +188,64 @@
             text-align: center; 
             margin-right: 15px; /* Increased from 5px to 15px for cleaner look */
             color: #2c7bb6;     /* Optional: Tint icons blue */
+        }
+
+        .abstract-modal-overlay {
+            display: none; 
+            position: fixed; 
+            z-index: 100000; /* Higher than Choices.js (99999) */
+            left: 0; top: 0; 
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); 
+            align-items: center; 
+            justify-content: center;
+            backdrop-filter: blur(2px); /* Slight blur for premium feel */
+        }
+        
+        .abstract-modal-content {
+            background-color: #fff; 
+            padding: 25px 30px; 
+            border-radius: 8px; 
+            width: 90%;
+            max-width: 75vw;
+            max-height: 80vh; 
+            overflow-y: auto; 
+            /* Exact match to your .exp-header styling */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            border-top: 4px solid #2c3e50; 
+            position: relative;
+            text-align: left;
+        }
+
+        .abstract-title {
+            font-size: 2.5rem; 
+            font-weight: 700; 
+            color: #2c3e50;
+            margin-top: 0; 
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .abstract-text {
+            line-height: 1.6; 
+            color: #555; 
+            font-size: 1.8rem; 
+            font-family: arial, sans-serif;
+        }
+
+        /* Matches your .action-icon styling */
+        .abstract-close-btn {
+            position: absolute; 
+            top: 20px; right: 25px; 
+            cursor: pointer; 
+            font-size: 1.5rem; 
+            color: #999;
+            transition: all 0.2s;
+        }
+        .abstract-close-btn:hover {
+            color: #2c3e50;
+            transform: scale(1.15);
         }
     </style>
 
@@ -218,7 +281,8 @@
         }
     </script>
 
-   <script>
+ 
+    <script>
         // 1. The Helper to get the CSRF Token (Keep this, it's good)
         function getCookie(name) {
             let cookieValue = null;
@@ -242,7 +306,8 @@
                 management:  $('#mgmt').val() || [],
                 environment: $('#env').val() || [],
                 fertilizer:  $('#fert').val() || [],
-                crops:       $('#crop').val() || []
+                crops:       $('#crop').val() || [],
+                soil:        $('#soil').val() || [],
             };
 
             console.log("Sending Filter Data:", filterData);
@@ -283,7 +348,6 @@
                         var lon = parseFloat(exp.Lon);
                         
                         // JITTER LOGIC (Spiral Match)
-                        // matches your initial load logic to ensure dots don't stack
                         var coordKey = lat.toFixed(4) + "_" + lon.toFixed(4);
                         if (coordRegistry[coordKey]) {
                             coordRegistry[coordKey]++;
@@ -315,6 +379,7 @@
                             // 4. SIDEBAR DATA (This was missing!)
                             Treatments: exp.TreatmentIDs || [],
                             Citation: exp.Citation,
+                            Abstract: exp.Abstract,
                             MAP: exp.MAP,
                             MAT: exp.MAT
                         };
@@ -362,10 +427,10 @@
 
 
     <script>
-        (async () => {
+        document.addEventListener('DOMContentLoaded', async function() {
         // 1. Fetch Map Topology
         const topology = await fetch(
-            'https://code.highcharts.com/mapdata/custom/world-highres.topo.json'
+            '/static/files/world-palestine.topo.json'
         ).then(response => response.json());
 
         // 2. Parse Data
@@ -417,6 +482,7 @@
                 MAP: ex.MAP,
                 MAT: ex.MAT,
                 Citation: ex.Citation,
+                Abstract: ex.Abstract,
                 // Ensure Treatments is an array.
                 // Assuming objects look like: { id: "123", name: "T1", crop: "Corn", mgmt: "Till" }
                 Treatments: ex.TreatmentIDs || [] 
@@ -441,14 +507,19 @@
                 }
 
                 // --- HEADER CARD ---
+                const safeAbstract = encodeURIComponent(p.Abstract || "No abstract text available for this publication.");
                 var html = `
                     <div class="info-panel">
                         <div class="exp-header">
                             <div class="exp-title">${displayTitle}</div>
-                            <div style="font-size: 1.3rem; color: #6c757d; margin-bottom: 12px;">
+                            <div style="font-size: 1.3rem; color: #6c757d; ">
                                 <i class="fas fa-map-marker-alt"></i> ${displaySite}
                             </div>
-                            
+
+                            <div class="btn-read-abstract" onclick='ReadAbstract("${safeAbstract}")'>
+                                <i class="fas fa-book text-primary"></i> Read Abstract
+                            </div>
+
                             <div class="d-flex flex-wrap">
                                 <div class="stat-badge" title="Mean Annual Precip">
                                     <i class="fas fa-tint text-primary" style="margin-right:5px;"></i> ${p.MAP} mm
@@ -504,7 +575,15 @@
                                     <span class="icon-width"><i class="fas fa-tools text-secondary"></i></span>
                                     <strong>Mgmt:</strong>&nbsp; ${t.mgmt}
                                 </div>
-
+                                <div class="t-detail">
+                                    <span class="icon-width"><i class="fas fa-calendar-alt text-info"></i></span>
+                                    <strong>Start Date:</strong>&nbsp; ${t.first_date || 'N/A'}
+                                </div>
+                                <div class="t-detail">
+                                    <span class="icon-width"><i class="fas fa-calendar-check text-info"></i></span>
+                                    <strong>End Date:</strong>&nbsp; ${t.last_date || 'N/A'}
+                                </div>
+                                
                             </div>
                         `;
                     });
@@ -579,12 +658,12 @@
                 dataLabels: { enabled: false }
             }]
         });
-        })();
+        });
     </script>
 
     <style>
         .multiselecter{max-width:100%}
-        .choices__input{width:90% !important; text-align:center; margin-left:auto; margin-right:auto}
+        .choices__input{width:90% !important; text-align:center; margin-left:auto; margin-right:auto; min-width:0 !important}
         .choices__item{background-color:#82968c !important; border:#6c757d !important; max-height:4vh !important}
         .choices__button{border-left: 1px solid #6c757d !important;max-height:3vh !important; padding-left:0px !important}
     </style>
@@ -761,6 +840,24 @@
     </style>
 
     <script>
+        function ReadAbstract(encodedText) {
+            const plainText = decodeURIComponent(encodedText);
+            document.getElementById('abstractTextContainer').innerText = plainText;
+            document.getElementById('abstractModal').style.display = 'flex';
+        }
+
+        // Closes the modal
+        function CloseAbstract() {
+            document.getElementById('abstractModal').style.display = 'none';
+        }
+
+        // Allow closing with the 'Escape' key for better UX
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                CloseAbstract();
+            }
+        });
+
         const CartManager = {
             // LocalStorage Key (keeps data persistent even if they refresh)
             key: 'grand_explorer_cart_v1', 
@@ -1116,6 +1213,15 @@
             </div>
         </div> 
     </div> 
+</div>
+
+<div id="abstractModal" class="abstract-modal-overlay" onclick="CloseAbstract()">
+    <div class="abstract-modal-content" onclick="event.stopPropagation()">
+        <i class="fas fa-times abstract-close-btn" onclick="CloseAbstract()"></i>
+        <h4 class="abstract-title"><i class="fas fa-book-open text-primary" style="margin-right: 8px;"></i> Publication Abstract</h4>
+        <div id="abstractTextContainer" class="abstract-text">
+            </div>
+    </div>
 </div>
 {% endblock %}
 

@@ -27,7 +27,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default=[], cast=list)
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost', cast=lambda v: [s.strip() for s in v.split(',')])
 
 
 # Application definition
@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'import_export',
+    'explorer',
+    'django_user_agents',
 ]
 
 MIDDLEWARE = [
@@ -51,7 +53,13 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_user_agents.middleware.UserAgentMiddleware',
 ]
+
+# --- SQL Explorer Settings ---
+# This determines who can view/execute SQL queries (Default is only Superusers)
+EXPLORER_CONNECTIONS = { 'Default': 'default' }
+EXPLORER_DEFAULT_CONNECTION = 'default'
 
 ROOT_URLCONF = 'fluxapp.urls'
 
@@ -71,6 +79,11 @@ TEMPLATES = [
     },
 ]
 
+# --- Email Settings (Development) ---
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'webmaster@grandexplorer.org'
+CONTACT_EMAIL = 'your.actual.email@gmail.com'
+
 WSGI_APPLICATION = 'fluxapp.wsgi.application'
 
 
@@ -81,6 +94,10 @@ DATABASES = {
     'default': dj_database_url.config(default=config('DATABASE_URL'))
 }
 
+DATABASES['default']['OPTIONS'] = {
+    'charset': 'utf8mb4',
+    'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators

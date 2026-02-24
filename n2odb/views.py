@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.db import models
-from n2odb.models import Publication, Site, Experiment, Treatment, Replication, RawMeasurementTreatment
+from n2odb.models import Publication, Site, Experiment, Treatment, Replication, RawMeasurementTreatment, UserAction
 from django.template.defaulttags import register
 from django.template import loader
 from django.template import Template, Context
@@ -10,8 +10,17 @@ import json
 from django.db.models import F
 from collections import defaultdict
 import datetime
-from django.db.models import Count, Avg
+from django.db.models import Count, Avg, Min, Max, Sum
 from django.views.decorators.csrf import csrf_exempt
+from .utils import Echo, _log_user_action
+from django.views.decorators.http import require_POST  
+import csv
+import os
+import zipstream, zipfile
+from django.http import StreamingHttpResponse
+from django.conf import settings
+from django.core.mail import send_mail
+from django.contrib import messages
 
 
 def index(request): 
@@ -28,133 +37,201 @@ def query_filters(request):
 
 def get_data(request):
     # -------------------------------------------------------------------------
-    # PART 1: AJAX REQUEST (Filtering Map Data)
+    # PART 1: AJAX REQUEST (Diagnostic + Functional)
     # -------------------------------------------------------------------------
     if request.method == "POST" and request.headers.get('x-requested-with') == 'XMLHttpRequest':
         try:
             data = json.loads(request.body)
-        
-            # =========================================================
-            # A. GRAPH REQUEST INTERCEPTOR
-            # Logic: If 'action' is 'fetch_graph', we ignore map filters
-            # =========================================================
+            
+            # ### ANALYTICS ###
             if data.get('action') == 'fetch_graph':
-                treatment_id = data.get('treatment_id')
-                return get_graph_json(treatment_id)
+                return get_graph_json(data.get('treatment_id'))
             
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        # 1. Extract Filters
+        # 1. EXTRACT FILTERS
         selected_ins = data.get('instruments', [])
         selected_mgmt = data.get('management', [])
         selected_env = data.get('environment', [])
         selected_fert = data.get('fertilizer', [])
         selected_crops = data.get('crops', [])
+        selected_soil = data.get('soil', [])
+        print(selected_soil)
 
-        # 2. Base Query (Replication)
-        # We assume Replication links to Treatment, but NOT directly to Site.
-        rep_qs = Replication.objects.select_related('TreatmentID').all()
+        print(f"\n=== DIAGNOSTIC START ===")
+        print(f"Incoming Filters: {selected_env}")
 
-        # --- A. Environmental Filters (Replication) ---
-        env_mapping = {
-            'Soil VWC': 'VWC_Meas', 'Soil WFPS': 'WFPS_Meas',
-            'Soil Temp': 'Soil_T_Meas', 'Air Temp':  'Air_T_Meas',
-            'Precipitation': 'Precip_Meas'
+        ENV_COLUMN_MAP = {
+            'Soil Temperature': 'soilt',       
+            'Soil VWC':         'vwc',
+            'WFPS':             'wfps',
+            'Mean Air Temperature': 'airt',
+            'Max Air Temperature':  'airtmax',
+            'Min Air Temperature':  'airtmin',
+            'Precipitation':    'precip',
+            'Soil Nitrate':     'soilno3',
+            'Soil Ammonium':    'soilnh4',
         }
-        for env_label in selected_env:
-            if env_label in env_mapping:
-                rep_qs = rep_qs.filter(**{env_mapping[env_label]: 1})
 
-        # --- B. Treatment Filters ---
+        SOIL_COLUMN_MAP = {
+            'Soil pH':      'pHMean',       
+            'Soil Bulk Density': 'BulkDensityMean',
+            'Soil Organic Carbon':          'SOMMean',      
+        }
+
+        # ---------------------------------------------------------------------
+        # 2. LOGIC: SET INTERSECTION (With Logging)
+        # ---------------------------------------------------------------------
+        # Start with ALL treatment IDs
+        valid_treatment_ids = set(Treatment.objects.values_list('pk', flat=True))
+        print(f"Base Total Treatments: {len(valid_treatment_ids)}")
+
+        # A. Apply Environmental Filters
+        if selected_env:
+            for env_label in selected_env:
+                if env_label in ENV_COLUMN_MAP:
+                    column_name = ENV_COLUMN_MAP[env_label]
+                    lookup_key = f"measurements__{column_name}__isnull"
+                    
+                    # 1. Find IDs that have THIS variable
+                    ids_with_var = set(
+                        Treatment.objects.filter(**{lookup_key: False})
+                        .values_list('pk', flat=True)
+                    )
+                    
+                    # 2. Perform Intersection
+                    before_count = len(valid_treatment_ids)
+                    valid_treatment_ids = valid_treatment_ids.intersection(ids_with_var)
+                    after_count = len(valid_treatment_ids)
+                    
+                    print(f" -> Filter '{env_label}': Found {len(ids_with_var)} matches.")
+                    print(f"    Intersection: {before_count} -> {after_count} remaining.")
+                else:
+                    print(f"WARNING: '{env_label}' not in map!")
+
+        # B. Apply Soil Filters (Strict Intersection)
+        if selected_soil:
+            for soil_label in selected_soil:
+                if soil_label in SOIL_COLUMN_MAP:
+                    column_name = SOIL_COLUMN_MAP[soil_label]
+                    
+                    # CASE 1: If these fields are directly on the Treatment model:
+                    lookup_key = f"{column_name}__isnull"
+                    
+                    # CASE 2: If they are in a related table (e.g., SoilData):
+                    # lookup_key = f"soildata__{column_name}__isnull"
+
+                    ids_with_soil = set(
+                        Treatment.objects.filter(**{lookup_key: False})
+                        .values_list('pk', flat=True)
+                    )
+                    valid_treatment_ids = valid_treatment_ids.intersection(ids_with_soil)
+
+        # ---------------------------------------------------------------------
+        # 3. BUILD FINAL QUERY
+        # ---------------------------------------------------------------------
+        treatment_qs = Treatment.objects.filter(pk__in=valid_treatment_ids)
+
+        # B. Apply Standard Filters
         if selected_ins:
-            rep_qs = rep_qs.filter(TreatmentID__FluxInstrument__in=selected_ins)
+            treatment_qs = treatment_qs.filter(FluxInstrument__in=selected_ins)
         if selected_mgmt:
-            rep_qs = rep_qs.filter(TreatmentID__Management__in=selected_mgmt)
+            treatment_qs = treatment_qs.filter(Management__in=selected_mgmt)
         if selected_crops:
-            rep_qs = rep_qs.filter(TreatmentID__PrimaryCrop__in=selected_crops)
-
-        # --- C. Fertilizer Filter ---
+            treatment_qs = treatment_qs.filter(PrimaryCrop__in=selected_crops)
         if selected_fert:
-            rep_qs = rep_qs.filter(
-                TreatmentID__measurements__nitrogentype__in=selected_fert
-            )
+            # Note: This join can cause duplicates, so we distinct() later
+            treatment_qs = treatment_qs.filter(measurements__nitrogentype__in=selected_fert)
 
-        # 3. Retrieve Data 
-        
-        # -- Replications --
-        filtered_reps = list(rep_qs.values(
-            'RepID', 'Air_T_Meas', 'Precip_Meas', 'Soil_T_Meas', 'VWC_Meas', 'WFPS_Meas'
-        ).distinct())
-
-        # -- Treatments --
-        treatment_qs = Treatment.objects.filter(TreatmentID__in=rep_qs.values('TreatmentID'))
-        filtered_treatments = list(treatment_qs.values(
+        # C. Execute Data Fetch
+        filtered_treatments = list(treatment_qs.distinct().values(
             'ExperimentID', 'TreatmentID', 'TreatmentName', 'PrimaryCrop', 
             'SecondaryCrop', 'CoverCrop', 'Management', 'FluxInstrument'
-        ).distinct())
-
-        # -- Sites --
-        # Path: Replication -> Treatment -> Experiment -> Site
-        site_qs = Site.objects.filter(
-            SiteID__in=rep_qs.values('TreatmentID__ExperimentID__SiteID')
-        )
-        filtered_sites = list(site_qs.values(
-            'SiteID', 'Latitude', 'Longitude', 'MAP', 'MAT'
-        ).distinct())
-
-        # -- Publications --
-        # Path: Replication -> Treatment -> Experiment -> Publication
-        pub_qs = Publication.objects.filter(
-            PubID__in=rep_qs.values('TreatmentID__ExperimentID__PubID')
-        )
-        filtered_pubs = list(pub_qs.values(
-            'PubID', 'PubTitle', 'PubYear', 'LeadAuthor', 'Citation'
-        ).distinct())
-
-        # 4. Construct the "Experiment Package"
-        exp_qs = Experiment.objects.filter(
-            ExperimentID__in=treatment_qs.values('ExperimentID')
-        )
+        ))
         
+        print(f"Final Treatments Returned: {len(filtered_treatments)}")
+
+        # ---------------------------------------------------------------------
+        # 4. FETCH PARENTS (Valid JSON Packaging)
+        # ---------------------------------------------------------------------
+        valid_exp_ids = list(set([t['ExperimentID'] for t in filtered_treatments]))
+        
+        # Experiments
+        exp_qs = Experiment.objects.filter(ExperimentID__in=valid_exp_ids)
         experiment_data = list(exp_qs.annotate(
             Lat=F('SiteID__Latitude'),
             Lon=F('SiteID__Longitude'),
-            SiteName=F('SiteID__Name'), 
+            SiteName=F('SiteID__SiteName'), 
             MAP=F('SiteID__MAP'),
             MAT=F('SiteID__MAT'),
             PubTitle=F('PubID__PubTitle'),
-            Citation=F('PubID__Citation')
+            Citation=F('PubID__Citation'),
+            Abstract=F('PubID__Abstract')
         ).values(
             'ExperimentID', 'ExperimentName', 
-            'Lat', 'Lon', 'SiteName', 'MAP', 'MAT', 'PubTitle', 'Citation'
+            'Lat', 'Lon', 'SiteName', 'MAP', 'MAT', 'PubTitle', 'Citation', 'Abstract'
         ))
 
-        # Group Treatments by ExperimentID
+        # Sites
+        site_qs = Site.objects.filter(SiteID__in=exp_qs.values('SiteID'))
+        filtered_sites = list(site_qs.values('SiteID', 'Latitude', 'Longitude', 'MAP', 'MAT').distinct())
+
+        # Pubs
+        pub_qs = Publication.objects.filter(PubID__in=exp_qs.values('PubID'))
+        filtered_pubs = list(pub_qs.values('PubID', 'PubTitle', 'PubYear', 'LeadAuthor', 'Citation', 'Abstract').distinct())
+        
+        # --- NEW: FETCH MEASUREMENT DATES IN ONE BULK QUERY ---
+        valid_treatment_ids = [t['TreatmentID'] for t in filtered_treatments]
+        print(valid_treatment_ids)
+
+        date_aggregates = RawMeasurementTreatment.objects.filter(
+            treatmentid__in=valid_treatment_ids
+        ).values('treatmentid').annotate(
+            first_date=Min('date'), 
+            last_date=Max('date')
+        )
+        print(f"Fetched date aggregates for {len(date_aggregates)} treatments.")
+
+        # Create a fast lookup dictionary: {101: {'first': '2020-01-01', 'last': '2022-12-31'}}
+        date_lookup = {
+            item['treatmentid']: {
+                # Converting to string so it serializes cleanly into JSON later
+                'first_date': item['first_date'].strftime('%Y-%m-%d') if item['first_date'] else None,
+                'last_date': item['last_date'].strftime('%Y-%m-%d') if item['last_date'] else None,
+            } 
+            for item in date_aggregates
+        }
+
+        # Attach treatments to experiments
         treatment_map = defaultdict(list)
         for t in filtered_treatments:
+            t_dates = date_lookup.get(t['TreatmentID'], {})
+            
             row = {
                 'id': t['TreatmentID'],
                 'name': t['TreatmentName'] if t['TreatmentName'] else "Unnamed Treatment",
                 'crop': t['PrimaryCrop'],
                 'mgmt': t['Management'],
-                'ins': t.get('FluxInstrument')
+                'ins': t.get('FluxInstrument'),
+                'first_date': t_dates.get('first_date'),
+                'last_date': t_dates.get('last_date'),
+                
             }
             treatment_map[t['ExperimentID']].append(row)
 
         for exp in experiment_data:
             exp['TreatmentIDs'] = treatment_map.get(exp['ExperimentID'], [])
 
-        # 5. Return JSON (Using consistent keys)
+        print(f"=== DIAGNOSTIC END ===\n")
+
+        # 5. RETURN VALID JSON
         update_data = {
-            'json_rep': json.dumps(filtered_reps),
             'json_treatment': json.dumps(filtered_treatments),
             'json_site': json.dumps(filtered_sites),
             'json_pub': json.dumps(filtered_pubs),
             'json_experiments': json.dumps(experiment_data)
         }
-        print("No errors")
-        print(update_data['json_experiments'])
         return JsonResponse(update_data)
 
     # -------------------------------------------------------------------------
@@ -170,8 +247,20 @@ def get_data(request):
                 Treatment.objects.values_list('FluxInstrument', flat=True).distinct())
             labels.append('Flux Instrument')
         if 'env' in selectedList:
-            dropdown_dict['Environmental Variables'] = ['Soil VWC', 'Soil Temp', 'Air Temp', 'Precipitation']
-            dropdown_dict['env'] = ['Soil VWC', 'Soil Temp', 'Air Temp', 'Precipitation']
+            env_options = [
+                'Soil Temperature', 
+                'Soil VWC', 
+                'WFPS', 
+                'Mean Air Temperature', 
+                'Max Air Temperature', 
+                'Min Air Temperature', 
+                'Precipitation', 
+                'Soil Nitrate', 
+                'Soil Ammonium'
+            ]
+            
+            dropdown_dict['Environmental Variables'] = env_options
+            dropdown_dict['env'] = env_options
             labels.append('Environmental Variables')
         if 'mgmt' in selectedList:
             dropdown_dict['Management'] = list(Treatment.objects.values_list('Management', flat=True).distinct())
@@ -192,13 +281,7 @@ def get_data(request):
                 .values_list('nitrogentype', flat=True)
                 .distinct()
             )
-            print(list(
-                RawMeasurementTreatment.objects
-                .exclude(nitrogentype__isnull=True)   # Drops NULL values
-                .exclude(nitrogentype__exact='')      # Drops empty strings ""
-                .values_list('nitrogentype', flat=True)
-                .distinct()
-            ))
+
             labels.append('Fertilizer Form')
         if 'crop' in selectedList:
             dropdown_dict['crop'] = list(Treatment.objects.values_list('PrimaryCrop', flat=True).distinct())
@@ -206,6 +289,19 @@ def get_data(request):
         if 'cont' in selectedList:
             dropdown_dict['Continent'] = list(Site.objects.values_list('Continent', flat=True).distinct())
             labels.append('Continent')
+        if 'soil' in selectedList:
+            dropdown_dict['Soil Measurements'] = ['Soil pH', 'Soil Organic Carbon', 'Soil Bulk Density']
+            dropdown_dict['soil'] = ['Soil pH', 'Soil Organic Carbon', 'Soil Bulk Density']
+            labels.append('Soil Measurements')
+        if 'texture' in selectedList:
+            dropdown_dict['Soil Texture'] = ['Sand', 'Silt', 'Clay', 'Loam', 'Sandy Loam', 'Silt Loam', 'Clay Loam',
+                                             'Sandy Clay Loam', 'Silty Clay Loam', 'Sandy Clay', 'Silty Clay',
+                                             'Loamy Sand'
+                                             ]
+            dropdown_dict['texture'] = ['Sand', 'Silt', 'Clay', 'Loam', 'Sandy Loam', 'Silt Loam', 'Clay Loam',
+                                                'Sandy Clay Loam', 'Silty Clay Loam', 'Sandy Clay', 'Silty Clay',
+                                                'Loamy Sand']
+            labels.append('Soil Texture')
 
         dropdown_dict['keys'] = selectedList.split(",")
         dropdown_dict['labels'] = labels
@@ -218,6 +314,8 @@ def get_data(request):
         labels_dict['mgmt'] = 'Management (any of these)'
         labels_dict['crop'] = 'Crop (any of these)'
         labels_dict['cont'] = 'Continent (any of these)'
+        labels_dict['soil'] = 'Soil Measurements (all of these)'
+        labels_dict['texture'] = 'Soil Texture (any of these)'
 
         dropdown_dict['labels_dict'] = labels_dict
 
@@ -232,7 +330,7 @@ def get_data(request):
         dropdown_dict['Replication'] = replicationdata
 
         # Also format same table data in JSON serializable manner for handling in javascript
-        dropdown_dict['json_pub'] = dumps(list(pubdata.values('PubID', 'PubTitle', 'PubYear', 'LeadAuthor', 'Citation')))
+        dropdown_dict['json_pub'] = dumps(list(pubdata.values('PubID', 'PubTitle', 'PubYear', 'LeadAuthor', 'Citation', 'Abstract')))
         dropdown_dict['json_site'] = dumps(
             list(sitedata.values('SiteID', 'Latitude', 'Longitude', 'MAP', 'MAT')))
         dropdown_dict['json_treatment'] = dumps(
@@ -252,7 +350,8 @@ def get_data(request):
             MAT=F('SiteID__MAT'),
             # Pull Publication Data (via PubID FK)
             PubTitle=F('PubID__PubTitle'),
-            Citation=F('PubID__Citation')
+            Citation=F('PubID__Citation'),
+            Abstract=F('PubID__Abstract')
         )
 
         # Convert to a list so we can modify it
@@ -267,15 +366,39 @@ def get_data(request):
             'Management'
         )
 
+                # --- NEW: FETCH MEASUREMENT DATES IN ONE BULK QUERY ---
+        valid_treatment_ids = [t['TreatmentID'] for t in treatments]
+        print(valid_treatment_ids)
+
+        date_aggregates = RawMeasurementTreatment.objects.filter(
+            treatmentid__in=valid_treatment_ids
+        ).values('treatmentid').annotate(
+            first_date=Min('date'), 
+            last_date=Max('date')
+        )
+        print(f"Fetched date aggregates for {len(date_aggregates)} treatments.")
+
+        # Create a fast lookup dictionary: {101: {'first': '2020-01-01', 'last': '2022-12-31'}}
+        date_lookup = {
+            item['treatmentid']: {
+                # Converting to string so it serializes cleanly into JSON later
+                'first_date': item['first_date'].strftime('%Y-%m-%d') if item['first_date'] else None,
+                'last_date': item['last_date'].strftime('%Y-%m-%d') if item['last_date'] else None,
+            } 
+            for item in date_aggregates
+        }
+
         # 3. Group Treatments by ExperimentID using a Python dictionary
-        # This is much faster than running a sub-query for every single experiment
         treatment_map = defaultdict(list)
         for t in treatments:
+            t_dates = date_lookup.get(t['TreatmentID'], {})
             row = {
                 'id': t['TreatmentID'],
                 'name': t['TreatmentName'] if t['TreatmentName'] else "Unnamed Treatment",
                 'crop': t['PrimaryCrop'],
-                'mgmt': t['Management']
+                'mgmt': t['Management'],
+                'first_date': t_dates.get('first_date'),
+                'last_date': t_dates.get('last_date'),
             }
             treatment_map[t['ExperimentID']].append(row)
 
@@ -285,9 +408,7 @@ def get_data(request):
             exp['TreatmentIDs'] = treatment_map.get(exp['ExperimentID'], [])
 
         # 5. Add to your dropdown_dict for the frontend
-        dropdown_dict['json_experiments'] = dumps(experiment_data)
-        print(dropdown_dict['json_experiments'])
-        
+        dropdown_dict['json_experiments'] = dumps(experiment_data)        
         
         return render(request, 'get-data.html', dropdown_dict)
 
@@ -508,6 +629,9 @@ def get_cart_data(request):
             # C. HMMAD Stats (Methodology)
             hmmad_true = measurements.filter(hmmad=True).count()
             hmmad_false = total_flux_measurements - hmmad_true
+            # Calculate the cumulative N2OFlux for each group
+            hmmad_true_flux = measurements.filter(hmmad=True, n2oflux__isnull=False).aggregate(total_flux=Sum('n2oflux'))['total_flux'] or 0
+            hmmad_false_flux = measurements.filter(hmmad=False, n2oflux__isnull=False).aggregate(total_flux=Sum('n2oflux'))['total_flux'] or 0
             
             # D. Crop Distribution
             # Model field: PrimaryCrop
@@ -542,7 +666,7 @@ def get_cart_data(request):
                 'sidebar_list': sidebar_list,
                 'total_rows': total_flux_measurements,
                 'map_data': map_data,
-                'hmmad_stats': {'Auto': hmmad_true, 'Manual': hmmad_false},
+                'hmmad_stats': {'HM': hmmad_true, 'BG': hmmad_false, 'HM_flux': hmmad_true_flux, 'BG_flux': hmmad_false_flux},
                 'crop_data': crop_data,
                 'soil_stats': soil_stats,
                 'flux_values': flux_values
@@ -555,90 +679,210 @@ def get_cart_data(request):
             return JsonResponse({'error': str(e)}, status=400)
 
     return JsonResponse({'error': 'POST method required'}, status=405)
-    """API Endpoint: Receives IDs via POST, returns Analytics JSON."""
+    
+
+class Echo:
+    """An object that implements just the write method of the file-like
+    interface.
+    """
+    def write(self, value):
+        return value
+
+# This view acts upon clicking Download on the Data Cart page.
+# It streams a zip file containing CSVs of the selected treatments
+# and a txt file readme.
+@require_POST
+def download_zip(request):
+    parent_ids = request.POST.getlist('ids')
+    # Cast to integers and filter out invalid entries
+    parent_ids = [int(x) for x in parent_ids if str(x).isdigit()]
+    email = request.POST.get('email_address')
+    result_count = len(parent_ids)
+    
+    if not parent_ids:
+        return StreamingHttpResponse("No data selected", status=400)
+    
+    # Log selections
+    if parent_ids and not request.user_agent.is_bot:
+        _log_user_action(
+        request, 
+        'DOWNLOAD_CART', 
+        ids=parent_ids, 
+        count=result_count,
+        email=email,
+        payload={}
+    )
+    
+    # --- 1. Load the README from disk ---
+    readme_path = os.path.join(settings.BASE_DIR, 'n2odb', 'static', 'files', 'data_cart_readme.txt')
+    
+    try:
+        with open(readme_path, 'r', encoding='utf-8') as f:
+            readme_content = f.read()
+    except FileNotFoundError:
+        # Fallback if file is missing so export doesn't crash
+        readme_content = "Documentation file not found. Contact admin."
+
+    # --- 2. Define the CSV Generator ---
+    def csv_generator(ids_to_query):
+        buffer = Echo()
+        writer = csv.writer(buffer)
+
+        column_map = {
+            # Level 0: Up Front Info ---
+            'Publication Title': 'treatmentid__ExperimentID__PubID__PubTitle',
+            'Publication Year':  'treatmentid__ExperimentID__PubID__PubYear',
+
+            # --- Level 1: The Measurement ---
+            'Measurement ID':   'rawtreatmentid', 
+            'Treatment ID':     'treatmentid',
+            'Date':             'date',
+            'N2O Flux (g N/ha/d)': 'n2oflux',
+            'VWC (%)':          'vwc',
+            'WFPS (%)':         'wfps',
+            'Soil Temp (°C)':   'soilt',
+            'Mean Daily Air Temp (°C)':  'airt',
+            'Max Daily Air Temp (°C)':   'airtmax',
+            'Min Daily Air Temp (°C)':   'airtmin',
+            'Precipitation (mm)':        'precip',
+            'Nitrogen Applied (kg N/ha)': 'nitrogenapplied',
+            'Nitrogen Form':    'nitrogenform',
+            'Nitrogen Type':    'nitrogentype',
+            'Soil NH4 (mg/kg)': 'soilnh4',
+            'Soil NO3 (mg/kg)': 'soilno3',
+            'Planted Crop':     'plantedcrop',
+            'Management':       'management',
+
+            # --- Level 2: Treatment ---
+            'Treatment Name':   'treatmentid__TreatmentName',
+            'Primary Crop':     'treatmentid__PrimaryCrop',
+            'Secondary Crop':   'treatmentid__SecondaryCrop',
+            'Management Style': 'treatmentid__Management',
+            'Flux Instrument':  'treatmentid__FluxInstrument',
+            'Silt Content (%)': 'treatmentid__SiltMean',
+            'Clay Content (%)': 'treatmentid__ClayMean',
+            'Sand Content (%)': 'treatmentid__SandMean',
+            'pH':               'treatmentid__pHMean',
+            'Bulk Density (g/cm3)': 'treatmentid__BulkDensityMean',
+            'Soil Organic Carbon (%)': 'treatmentid__SOMMean',
+            'Treatment Description': 'treatmentid__TreatmentDescription',
+
+            # --- Level 3: Experiment ---
+            'Experiment Title': 'treatmentid__ExperimentID__ExperimentName',
+
+            # --- Level 4 Branch A: Site ---
+            'Site Name':        'treatmentid__ExperimentID__SiteID__SiteName',
+            'Site Latitude':    'treatmentid__ExperimentID__SiteID__Latitude',
+            'Site Longitude':   'treatmentid__ExperimentID__SiteID__Longitude',
+            'Mean Annual Precipitation (mm)': 'treatmentid__ExperimentID__SiteID__MAP',
+            'Mean Annual Temperature (°C)':   'treatmentid__ExperimentID__SiteID__MAT',
+
+            # --- Level 5 Branch B: Publication ---
+            'DOI':               'treatmentid__ExperimentID__PubID__Link',
+            'Lead Author':       'treatmentid__ExperimentID__PubID__LeadAuthor',
+            'Citation':          'treatmentid__ExperimentID__PubID__Citation'
+        }
+
+        qs_check = RawMeasurementTreatment.objects.filter(
+            treatmentid__in=ids_to_query
+        )
+        
+        count = qs_check.count()
+        print(f"[DEBUG] 2. Query found {count} matching rows in DB.")
+        
+        if count == 0:
+            print("[DEBUG] CRITICAL: No rows found. Check your filter syntax!")
+            print(f"        Filter used: treatmentid__in={ids_to_query}")
+
+
+        # Query Setup
+        db_columns = column_map.values()
+        
+        # Execute Query
+        queryset = RawMeasurementTreatment.objects.filter(
+            treatmentid__in=ids_to_query
+        ).values_list(
+            *db_columns
+        ).order_by(
+            'pk' 
+        ).iterator(chunk_size=2000)
+
+        
+        # Add Header
+        yield writer.writerow(column_map.keys()).encode('utf-8')
+
+        # Add Data
+        for row in queryset:
+            yield writer.writerow(row).encode('utf-8')
+
+    # --- 3. Create the Zip Stream ---
+    z = zipstream.ZipStream(
+        compress_type=zipfile.ZIP_DEFLATED, 
+        compress_level=5
+    )
+
+    # Add README
+    z.add(readme_content.encode('utf-8'), 'README.txt')
+
+    # Add CSV (Dynamic Stream)
+    z.add(csv_generator(parent_ids), 'n2odb_data_export.csv')
+
+    # --- 4. Return Response ---
+    response = StreamingHttpResponse(z, content_type="application/zip")
+    response['Content-Disposition'] = 'attachment; filename="n2odb_export.zip"'
+    
+    return response
+
+def contact_view(request):
     if request.method == 'POST':
+        # 1. Extract Data
+        name = request.POST.get('name')
+        email = request.POST.get('email')
+        subject_type = request.POST.get('subject')
+        message_content = request.POST.get('message')
+
+        # 2. Format the Email Subject & Body
+        # We put [GRAND] in the subject so you can filter these easily in your inbox
+        email_subject = f"[GRAND Explorer] {subject_type}: {name}"
+        
+        email_body = f"""
+        You have received a new message via the GRAND Explorer Contact Form.
+
+        --------------------------------------------------
+        SENDER INFO
+        --------------------------------------------------
+        Name:    {name}
+        Email:   {email}
+        Subject: {subject_type}
+
+        --------------------------------------------------
+        MESSAGE
+        --------------------------------------------------
+        {message_content}
+        """
+
         try:
-            # 1. Parse IDs from Request Body
-            body = json.loads(request.body)
-            raw_ids = body.get('ids', [])
-            # Validate IDs are integers
-            treatment_ids = [int(x) for x in raw_ids if str(x).isdigit()]
-
-            # 2. Fetch Objects
-            # Use select_related to grab parent Experiment data efficiently
-            treatments = Treatment.objects.filter(pk__in=treatment_ids).select_related('ExperimentID')
-            
-            # 3. Filter Measurements
-            measurements = RawMeasurementTreatment.objects.filter(treatmentid__in=treatments)
-            total_flux_rows = measurements.count()
-
-            # --- BUILD WIDGET DATA ---
-
-            # A. Sidebar List
-            sidebar_list = []
-            for t in treatments:
-                sidebar_list.append({
-                    'id': t.pk,
-                    'name': getattr(t, 'Name', f"Treatment {t.pk}"), 
-                    'crop': getattr(t, 'PrimaryCrop', "Unknown"),
-                    'location': t.ExperimentID.SiteName, 
-                    'year': t.ExperimentID.Year,
-                })
-
-            # B. Map Data (Grouped by Experiment Site)
-            map_data = []
-            experiments = set(t.ExperimentID for t in treatments)
-            for exp in experiments:
-                # Count rows just for this experiment's selected treatments
-                count = measurements.filter(treatment__experiment=exp).count()
-                if count > 0:
-                    map_data.append({
-                        'lat': float(exp.Lat),
-                        'lon': float(exp.Lon),
-                        'name': exp.SiteName,
-                        'z': count # Bubble size
-                    })
-
-            # C. HMMAD (Methodology)
-            # Assuming 1 = Auto, 0 = Manual. Adjust field name if needed.
-            hmmad_auto = measurements.filter(HMMAD=1).count()
-            hmmad_manual = total_flux_rows - hmmad_auto
-            
-            # D. Crop Distribution
-            crop_counts = treatments.values('PrimaryCrop').annotate(count=Count('id')).order_by('-count')
-            crop_data = list(crop_counts) 
-
-            # E. Soil Texture (Average)
-            # Assumes Experiment has Sand/Silt/Clay fields.
-            soil_stats = treatments.aggregate(
-                Sand=Avg('experiment__Sand'),
-                Silt=Avg('experiment__Silt'),
-                Clay=Avg('experiment__Clay')
+            # 3. Send Email
+            send_mail(
+                subject=email_subject,
+                message=email_body,
+                from_email=settings.DEFAULT_FROM_EMAIL, # Must match your settings
+                recipient_list=[settings.CONTACT_EMAIL], # Where it goes (Admin)
+                fail_silently=False,
             )
-
-            # F. Histogram Data (Raw Flux Values)
-            # Limit to 10,000 points to prevent browser crash if data is huge
-            flux_values = list(measurements.filter(N2OFlux__isnull=False)
-                               .values_list('N2OFlux', flat=True)[:10000])
-
-            # 4. Return JSON
-            data = {
-                'sidebar_list': sidebar_list,
-                'total_rows': total_flux_rows,
-                'map_data': map_data,
-                'hmmad_stats': {'Auto': hmmad_auto, 'Manual': hmmad_manual},
-                'crop_data': crop_data,
-                'soil_stats': soil_stats,
-                'flux_values': flux_values
-            }
-            return JsonResponse(data)
-
+            
+            # 4. Success Feedback
+            messages.success(request, "Thank you! Your message has been sent successfully.")
+            return redirect('contact')
+            
         except Exception as e:
-            # --- ADD THIS PRINT STATEMENT ---
-            print("!!!!!!! API ERROR !!!!!!!")
-            print(e)
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!")
-            # -------------------------------
-            return JsonResponse({'error': str(e)}, status=400)
+            # 5. Error Feedback
+            print(f"Error sending email: {e}") # Log to console for debugging
+            messages.error(request, "There was a technical error sending your message. Please try again later.")
+            return redirect('contact')
 
-    return JsonResponse({'error': 'POST method required'}, status=405)
+    # If GET request, just show the form
+    return render(request, 'contact.html')
+
+def team_view (request):
+    return render(request, 'team.html')

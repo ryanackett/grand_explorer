@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Our Team | GRAND Explorer{% endblock %}
+
+{% block content %}
+<style>
+    /* --- Page Wrapper --- */
+    .team-section {
+        background-color: #f8f9fa; /* Very light grey */
+        padding: 80px 20px;
+        min-height: 85vh; /* Fills screen */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    /* --- Section Header --- */
+    .section-header {
+        text-align: center;
+        margin-bottom: 1em;
+        max-width: 700px;
+    }
+
+    .section-title {
+        font-family: 'Georgia', serif;
+        font-weight: 700;
+        color: #2c3e50;
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        margin-top: 1em;
+    }
+
+    .section-subtitle {
+        color: #666;
+        font-size: 2.1rem;
+        font-family: 'Georgia', serif;
+        line-height: 1.6;
+    }
+
+    /* --- Card Container --- */
+    .team-grid {
+        display: flex;
+        justify-content: center;
+        gap: 40px; /* Space between cards */
+        flex-wrap: wrap; /* Stacks on mobile */
+    }
+
+    /* --- The Tactile Card --- */
+    .team-card {
+        background: white;
+        width: 350px; /* Fixed width for consistency */
+        border-radius: 12px;
+        padding: 40px 30px;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05); /* Soft shadow */
+        border-top: 5px solid #82968c; /* Branding strip */
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Springy bounce */
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Hover State: Lift and Glow */
+    .team-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 20px 40px rgba(130, 150, 140, 0.2);
+    }
+
+    /* --- Member Photo --- */
+    .member-img-wrapper {
+        width: 240px;
+        height: 240px;
+        margin: 0 auto 25px auto;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 4px solid #f0f2f1; /* Light ring around photo */
+        transition: border-color 0.3s ease;
+    }
+
+    .team-card:hover .member-img-wrapper {
+        border-color: #82968c; /* Ring turns green on hover */
+    }
+
+    .member-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover; /* Ensures photo doesn't stretch */
+    }
+
+    /* --- Typography --- */
+    .member-name {
+        font-family: 'Georgia', serif;
+        font-weight: 700;
+        color: #2c3e50;
+        font-size: 2.5rem;
+        margin-bottom: 5px;
+        margin-top: 1em;
+    }
+
+    .member-role {
+        font-family: 'Georgia', serif;
+        color: #82968c; /* Brand Green */
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 1.5rem;
+        letter-spacing: 1px;
+        margin-bottom: 20px;
+        display: block;
+    }
+
+    .member-bio {
+        color: #6c757d;
+        font-size: 1.45rem;
+        line-height: 1.6;
+        margin-bottom: 25px;
+    }
+
+    /* --- Social Icons --- */
+    .member-socials {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+    }
+
+    .social-link {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background-color: #f0f2f1;
+        color: #555;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+
+    .social-link:hover {
+        background-color: #82968c;
+        color: white;
+    }
+
+</style>
+
+<div class="team-section">
+    
+    <div class="section-header">
+        <h1 class="section-title">Meet the Team</h1>
+        <p class="section-subtitle">
+            The GRAND Explorer project is driven by a small, dedicated team passionate about open science and the global food system.
+        </p>
+    </div>
+
+    <div class="team-grid">
+
+        <div class="team-card">
+            <div class="member-img-wrapper">
+                <img src="/static/images/headshot.JPG" alt="Ryan Ackett" class="member-img">
+            </div>
+            <h3 class="member-name">Dr. Ryan Ackett</h3>
+            <span class="member-role">Lead Developer & Researcher</span>
+            <p class="member-bio">
+                Ryan leads the GRAND Explorer. With a background in agricultural engineering, biogeochemistry, and computational modeling, he specializes in transforming raw, uncoordinated datasets into powerful insights.
+                Ryan is driven by a passion for building a more sustainable and equitable food system through open data and collaborative science.
+            <div class="member-socials">
+                <a href="https://www.linkedin.com/in/ryan-ackett/" class="social-link" title="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                 <a href="https://scholar.google.com/citations?user=MsPx5CkAAAAJ&hl=en&oi=ao" class="social-link" title="Google Scholar"><i class="fas fa-graduation-cap"></i></a>
+                <a href="#" class="social-link" title="GitHub"><i class="fab fa-github"></i></a>
+                <a href="#" class="social-link" title="Email"><i class="fas fa-envelope"></i></a>
+                <a href="https://ryanackett.com" class="social-link" title="Website"><i class="fas fa-globe"></i></a>
+            </div>
+        </div>
+
+        <div class="team-card">
+            <div class="member-img-wrapper">
+                <img src="https://ui-avatars.com/api/?name=Deb+Saha&background=e9ecef&color=6c757d&size=256" alt="Co-Lead Name" class="member-img">
+            </div>
+            <h3 class="member-name">Dr. Debasish Saha</h3>
+            <span class="member-role">Overseeing Principal Investigator</span>
+            <p class="member-bio">
+                Dr. Saha provides oversight, funding, and scientific expertise for the project. Deb is an Assistant Professor at the University of Tennessee, Knoxville and leads the Saha Lab. His research focuses on soil biogeochemistry and global N2O modeling.
+            </p>
+            <div class="member-socials">
+                <a href="https://scholar.google.com/citations?user=Qf8nNKAAAAAJ&hl=en&oi=ao" class="social-link" title="Google Scholar"><i class="fas fa-graduation-cap"></i></a>
+                <a href="#" class="social-link" title="Email"><i class="fas fa-envelope"></i></a>
+                <a href="https://sahalab.utk.edu/" class="social-link" title="Website"><i class="fas fa-globe"></i></a>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

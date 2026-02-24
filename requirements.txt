@@ -9,3 +9,6 @@ mysqlclient
 tablib
 diff-match-patch
 django-import-export
+zipstream-ng
+django-sql-explorer 
+django-user_agents

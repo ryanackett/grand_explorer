@@ -12,6 +12,7 @@ class Publication(models.Model):
     Citation = models.CharField(db_column='Citation', max_length=500, blank=True, null=True)  # Field name made lowercase.
     PubYear = models.IntegerField(db_column='PubYear', blank=True, null=True)  # Field name made lowercase.
     Link = models.CharField(db_column='Link', max_length=255, blank=True, null=True)  # Field name made lowercase.
+    Abstract = models.TextField(db_column='Abstract', blank=True, null=True) 
     class Meta:
         db_table = 'Publication'
 
@@ -46,7 +47,8 @@ class Treatment(models.Model):
     PrimaryCrop = models.CharField(db_column='PrimaryCrop', max_length=32)  # Field name made lowercase.
     SecondaryCrop = models.CharField(db_column='SecondaryCrop', max_length=32, blank=True, null=True)  # Field name made lowercase.
     CoverCrop = models.CharField(db_column='CoverCrop', max_length=32, blank=True, null=True)  # Field name made lowercase.
-    Management = models.CharField(db_column='Management', max_length=16, blank=True, null=True)  # Field name made lowercase.
+    Management = models.CharField(db_column='Management', max_length=16, blank=True, null=True)
+    Tillage = models.CharField(db_column='Tillage', blank=False, null=True, max_length=32)
     FluxInstrument = models.CharField(db_column='FluxInstrument', max_length=45, blank=False, null=True)  # Field name made lowercase.
     TreatmentName = models.CharField(db_column='TreatmentName', max_length=45, blank=True, null=True)  # Field name made lowercase.
     SandMean = models.FloatField(db_column='SandMean', blank=True, null=True)  # Field name made lowercase.
@@ -160,3 +162,34 @@ class RawMeasurementTreatment(models.Model):
     hbosscores = models.CharField(db_column='HBOSscores', max_length=45, blank=True, null=True)  # Field name made lowercase.
     class Meta:
         db_table = 'RawMeasurementTreatment'
+
+class UserAction(models.Model):
+    # Distinguish between "Browsing" (get-data) and "Downloading" (data-cart)
+    ACTION_CHOICES = [
+        ('EXPLORE', 'Map Exploration'),     # AJAX updates
+        ('DOWNLOAD', 'Data Download'),      # CSV generation
+    ]
+    # 1. Who (Identity)
+    session_key = models.CharField(max_length=40, null=True, blank=True)
+    user_email = models.EmailField(null=True, blank=True)
+    # 2. What (Intent)
+    action_type = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    # stores the exact scientific query (e.g., {"crop": "Maize", "year": 2020})
+    filters = models.JSONField(default=dict)
+    # Create a list of downloaded IDs for reference
+    download_ids = models.JSONField(null=True, blank=True)
+    # Track impact (e.g., "User downloaded 500 rows")
+    result_count = models.IntegerField(null=True, blank=True, help_text="Number of items returned/downloaded")
+    # 3. When
+    timestamp = models.DateTimeField(auto_now_add=True)
+    # 4. Bot Detection
+    is_bot = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['action_type', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.action_type} ({self.timestamp.strftime('%Y-%m-%d %H:%M')})"

@@ -1,7 +1,7 @@
 {% extends 'base.html' %} 
 
 {% block content %}
-
+{% csrf_token %}
 
 <script src="/static/js/jquery-3.5.0.min.js"></script>
 <script src="/static/js/plugins.js"></script>
@@ -9,7 +9,6 @@
 
 <script>
     // This forcibly deletes the old Highcharts loaded by plugins.js
-    // ensuring your new version can load fresh without Error #16.
     if (window.Highcharts) { 
         console.warn("Old Highcharts detected in plugins.js - Nuking it.");
         delete window.Highcharts; 
@@ -23,8 +22,8 @@
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
-<script src="https://code.highcharts.com/highcharts.js"></script>
-<script src="https://code.highcharts.com/highcharts-more.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@11/highmaps.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@11/modules/exporting.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script src="https://code.highcharts.com/modules/histogram-bellcurve.js"></script>
 <script src="https://code.highcharts.com/maps/modules/map.js"></script>
@@ -101,7 +100,7 @@
     }
 
     /* Actions */
-    .cart-actions { margin-top: auto; padding-top: 2rem; }
+    .cart-actions {padding-top: 2rem; }
     .btn-download {
         width: 100%;
         padding: 1rem;
@@ -255,7 +254,7 @@
         </div>
 
         <div class="cart-actions">
-            <button class="btn-download" onclick="downloadCSV()">
+            <button class="btn-download" id="download-btn" onclick="triggerDownload()">
                 <i class="fas fa-download"></i> Download Dataset
             </button>
             <div style="text-align:center; margin-top:15px; margin-bottom:3rem; ">
@@ -284,22 +283,27 @@
         <div class="dash-grid" id="dash-content">
             <div class="widget w-large">
                 <div class="widget-title">Geographic Coverage</div>
-                <div id="map-chart" style="height: 250px;"></div>
+                <div id="map-chart" style="height: 100%;"></div>
             </div>
 
             <div class="widget">
                 <div class="widget-title">Hot Moments</div>
-                <div id="hmmad-chart" style="height: 200px;"></div>
+                <div id="hmmad-time" style="flex: 1; min-height: 180px;"></div>
+                <div id="hmmad-flux" style="flex: 1; min-height: 180px;"></div>
+                <div style="margin-top:10px; font-size:12px; color:#666; text-align:center; line-height:1.4;">
+                    <em>Proportion of time and total cumulative flux attributed to hot moments vs background emissions. Based on </em>
+                    <a href="https://doi.org/10.1029/2025JG008953" target="_blank" style="color: var(--forest-green); font-weight:bold; font-style:italic;">Ackett et al. (2025)</a>.
+                </div>
             </div>
 
             <div class="widget w-large">
                 <div class="widget-title">Primary Crop Distribution</div>
-                <div id="crop-chart" style="height: 200px;"></div>
+                <div id="crop-chart" style="height: 100%;"></div>
             </div>
 
             <div class="widget">
                 <div class="widget-title">Soil Texture</div>
-                <div id="soil-chart" style="height: 200px;"></div>
+                <div id="soil-chart" style="height: 100%;"></div>
             </div>
 
             <div class="widget w-full">
@@ -308,6 +312,27 @@
             </div>
         </div>
     </main>
+</div>
+
+<div id="emailModal" style="display:none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+    <div style="background-color: #fff; margin: 15% auto; padding: 25px; border-radius: 8px; width: 400px; font-family: sans-serif;">
+        <h3 style="margin-top: 0;">Download Data Cart</h3>
+        <p>Please enter your email to download your selected items.</p>
+        
+        <form onsubmit="handleModalSubmit(event)">
+            <div style="margin-bottom: 15px;">
+                <label>Email Address:</label>
+                <input type="email" id="modal_email_input" required 
+                       style="width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box;">
+            </div>
+            <div style="text-align: right;">
+                <button type="button" onclick="closeEmailModal()" style="width: 100%;">Cancel</button>
+                <button type="submit" class="btn-download" style="padding: 6px 12px;">
+                    Download
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
@@ -477,7 +502,7 @@
         // STEP B: If missing, fetch it manually (Bypasses the error)
         else {
             console.log("Local map script not found. Fetching from CDN...");
-            fetch('https://code.highcharts.com/mapdata/custom/world.topo.json')
+            fetch('/static/files/world-palestine.topo.json')
                 .then(response => {
                     if (!response.ok) throw new Error("Network response was not ok");
                     return response.json();
@@ -491,78 +516,85 @@
                     mapContainer.innerHTML = "<div style='color:red;padding:20px'>Could not load World Map data. check console.</div>";
                 });
         }
+        // 1. Calculate Time Proportion
+        const timeHot = data.hmmad_stats.HM || 0;
+        const timeBg = data.hmmad_stats.BG || 0;
+        const timeTotal = timeHot + timeBg;
+        const timePctString = timeTotal > 0 ? ((timeHot / timeTotal) * 100).toFixed(1) + '%' : '0%';
 
-        // --- 2. Donut (Hot Moments vs Background) ---
-        // Calculate Percentage
-        const hotMoments = data.hmmad_stats.Auto || 0;
-        const background = data.hmmad_stats.Manual || 0;
-        const total = hotMoments + background;
-        const pctString = total > 0 ? ((hotMoments / total) * 100).toFixed(1) + '%' : '0%';
+        // 2. Calculate Cumulative Flux Proportion
+        const fluxHot = data.hmmad_stats.HM_flux || 0; 
+        const fluxBg = data.hmmad_stats.BG_flux || 0;
+        const fluxTotal = fluxHot + fluxBg;
+        const fluxPctString = fluxTotal > 0 ? ((fluxHot / fluxTotal) * 100).toFixed(1) + '%' : '0%';
 
-        Highcharts.chart('hmmad-chart', {
-            chart: { 
-                type: 'pie', 
-                height: 200, 
-                backgroundColor: 'transparent',
-                // This event fires every time the chart draws or resizes
-                events: {
-                    render: function() {
-                        const chart = this;
-                        const series = chart.series[0];
-                        
-                        // 1. Calculate the exact center of the Pie slices
-                        // series.center is relative to plot area, so we add plotTop/Left
-                        const centerX = chart.plotLeft + series.center[0];
-                        const centerY = chart.plotTop + series.center[1];
+        // Safeguards for empty data
+        const safeFluxBg = fluxTotal === 0 ? 1 : fluxBg; 
+        const safeTimeBg = timeTotal === 0 ? 1 : timeBg;
 
-                        // 2. Create the label if it doesn't exist
-                        if (!chart.donutLabel) {
-                            chart.donutLabel = chart.renderer.label(
-                                `<div style="text-align:center;">
-                                    <span style="font-size:1.2rem; color:#7A9E7E; font-weight:bold;">${pctString}</span><br>
-                                    <span style="font-size:11px; color:#666;">Hot Moments</span>
-                                </div>`, 
-                                0, 
-                                0, 
-                                null, 
-                                null, 
-                                null, 
-                                true // useHTML
-                            ).css({
-                                color: '#333',
-                            }).add();
-                        }
+        // --- THE NEW SPLIT CHART LOGIC ---
 
-                        // 3. Center the label over the calculated coordinates
-                        const labelBox = chart.donutLabel.getBBox();
-                        chart.donutLabel.attr({
-                            x: centerX - (labelBox.width / 2),
-                            y: centerY - (labelBox.height / 2)
-                        });
-                    }
-                }
-            },
-            title: { text: '' }, // Disable standard title
+        // A. Create a shared config so we don't repeat ourselves
+        const donutTemplate = {
+            chart: { type: 'pie', backgroundColor: 'transparent' },
             plotOptions: { 
                 pie: { 
                     innerSize: '75%', 
+                    size: '85%', // Now they can take up 85% of their own individual boxes!
+                    borderWidth: 0, 
                     dataLabels: { enabled: false }, 
-                    showInLegend: true 
-                } 
+                    showInLegend: false
+                }
             },
-            legend: {
-                itemStyle: { fontSize: '1.2rem', color: '#333638' },
-                symbolRadius: 6
+            legend: { enabled: false },
+            colors: ['#7A9E7E', '#e6e6e6'],
+            tooltip: {
+                pointFormat: '<b>{point.y}</b> ({point.percentage:.1f}%)'
+            }
+        };
+
+        // B. Draw Chart 1 (Top)
+        Highcharts.chart('hmmad-time', Highcharts.merge(donutTemplate, {
+            // Native Highcharts way to center text inside a donut
+            title: {
+                text: `<div style="text-align:center;">
+                        <span style="font-size:1.3rem; color:#7A9E7E; font-weight:bold;">${timePctString}</span><br>
+                        <span style="font-size:12px; color:#666; text-transform:uppercase; letter-spacing:0.5px;">Time</span>
+                    </div>`,
+                align: 'center',
+                verticalAlign: 'middle',
+                y: 12, // Slight nudge down to perfectly center the HTML block
+                useHTML: true
             },
-            colors: ['#7A9E7E', '#cccccc'],
             series: [{
-                name: 'Rows',
+                name: 'Time Proportion',
                 data: [
-                    { name: 'Hot Moments', y: hotMoments },
-                    { name: 'Background Emissions', y: background }
+                    { name: 'Hot Moments', y: timeHot },
+                    { name: 'Background Emissions', y: safeTimeBg }
                 ]
             }]
-        });
+        }));
+
+        // C. Draw Chart 2 (Bottom)
+        Highcharts.chart('hmmad-flux', Highcharts.merge(donutTemplate, {
+            title: {
+                text: `<div style="text-align:center;">
+                        <span style="font-size:1.3rem; color:#7A9E7E; font-weight:bold;">${fluxPctString}</span><br>
+                        <span style="font-size:12px; color:#666; text-transform:uppercase; letter-spacing:0.5px;">Total Flux</span>
+                    </div>`,
+                align: 'center',
+                verticalAlign: 'middle',
+                y: 12, 
+                useHTML: true
+            },
+            series: [{
+                name: 'Flux Proportion',
+                data: [
+                    { name: 'Hot Moments Flux', y: fluxHot },
+                    { name: 'Background Flux', y: safeFluxBg }
+                ]
+            }]
+        }));
 
         // --- 3. Bar (Crops) ---
         const categories = data.crop_data.map(d => d.PrimaryCrop);
@@ -768,7 +800,9 @@
                         labels: {
                             style: { fontSize: '1.2rem' },
 
-                        }
+                        },
+                        // Set minimum y axis value to avoid log(0) issues
+                        min: 1
                     },
 
                     tooltip: {
@@ -779,10 +813,14 @@
                         column: {
                             // Safety threshold for log axis
                             threshold: 0.1, 
+                            minPointLength: 5,
                             groupPadding: 0,
                             pointPadding: 0.05, // Slight gap between bars for readability
                             borderWidth: 1,
                             borderColor: 'transparent'
+                            // Set minimum y axis value to avoid log(0) issues
+
+
                         }
                     },
 
@@ -801,8 +839,118 @@
     }
 
 
-    function downloadCSV() {
-        alert("Download functionality to be implemented.");
+    function downloadCSV(userEmail = null) {
+        // 1. Retrieve and Parse IDs from LocalStorage
+        const storedData = localStorage.getItem('grand_explorer_cart_v1');
+        const ids = storedData ? JSON.parse(storedData) : [];
+
+        // Safety check: Don't submit if empty
+        if (ids.length === 0) {
+            alert("No items selected for export.");
+            return;
+        }
+
+        // Create a Hidden Form
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/cart/download-zip/';  
+        form.style.display = 'none'; 
+
+        // ... (Your existing CSRF Token logic here) ...
+        const csrfTokenInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (csrfTokenInput) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfTokenInput.value;
+            form.appendChild(csrfInput);
+        }
+
+        // If we have an email, add it to the form so the backend can log it
+        if (userEmail) {
+            const emailInput = document.createElement('input');
+            emailInput.type = 'hidden';
+            emailInput.name = 'email_address'; // The backend will look for this name
+            emailInput.value = userEmail;
+            form.appendChild(emailInput);
+        }
+
+        // Add the IDs (Your existing logic)
+        ids.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'ids'; 
+            input.value = id;
+            form.appendChild(input);
+        });
+
+        // ... (Rest of your existing submit/UI logic) ...
+        document.body.appendChild(form);
+        
+        // UI Feedback
+        const btn = document.getElementById('download-btn');
+        if(btn) {
+            btn.innerText = "Generating Bundle...";
+            btn.disabled = true;
+        }
+
+        form.submit();
+        document.body.removeChild(form);
+        
+        if(btn) {
+            setTimeout(() => {
+                btn.innerText = "Download Cart"; // Reset text
+                btn.disabled = false;
+            }, 3000); 
+        }
+    }
+</script>
+
+<script>
+    function triggerDownload() {
+        // 1. Check if Cart is empty first (don't annoy user with email if cart is empty)
+        const storedData = localStorage.getItem('grand_explorer_cart_v1');
+        const ids = storedData ? JSON.parse(storedData) : [];
+        if (ids.length === 0) {
+            alert("No items selected for export.");
+            return;
+        }
+
+        // 2. Check for saved email (Express Lane)
+        const savedEmail = localStorage.getItem('grand_user_email');
+
+        if (savedEmail) {
+            // User is known: Pass email directly to your function
+            downloadCSV(savedEmail);
+        } else {
+            // User is new: Show the modal
+            document.getElementById("emailModal").style.display = "block";
+        }
+    }
+
+    // --- B. MODAL HANDLER ---
+    function handleModalSubmit(event) {
+        // Prevent the form from actually submitting/refreshing the page
+        event.preventDefault(); 
+        
+        const emailInput = document.getElementById('modal_email_input');
+        const email = emailInput.value;
+
+        if (email) {
+            // 1. Save for next time
+            localStorage.setItem('grand_user_email', email);
+            
+            // 2. Close Modal
+            document.getElementById("emailModal").style.display = "none";
+            
+            // 3. Trigger the real download function with the email
+            downloadCSV(email);
+        }
+    }
+
+    // --- C. CLOSE MODAL HELPER ---
+    function closeEmailModal() {
+        document.getElementById("emailModal").style.display = "none";
     }
 </script>
 

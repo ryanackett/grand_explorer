@@ -1,136 +1,185 @@
 {% extends 'base.html' %}
 {% block head %}
 
-    <!--- basic page needs
-    ================================================== -->
-    <meta charset="utf-8">
-    <title>About - Calvin</title>
-    <meta name="description" content="">
-    <meta name="author" content="">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About | GRAND Explorer</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --text-color: #333;
+            --bg-color: #f9f9f9;
+            --section-bg: #ffffff;
+        }
 
-    <!-- mobile specific metas
-    ================================================== -->
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+        }
 
-    <!-- CSS
-    ================================================== -->
-    <link rel="stylesheet" href="css/vendor.css">
-    <link rel="stylesheet" href="css/styles.css">
+        /* Typography */
+        h1, h2, h3 {
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+        
+        h1 { margin-bottom: 0.5em; }
+        h2 { border-bottom: 2px solid #eaeaea; padding-bottom: 10px; margin-top: 40px; }
 
-    <!-- script
-    ================================================== -->
-    <script src="js/modernizr.js"></script>
-    <script defer src="js/fontawesome/all.min.js"></script>
+        p { margin-bottom: 0.2em; font-size: 1.8rem; }
 
-    <!-- favicons
-    ================================================== -->
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-    <link rel="manifest" href="site.webmanifest">
+        /* Layout */
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
 
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        header h1 { color: white; margin: 0; font-size: 3.5rem; }
+        header .subtitle { font-size: 2.2rem; font-weight: 300; opacity: 0.9; }
+
+        .content-section {
+            background: var(--section-bg);
+            padding: 40px;
+            margin-top: -30px; /* Overlap effect */
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        /* Feature Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .grid-item {
+            background: #f4f6f7;
+            padding: 20px;
+            border-radius: 5px;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .grid-item h3 { margin-top: 0; font-size: 1.1rem; }
+
+        h3 {
+            font-size: 1.8rem;
+            margin-top: 0.5em;
+            margin-bottom: 0.2em;
+        }
+
+        /* Citation Box */
+        .citation-box {
+            background-color: #e8f4fc;
+            border: 1px solid #b6e0fe;
+            padding: 20px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin-top: 20px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .content-section { padding: 20px; margin-top: 0; }
+            header h1 { font-size: 1.8rem; }
+        }
+
+       .about-header {
+            margin-top: 3rem;
+        }
+    </style>
 </head>
 
 {% endblock %}
 {% block content %}
 
 
+    <div class="container" style="margin-top: 6rem; margin-bottom: 4rem;">
+        <section class="content-section">
+            
+            <h2>Mission Overview</h2>
+            <p>
+                The <strong>GRAND Explorer</strong> is a specialized research infrastructure designed to harmonize, curate, and distribute global soil nitrous oxide (N<sub>2</sub>O) flux data. 
+                By bridging the gap between plot-scale experimentation and global biogeochemical modeling, GRAND aims to accelerate the development of climate-smart agricultural systems.
+            </p>
+            <p>
+                Accurate quantification of agricultural greenhouse gas emissions is critical for meeting international climate targets. While Tier 1 (emission factor) and Tier 2 approaches provide necessary baselines, the complexity of soil nitrogen dynamics necessitates <strong>IPCC Tier 3 methodologies</strong>: robust, process-based modeling that accounts for local soil heterogeneity, management history, and high-temporal-resolution climate drivers.
+            </p>
+            <p>
+                Currently, the implementation of Tier 3 models (such as DayCENT, DNDC, and APSIM) on a global scale is constrained not by a lack of algorithms, but by data fragmentation. 
+                Field measurements are often siloed in individual publications, lacking the standardized metadata and auxiliary environmental variables required for rigorous model validation. 
+                <strong>GRAND addresses this bottleneck</strong> by providing the high-resolution, accessible data infrastructure necessary to permit large-scale, cross-site model intercomparisons and validation.
+            </p>
 
-    <!-- content
-    ================================================== -->
-    <section class="s-content">
+            <h2>Infrastructure for Community Science</h2>
+            <p>
+                The scientific community possesses a latent ethos of data sharing and collaboration. However, this potential is often unrealized due to high friction in data standardization and distribution. GRAND is built on the philosophy that <strong>infrastructure drives culture</strong>.
+            </p>
+            <p>
+                By providing an open-source, community-centered platform that reduces the technical burden of sharing and accessing data, we aim to operationalize the <strong>FAIR Principles</strong> (Findable, Accessible, Interoperable, Reusable). This platform is not merely a repository; it is a collaborative mechanism designed to honor the effort of experimentalists while empowering modelers.
+            </p>
 
-        <div class="row">
-            <div class="column large-12">
+            <h2>Technical Architecture & Capabilities</h2>
+            <p>
+                The utility of a scientific database is defined by the quality of its underlying architecture. GRAND utilizes a robust, open-source technology stack designed to ensure reproducibility, relational integrity, and long-term stability for the research community.
+            </p>
 
-                <article class="s-content__entry">
+            <h3>Automated Standardization (Python)</h3>
+            <p>
+                Manual data entry is the primary source of error in legacy databases. GRAND employs automated Python scripting pipelines to ingest raw datasets. These scripts programmatically clean, convert units, and map disparate terminology (e.g., "conventional till" vs. "moldboard plow") to a single, harmonized ontology. This ensures that the data delivered to modelers is consistent and methodologically transparent.
+            </p>
 
-                    <div class="s-content__media">
-                        <img src="images/thumbs/about/about-1050.jpg" 
-                                srcset="images/thumbs/about/about-2100.jpg 2100w, 
-                                        images/thumbs/about/about-1050.jpg 1050w, 
-                                        images/thumbs/about/about-525.jpg 525w" sizes="(max-width: 2100px) 100vw, 2100px" alt="">
+            <h3>Relational Integrity (MySQL)</h3>
+            <p>
+                Biogeochemical data is inherently hierarchical: Fluxes belong to Treatments, Treatments belong to Sites, and Sites belong to Citations. We utilize a MySQL relational database to enforce strict referential integrity across these layers. This structure prevents "orphan" data points and ensures that every N<sub>2</sub>O measurement is inextricably linked to its driving variables (soil properties, climate, and management history).
+            </p>
 
-                    </div> <!-- end s-content__media -->
+            <h3>Scalable Access (Django)</h3>
+            <p>
+                The platform is built on the Django web framework, chosen for its stability and security in handling complex scientific data structures. By decoupling the frontend exploration tools from the backend database, we provide a secure, high-performance environment that allows researchers to query millions of data points without compromising system speed or reliability.
+            </p>
 
-                    <div class="s-content__entry-header">
-                        <h1 class="s-content__title">Learn More About Story.</h1>
-                    </div> <!-- end s-content__entry-header -->
+            <h2>Core Functionalities</h2>
+            <ul class="feature-list">
+                <li><strong>Harmonization:</strong> Ingestion of diverse datasets into a unified schema with standardized ontologies for crops, fertilizers, and management practices.</li>
+                <li><strong>Model-Ready Exports:</strong> Direct integration with biogeochemical models via formatted exports and comprehensive spin-up data (site history).</li>
+                <li><strong>Gap Analysis:</strong> Visualization of spatial and management-based data deficits to guide strategic funding for future field campaigns.</li>
+            </ul>
 
-                    <div class="s-content__primary">
+            <h2>Usage & Citation Policy</h2>
+            <p>
+                Data integrity and academic credit are paramount. Users of the GRAND Explorer are required to cite both the platform and the primary data generators who contributed to the repository.
+            </p>
+            <div class="citation-box">
+                <strong>Suggested Citation:</strong><br>
+                [Author List]. (2026). GRAND: The Global Repository for Agricultural N2O Data. [DOI/Link].
+                <br><br>
+                <em>Note: A full BibTeX file of primary sources is generated dynamically with every dataset download.</em>
+            </div>
 
-                        <div class="s-content__page-content">
-
-                            <p class="lead">
-                            Duis ex ad cupidatat tempor Excepteur cillum cupidatat fugiat nostrud cupidatat dolor sunt sint sit nisi est eu 
-                            exercitation incididunt adipisicing veniam velit id fugiat enim mollit amet anim veniam dolor dolor irure velit 
-                            commodo cillum sit nulla ullamco magna amet magna cupidatat qui labore cillum sit in tempor veniam consequat non 
-                            laborum adipisicing aliqua ea nisi sint ut quis proident ullamco ut dolore culpa occaecat ut laboris in sit minim 
-                            cupidatat ut dolor voluptate enim veniam consequat occaecat fugiat in adipisicing in amet Ut nulla nisi non ut 
-                            enim aliqua laborum mollit quis nostrud sed sed.
-                            </p>
-                            
-                            <p>
-                            Lorem ipsum Nisi cillum reprehenderit minim sunt dolore dolor eiusmod eu aliquip ad ut sint dolore laborum 
-                            voluptate ullamco dolore aliquip enim. Excepteur cillum cupidatat fugiat nostrud cupidatat dolor sunt sint sit 
-                            nisi est eu exercitation incididunt adipisicing
-                            </p> 
-
-                            <p>
-                            Lorem ipsum Cillum sit sunt dolore non aute enim pariatur deserunt magna reprehenderit veniam officia ullamco 
-                            eiusmod laborum commodo veniam elit proident enim sit cillum ex aliquip dolore labore sint ut deserunt officia 
-                            veniam consectetur in in quis eu consectetur non sint Duis mollit Ut magna irure.
-                            </p>
-
-                            <br>
-
-                            <div class="row block-large-1-2 block-tab-full s-content__blocks">
-                                <div class="column">
-                                    <h4>Who.</h4>
-                                    <p>
-                                    Lorem ipsum Nisi amet fugiat eiusmod et aliqua ad qui ut nisi Ut aute anim mollit fugiat qui sit ex 
-                                    occaecat et eu mollit nisi pariatur fugiat deserunt dolor veniam reprehenderit aliquip magna nisi 
-                                    consequat aliqua veniam in aute ullamco Duis laborum ad non pariatur sit.
-                                    </p>
-                                </div>
-
-                                <div class="column">
-                                    <h4>When.</h4>
-                                    <p>
-                                    Lorem ipsum Nisi amet fugiat eiusmod et aliqua ad qui ut nisi Ut aute anim mollit fugiat qui sit ex 
-                                    occaecat et eu mollit nisi pariatur fugiat deserunt dolor veniam reprehenderit aliquip magna nisi 
-                                    consequat aliqua veniam in aute ullamco Duis laborum ad non pariatur sit.
-                                    </p>
-                                </div>
-
-                                <div class="column">
-                                    <h4>What.</h4>
-                                    <p>
-                                    Lorem ipsum Nisi amet fugiat eiusmod et aliqua ad qui ut nisi Ut aute anim mollit fugiat qui sit ex 
-                                    occaecat et eu mollit nisi pariatur fugiat deserunt dolor veniam reprehenderit aliquip magna nisi 
-                                    consequat aliqua veniam in aute ullamco Duis laborum ad non pariatur sit.
-                                    </p>
-                                </div>
-
-                                <div class="column">
-                                    <h4>How.</h4>
-                                    <p>
-                                    Lorem ipsum Nisi amet fugiat eiusmod et aliqua ad qui ut nisi Ut aute anim mollit fugiat qui 
-                                    sit ex occaecat et eu mollit nisi pariatur fugiat deserunt dolor veniam reprehenderit aliquip 
-                                    magna nisi consequat aliqua veniam in aute ullamco Duis laborum ad non pariatur sit.
-                                    </p>
-                                </div>
-
-                            </div>
-                        </div> <!-- end s-entry__page-content -->
-
-                    </div> <!-- end s-content__primary -->
-                </article> <!-- end entry -->
-
-            </div> <!-- end column -->
-        </div> <!-- end row -->
-
-    </section> <!-- end s-content -->
+        </section>
+    </div>
 
 
 
