@@ -714,7 +714,7 @@ def download_zip(request):
     )
     
     # --- 1. Load the README from disk ---
-    readme_path = os.path.join(settings.BASE_DIR, 'n2odb', 'static', 'files', 'data_cart_readme.txt')
+    readme_path = os.path.join(settings.BASE_DIR, 'n2odb', 'static', 'files', 'README.txt')
     
     try:
         with open(readme_path, 'r', encoding='utf-8') as f:

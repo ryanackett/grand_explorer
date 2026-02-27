@@ -32,6 +32,8 @@
     <script src="https://code.highcharts.com/maps/modules/accessibility.js"></script>
     <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
     <script type="module">
         import {
             Grid,
@@ -520,7 +522,7 @@
                                 <i class="fas fa-book text-primary"></i> Read Abstract
                             </div>
 
-                            <div class="d-flex flex-wrap">
+                            <div class="d-flex flex-wrap site-climate">
                                 <div class="stat-badge" title="Mean Annual Precip">
                                     <i class="fas fa-tint text-primary" style="margin-right:5px;"></i> ${p.MAP} mm
                                 </div>
@@ -535,6 +537,10 @@
 
                             <div class="btn-add-all" onclick='CartManager.add(${JSON.stringify(allTreatmentIds)})'>
                                 <i class="fas fa-shopping-cart"></i> Add All to Data Cart
+                            </div>
+
+                            <div class="btn-card-tutorial" onclick='cardTutorial()'>
+                                <i class="fas fa-question-circle text-primary"></i> How to Use This Card
                             </div>
                         </div>
 
@@ -660,6 +666,53 @@
         });
         });
     </script>
+
+    <script>
+        // ==========================================
+        // 1. TUTORIAL FUNCTION
+        // ==========================================
+        function startTutorial() {
+            const driver = window.driver.js.driver;
+            const tourObj = driver({
+                showProgress: true,
+                steps: [
+                    { element: '.data-cart', popover: { title: 'Data Cart', description: 'Use this page to curate a dataset from N2O experiments across the globe. Data can be added by experimental treatment, full experiment, or everything shown on the map below. All datasets you add will be available here in your Data Cart for review and download.' } },
+                    { element: '.filter-row', popover: { title: 'Filter', description: 'Use these filters to find datasets that match your criteria.' } },
+                    { element: '#add-all-cart-btn', popover: { title: 'Bulk Add', description: 'Add all currently filtered points on the map directly to your data cart.' } },
+                    { element: '#container', popover: { title: 'Interactive Map', description: 'Click any point on the map to see its specific details about the publication, site, and treatments in the sidebar.' } }
+                ]
+            });
+            
+            tourObj.drive();
+        }
+    </script>
+
+    <script>
+        // ==========================================
+        // CARD FUNCTION
+        // ==========================================
+        function cardTutorial() {
+            const driver = window.driver.js.driver;
+            const tourObj = driver({
+                showProgress: true,
+                steps: [
+                    { element: '.exp-title', popover: { title: 'Publication Title', description: 'Publication title of selected map point.' } },
+                    { element: '.btn-read-abstract', popover: { title: 'Read Abstract', description: 'Click to view the abstract of the selected publication.' } },
+                    { element: '.site-climate', popover: { title: 'Site Climate', description: 'Mean annual precipitation and temperature of the selected site.' } },
+                    { 
+                        element: '#info .t-actions', 
+                        popover: { 
+                            title: 'Treatment Actions', 
+                            description: 'Use the graph icon to visualize flux and environmental trends, or the cart icon to add this specific treatment to your data cart.' 
+                        } 
+                    }
+                ]
+            });
+            
+            tourObj.drive();
+        }
+    </script>
+
 
     <style>
         .multiselecter{max-width:100%}
@@ -1139,7 +1192,7 @@
 
     <!-- content
     ================================================== -->
-    <section class="s-content row" style="text-align:center; padding-bottom:5vh">
+    <section class="s-content row filter-row" style="text-align:center; padding-bottom:5vh">
         {% load get_dictionary_items %}
         <div class="d-flex justify-content-center flex-wrap mt-100 multiselecter col-md-11">
             {% for key in keys %}
@@ -1171,11 +1224,28 @@
         <div class="container-fluid p-0">
             <div class="row g-0 map-row">
                 
-                <div class="col-md-8 map-col">
-                    <div id="container" style="width:100%; height:100%;"></div>
+                <div class="col-md-8 map-col" style="display: flex; flex-direction: column;">
+                    <div class="map-action-bar p-3 bg-white d-flex justify-content-between align-items-center" style="padding: 0 !important;">
+                        <div>
+                            <button id="start-tutorial-btn" onclick="startTutorial()" class="btn btn-outline-secondary">
+                                ❓ Tutorial
+                            </button>
+                        </div>
+                        <div>
+                            <button id="add-all-cart-btn" class="btn btn-primary">
+                                🛒 Add Full Map to Data Cart
+                            </button>
+                        </div>
+                        
+                    </div>
+                    
+                    <div id="container" style="flex-grow: 1; width:100%; min-height: 400px; margin:0 !important;"></div>
+                    
+                    
+
                 </div>
 
-                <div class="col-md-4 sidebar-col" style="background: #f8f9fa;">
+                <div class="col-md-4 sidebar-col" style="background: #f8f9fa; overflow-y: auto;">
                     <div id="info">
                         <div class="text-muted p-4 text-center" style="margin-top: 20%;">
                             Select a point on the map to view details.

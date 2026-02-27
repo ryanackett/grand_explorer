@@ -412,7 +412,7 @@
     }
 
     function renderSidebar(list, totalRows) {
-        document.getElementById('sidebar-stats').innerText = `${list.length} Treatments | ~${(totalRows * 0.0005).toFixed(1)} MB`;
+        document.getElementById('sidebar-stats').innerText = `${list.length} Treatments | ~${(totalRows * 0.0021).toFixed(1)} MB`;
         document.getElementById('total-rows-display').innerText = totalRows.toLocaleString() + " N2O Flux Measurements";
 
         const container = document.getElementById('cart-list-container');
@@ -521,6 +521,7 @@
         const timeBg = data.hmmad_stats.BG || 0;
         const timeTotal = timeHot + timeBg;
         const timePctString = timeTotal > 0 ? ((timeHot / timeTotal) * 100).toFixed(1) + '%' : '0%';
+        console.log(`Time - Hot: ${timeHot}, BG: ${timeBg}, Total: ${timeTotal}, Pct: ${timePctString}`);
 
         // 2. Calculate Cumulative Flux Proportion
         const fluxHot = data.hmmad_stats.HM_flux || 0; 
