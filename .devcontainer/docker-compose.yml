@@ -7,6 +7,11 @@ services:
       - ./db_data:/var/lib/mysql:Z
     env_file:
       - ../.env
+    networks:
+      # `default` keeps app<->db working; `n2o_net` lets the separate
+      # DorichScraper ETL container reach this DB as host `db`.
+      - default
+      - n2o_net
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
@@ -30,3 +35,13 @@ services:
 
 volumes:
   mysql_data:
+
+networks:
+  # Shared cross-project network referenced as EXTERNAL by BOTH this project and
+  # the DorichScraper compose, so neither tries to own/label it (that mismatch
+  # causes the "network n2o_net has incorrect label" rebuild error). Create it
+  # once, out-of-band, before bringing either project up:
+  #     docker network create n2o_net
+  n2o_net:
+    external: true
+    name: n2o_net

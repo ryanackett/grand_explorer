@@ -91,13 +91,13 @@ class RawMeasurement(models.Model):
     soilt = models.FloatField(db_column='SoilT', blank=True, null=True)  # Field name made lowercase.
     airt = models.FloatField(db_column='AirT', blank=True, null=True)  # Field name made lowercase.
     precip = models.FloatField(db_column='Precip', blank=True, null=True)  # Field name made lowercase.
-    nitrogenapplied = models.FloatField(db_column='NitrogenApplied')  # Field name made lowercase.
+    nitrogenapplied = models.FloatField(db_column='NitrogenApplied', blank=True, null=True)  # Field name made lowercase.
     nitrogenform = models.CharField(db_column='NitrogenForm', max_length=64)  # Field name made lowercase.
     nitrogentype = models.CharField(db_column='NitrogenType', max_length=45)  # Field name made lowercase.
     plantedcrop = models.CharField(db_column='PlantedCrop', max_length=32)  # Field name made lowercase.
-    harvest = models.IntegerField(db_column='Harvest')  # Field name made lowercase.
-    tillage = models.IntegerField(db_column='Tillage')  # Field name made lowercase.
-    irrigationapplied = models.FloatField(db_column='IrrigationApplied')  # Field name made lowercase.
+    harvest = models.IntegerField(db_column='Harvest', blank=True, null=True)  # Field name made lowercase.
+    tillage = models.IntegerField(db_column='Tillage', blank=True, null=True)  # Field name made lowercase.
+    irrigationapplied = models.FloatField(db_column='IrrigationApplied', blank=True, null=True)  # Field name made lowercase.
     hmtruth = models.BooleanField(db_column='HMTruth', blank=False, null=True)
     airtmax = models.FloatField(db_column='AirTMax', blank=True, null=True)  # Field name made lowercase.
     airtmin = models.FloatField(db_column='AirTMin', blank=True, null=True)  # Field name made lowercase.
@@ -124,7 +124,7 @@ class RawMeasurementTreatment(models.Model):
     soilt = models.FloatField(db_column='SoilT', blank=True, null=True)  # Field name made lowercase.
     airt = models.FloatField(db_column='AirT', blank=True, null=True)  # Field name made lowercase.
     precip = models.FloatField(db_column='Precip', blank=True, null=True)  # Field name made lowercase.
-    nitrogenapplied = models.FloatField(db_column='NitrogenApplied')  # Field name made lowercase.
+    nitrogenapplied = models.FloatField(db_column='NitrogenApplied', blank=True, null=True)  # Field name made lowercase.
     nitrogenform = models.CharField(db_column='NitrogenForm', blank=True, null=True, max_length=64)  # Field name made lowercase.
     nitrogentype = models.CharField(db_column='NitrogenType', blank=True, null=True, max_length=45)  # Field name made lowercase.
     plantedcrop = models.CharField(db_column='PlantedCrop', max_length=32, blank=True, null=True,)  # Field name made lowercase.
