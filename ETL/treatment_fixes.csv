@@ -47,26 +47,30 @@ TreatmentID,PrimaryCrop,FluxInstrument,Tillage,Source
 380,Pasture,,,data
 381,Pasture,,,data
 382,Pasture,,,data
+383,Triticum aestivum (Winter Wheat),,,manual
+384,Triticum aestivum (Winter Wheat),,,manual
+385,Triticum aestivum (Winter Wheat),,,manual
+386,Triticum aestivum (Winter Wheat),,,manual
 387,Zea mays (Corn),Automatic Chamber,Field Cultivator,data
 388,Zea mays (Corn),Automatic Chamber,Field Cultivator,data
-389,Unknown,Eddy Covariance,,data
-390,Unknown,Eddy Covariance,,data
-391,Trifolium repens (Clover),Eddy Covariance,,infer:name
-392,Unknown,Static Chamber,,data
-393,Unknown,Static Chamber,,data
-394,Unknown,Static Chamber,,data
-395,Unknown,Static Chamber,,data
-396,Unknown,Static Chamber,,data
-397,Unknown,Static Chamber,,data
-398,Unknown,Static Chamber,,data
-399,Unknown,Static Chamber,,data
-400,Unknown,Static Chamber,,data
-401,Unknown,Static Chamber,,data
-402,Unknown,Static Chamber,,data
-403,Unknown,Static Chamber,,data
-404,Unknown,Static Chamber,,data
-405,Unknown,Static Chamber,,data
-406,Unknown,Static Chamber,,data
+389,Grassland,Eddy Covariance,,manual
+390,Grassland,Eddy Covariance,,manual
+391,Grassland,Eddy Covariance,,manual
+392,Bromus inermis (Brome Grass),Static Chamber,,manual
+393,Glycine max (Soybean),Static Chamber,,manual
+394,Glycine max (Soybean),Static Chamber,,manual
+395,Glycine max (Soybean),Static Chamber,,manual
+396,Mid-successional,Static Chamber,,manual
+397,"Corn, Soybean, Wheat",Static Chamber,,manual
+398,"Corn, Soybean, Wheat",Static Chamber,,manual
+399,"Corn, Soybean, Wheat",Static Chamber,,manual
+400,"Corn, Soybean, Wheat",Static Chamber,,manual
+401,Populus (Poplar),Static Chamber,,manual
+402,Medicago sativa (Alfalfa),Static Chamber,,manual
+403,Early Successional,Static Chamber,,manual
+404,Grassland,Static Chamber,,manual
+405,Coniferous Forest,Static Chamber,,manual
+406,Deciduous Forest,Static Chamber,,manual
 407,Pasture,,,infer:name
 408,Pisum sativum (Pea),,,infer:name
 409,Pasture,,,infer:name
@@ -88,7 +92,10 @@ TreatmentID,PrimaryCrop,FluxInstrument,Tillage,Source
 425,Pasture,Automatic Chamber,,data
 426,Pasture,Automatic Chamber,,data
 427,Pasture,Automatic Chamber,,data
-431,Unknown,Static Chamber,,data
+428,Pasture,,,manual
+429,Pasture,,,manual
+430,Pasture,,,manual
+431,"Corn, Soybean, Canola",Static Chamber,,manual
 432,Glycine max (Soybean),Automatic Chamber,,data
 433,Glycine max (Soybean),Automatic Chamber,,data
 434,Glycine max (Soybean),Automatic Chamber,,data
@@ -118,9 +125,9 @@ TreatmentID,PrimaryCrop,FluxInstrument,Tillage,Source
 462,Panicum virgatum (Switchgrass),Static Chamber,,data
 463,Panicum virgatum (Switchgrass),Static Chamber,,data
 464,Panicum virgatum (Switchgrass),Static Chamber,,data
-465,Unknown,Automatic Chamber,,data
-466,Unknown,Automatic Chamber,,data
-467,Unknown,Automatic Chamber,,data
+465,Zea mays (Corn),Automatic Chamber,,manual
+466,Zea mays (Corn),Automatic Chamber,,manual
+467,Zea mays (Corn),Automatic Chamber,,manual
 468,Triticum aestivum (Wheat),Automatic Chamber,,data
 469,Triticum aestivum (Wheat),Automatic Chamber,,data
 470,Triticum aestivum (Wheat),Automatic Chamber,,data

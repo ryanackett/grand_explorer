@@ -117,6 +117,83 @@ python manage.py apply_treatment_fixes --undo ETL/treatment_manifest_<ts>.json
 `treatment_fixes.csv` is keyed by the live `TreatmentID` (verified to match), and
 empty CSV cells never overwrite (a blank Tillage won't null an existing value).
 
+## 5. Soil & climate enrichment — `apply_soil` / `apply_climate`
+
+Fills the soil physics/chemistry on `Treatment` (`SandMean`, `SiltMean`,
+`ClayMean`, `pHMean`, `BulkDensityMean`, `SOMMean`) and `MAP`/`MAT` on `Site`.
+
+**The values are already in the Dorich export** — `DorichData/Summary_V1.csv`
+carries `Sand`/`Silt`/`Clay`/`pH`/`BD`/`soilC_perc` and `MeanPrec_mm`/`MeanTemp_c`
+per (Reference, Treatment), which join the live DB on
+`(Experiment.ExperimentName, Treatment.TreatmentName)`. These are site-level and
+authoritative. `SOMMean` stores `soilC_perc` **as-is** (organic C %), not converted
+to organic matter.
+
+Where Summary has no value (coverage ~35–80%), and for legacy rows (1–334, which
+have no Summary match), a **gridded fallback** fills the gap, flagged per field in
+the `Source` column:
+
+- **SoilGrids v2.0** (ISRIC) — 0–30 cm depth-weighted sand/silt/clay/pH/bulk
+  density/SOC, by site lat/lon.
+- **NASA POWER** climatology — annual `T2M` (MAT) and `PRECTOTCORR`×365.25 (MAP).
+
+Texture stays coherent (Sand+Silt+Clay = 100) and single-provenance per triplet:
+a full Summary triplet is used as-is (`Source=*:summary`); where Summary measured
+only some components (e.g. clay), the measured ones are kept and the rest filled
+from SoilGrids **rescaled** to the remaining fraction (`Source=*:soilgrids_scaled`);
+with no Summary texture, a full SoilGrids triplet is used (`Source=*:soilgrids`).
+
+Sites with invalid coordinates (e.g. the `(0,0)` null-island placeholder) are
+**skipped** from the gridded fallback and reported — fix the lat/lon in `Site`,
+then re-run `build_soil.py` to pick them up.
+
+### Generate the worksheets — `ETL/build_soil.py`
+
+Run from a host with Docker-socket access + outbound internet (queries the live
+DB for join keys / current NULLs, then the gridded APIs once per site, cached to
+`ETL/_grid_cache.json`). Dump the live state first:
+
+```bash
+# TSV dumps the generator reads (see the SQL in build_soil.py's docstring)
+#   /tmp/treatments_dump.tsv  and  /tmp/sites_dump.tsv
+python3 ETL/build_soil.py            # writes soil_enrichment.csv + site_climate.csv
+python3 ETL/build_soil.py --offline  # re-emit from cache + Summary only (no network)
+```
+
+### Apply (reversible, fill-only)
+
+```bash
+python manage.py apply_soil    ETL/soil_enrichment.csv --dry-run
+python manage.py apply_soil    ETL/soil_enrichment.csv
+python manage.py apply_climate ETL/site_climate.csv --dry-run
+python manage.py apply_climate ETL/site_climate.csv
+# reverse:
+python manage.py apply_soil    --undo ETL/soil_manifest_<ts>.json
+python manage.py apply_climate --undo ETL/climate_manifest_<ts>.json
+```
+
+`apply_soil` fills only NULL Treatment fields (never overwrites a measured value).
+`apply_climate` treats `0` as the legacy "unknown" placeholder, so it fills NULL
+**or 0** MAP/MAT but leaves a real non-zero value alone. Both write a backup
+manifest and reverse exactly. The worksheets only contain currently-missing
+fields, so an apply is inherently additive.
+
+### Which values are estimated — `ESTIMATED_VALUES.md`
+
+Because the fallback values are modelled (SoilGrids 250 m / NASA POWER climatology),
+not site measurements, every gridded fill is tracked. `ETL/build_provenance.py`
+reads the two worksheets + the site/treatment map and writes
+[`ESTIMATED_VALUES.md`](ESTIMATED_VALUES.md) — a per-site table of exactly which
+fields and treatment ranges carry an estimate (`soilgrids`, `soilgrids_scaled`,
+`nasa_power`) versus the authoritative `summary` source. Regenerate it after any
+re-run:
+
+```bash
+# dump the map the table needs (utf8mb4 so site names render):
+#   SELECT s.SiteID, s.SiteName, t.TreatmentID, e.ExperimentName ...  -> /tmp/site_trt_map.tsv
+python3 ETL/build_provenance.py        # writes ETL/ESTIMATED_VALUES.md
+```
+
 ## How the worksheets were generated — `enrichment/`
 
 The `enrichment/` scripts are the provenance tools that produced the worksheets.
@@ -151,6 +228,11 @@ git-ignored). `load_tables --undo` deletes the loaded pk ranges; `apply_enrichme
 ## Files in this directory
 
 - `pub_enrichment.csv`, `gracenet_candidates.csv`, `title_fixes.csv` — reviewed enrichment inputs (**committed**).
+- `treatment_fixes.csv` — Treatment convention fixes (**committed**).
+- `soil_enrichment.csv`, `site_climate.csv` — reviewed soil/climate worksheets (**committed**).
+- `build_soil.py` — generator for the soil/climate worksheets (**committed**).
+- `build_provenance.py` + `ESTIMATED_VALUES.md` — provenance table of modelled fills (**committed**).
 - `enrichment/` — provenance resolver scripts (**committed**).
 - `RawData.csv` — 82 MB legacy denormalized export for `import_rawdata` (**git-ignored**).
+- `_grid_cache.json` — per-site SoilGrids/NASA POWER cache (**git-ignored**).
 - `*_manifest_*.json` — run-specific undo manifests (**git-ignored**; keep locally for rollback).
