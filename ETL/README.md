@@ -93,6 +93,30 @@ python manage.py apply_enrichment ETL/title_fixes.csv --overwrite
 as the Link for the GRACEnet pubs — applying gracenet first (with its correct
 individual links) means fill-empty skips those, so the umbrella link never lands.
 
+## 4. Treatment convention fixes — `manage.py apply_treatment_fixes`
+
+The transform loaded Treatment rows before some conventions were applied. The
+fixes (now also baked into `build_tables.py` for future runs) are captured in
+`treatment_fixes.csv` (`TreatmentID, PrimaryCrop, FluxInstrument, Tillage, Source`):
+
+- **FluxInstrument** → `Static Chamber` / `Automatic Chamber` / `Eddy Covariance`
+  (the `flux gradient` micromet method is recorded as Eddy Covariance per convention).
+- **PrimaryCrop** → `Scientific name (Common Name)` matching the existing rows,
+  backfilled from `DorichData/CropYield_V1.csv` and, where flagged `Source=infer:*`,
+  inferred from the linked publication (treatment-name hint or a single crop named
+  in the abstract). 28 cryptic-coded treatments remain `Unknown` (no reliable source).
+- **Tillage** → title-cased.
+
+```bash
+# review the Source=infer:* rows first, then (these are corrections, so --overwrite):
+python manage.py apply_treatment_fixes ETL/treatment_fixes.csv --overwrite --dry-run
+python manage.py apply_treatment_fixes ETL/treatment_fixes.csv --overwrite
+python manage.py apply_treatment_fixes --undo ETL/treatment_manifest_<ts>.json
+```
+
+`treatment_fixes.csv` is keyed by the live `TreatmentID` (verified to match), and
+empty CSV cells never overwrite (a blank Tillage won't null an existing value).
+
 ## How the worksheets were generated — `enrichment/`
 
 The `enrichment/` scripts are the provenance tools that produced the worksheets.
