@@ -1,5 +1,22 @@
+# --- Secrets / environment ---
 .env
+
+# --- Python ---
 __pycache__/
 *.pyc
+
+# --- Django ---
 db.sqlite3
 media/
+
+# --- MySQL data directory ---
+# Bind-mounted into the `db` devcontainer service; holds the live database,
+# auto-generated SSL keys (*.pem), and binlogs. Must never be versioned.
+.devcontainer/db_data/
+
+# --- ETL: large inputs & run-specific artifacts ---
+# RawData.csv is the 82 MB denormalized export consumed by import_rawdata.
+ETL/RawData.csv
+# Undo manifests written by load_tables / apply_enrichment (keep locally for
+# rollback, but they are run-specific and shouldn't be committed).
+ETL/*_manifest_*.json
