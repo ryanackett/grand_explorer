@@ -12,3 +12,7 @@ django-import-export
 zipstream-ng
 django-sql-explorer 
 django-user_agents
+pandas
+pyod
+reverse_geocoder
+pycountry_convert

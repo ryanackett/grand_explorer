@@ -1,88 +1,154 @@
 ================================================================================
-                            *GRAND* DATA EXPORT README
+                            GRAND DATA EXPORT README
 ================================================================================
 
-SOURCE:       GRAND Explorer (url.com)
-FILE:         n2o_data_export.csv
+SOURCE:    GRAND Explorer — Global Repository for Agricultural N2O Data
+           (public site URL: TBD — pre-launch)
+
+THIS ARCHIVE CONTAINS:
+  * README.txt             — this file
+  * n2odb_data_export.csv  — your selected data, one row per measurement
+  * MODELED_VALUES.md      — which sites/treatments carry modeled (estimated)
+                             soil/climate covariates (see section 4)
 
 --------------------------------------------------------------------------------
 1. OVERVIEW
 --------------------------------------------------------------------------------
-This archive contains harmonized N2O emission data selected from the N2Odb 
-interface. The data is provided in a "flat" CSV format suitable for process-based 
-modeling, ML modeling, statistical analysis, and meta-analysis.
+This archive contains harmonized soil N2O emission data selected through the
+GRAND Explorer interface. The data is a "flat" CSV suitable for process-based
+modeling, machine learning, statistical analysis, and meta-analysis.
 
-The export includes:
-1. Experimental metadata (Site, treatment, and management details)
-2. Environmental drivers (Soil properties, climate context)
-3. Flux measurements (N2O emissions and related nitrogen species)
+Each row is one measurement for one treatment on one date. A record represents
+a treatment's mean flux (replicate plots are averaged), joined to its treatment,
+experiment, site, and publication context.
 
 --------------------------------------------------------------------------------
 2. CITATION POLICY
 --------------------------------------------------------------------------------
-Using this data for publication requires citing both the GRAND database AND 
-the original primary sources included in your download.
+Using this data in a publication requires citing BOTH the GRAND database AND the
+original primary sources for the rows you use.
 
-Suggested Citation for GRAND Explorer:
-[Insert your Lab/Project Citation Here, e.g.: Smith et al. (2025). Global N2O Database...]
+Suggested citation for GRAND:
+    Ackett, R., Saha, D. (2026). GRAND: The Global Repository for
+    Agricultural N2O Data.
 
-A full list of original citations for all rows in this export are provided in
-the "Citation" column (or, if empty, the "Link" column)
+Every row carries its original source in the "Citation" column (and a link in
+the "DOI" column where available). Please cite the primary studies accordingly.
 
 --------------------------------------------------------------------------------
-3. DATA STRUCTURE & UNITS
+3. COLUMNS
 --------------------------------------------------------------------------------
-The CSV file is structured with one row per measurement/aggregation period. 
-Missing values are denoted by blank cells or "NA" depending on the source aggregation.
+Columns appear in the CSV in the order listed below. Missing values are blank.
 
-KEY COLUMNS:
+-- PUBLICATION --
+  Publication Title            Title of the source publication
+  Publication Year             Year of publication
+  DOI                          Link to the source (from the publication's Link
+                               field; usually a DOI, not guaranteed to be one)
+  Lead Author                  Lead author of the source publication
+  Citation                     Full citation string for the source
 
 -- IDENTIFIERS --
-* measurement_id    : Unique database ID for the specific observation
-* treatment_id      : Unique ID linking measurements to a specific experimental treatment
-* site_name         : Name of the experimental site or research station
-* reference_source  : Citation/DOI for the original study
+  Measurement ID               Unique ID for this observation (row)
+  Treatment ID                 ID of the experimental treatment this row belongs to
+  Experiment Title             Name of the experiment
+  Treatment Name               Name of the treatment
+  Treatment Description        Free-text description of the treatment
 
 -- TEMPORAL --
-* date              : Date of measurement (ISO 8601: YYYY-MM-DD)
+  Date                         Measurement date (ISO 8601: YYYY-MM-DD)
 
--- FLUX DATA (Response Variables) --
-* n2o_flux          : Daily N2O emission rate
-                      [Units: g N ha-1 d-1] (grams Nitrogen per hectare per day)
+-- FLUX & NITROGEN --
+  N2O Flux (g N/ha/d)          Daily N2O emission rate (grams N per hectare per day)
+  Nitrogen Applied (kg N/ha)   N application rate on this date
+  Nitrogen Form                Form of N applied (e.g. urea, UAN, manure)
+  Nitrogen Type                Class of N applied (e.g. synthetic, organic)
+  Soil NH4 (mg/kg)             Soil ammonium
+  Soil NO3 (mg/kg)             Soil nitrate
 
--- EXPERIMENTAL DRIVERS (Management) --
-* fertilizer_type   : Class of fertilizer applied (e.g., Synthetic, Manure, Control)
-* n_rate            : Total Nitrogen application rate
-                      [Units: kg N ha-1]
-* crop_type         : Main crop species grown during the measurement period
-* tillage           : Tillage practice (e.g., Conventional, No-till)
+-- MICROMETEOROLOGY / SOIL STATE --
+  VWC (%)                      Volumetric water content
+  WFPS (%)                     Water-filled pore space
+  Soil Temp (°C)               Soil temperature
+  Mean Daily Air Temp (°C)     Mean daily air temperature
+  Max Daily Air Temp (°C)      Maximum daily air temperature
+  Min Daily Air Temp (°C)      Minimum daily air temperature
+  Precipitation (mm)           Daily precipitation
 
--- ENVIRONMENTAL CONTEXT (Soil & Climate) --
-* soil_texture      : USDA Soil Texture Class (e.g., Silty Loam)
-* clay_percent      : Percentage of clay in topsoil (0-20cm) [%]
-* soc               : Soil Organic Carbon content [% or g kg-1]
-* ph                : Soil pH (method varies, typically H2O or CaCl2)
-* bulk_density      : Soil bulk density [g cm-3]
-* precipitation     : Daily precipitation (or interpolated) [mm]
-* air_temp          : Mean daily air temperature [°C]
+-- TREATMENT / MANAGEMENT --
+  Primary Crop                 Main crop in the treatment
+  Secondary Crop               Secondary crop, if any
+  Planted Crop                 Crop planted during this measurement period
+  Management                   Management recorded at the measurement level
+  Management Style             Management recorded at the treatment level
+  Flux Instrument              Measurement method (Static Chamber /
+                               Automatic Chamber / Eddy Covariance)
+
+-- SOIL PHYSICAL / CHEMICAL (treatment level) --
+  Sand Content (%)             Topsoil sand fraction
+  Silt Content (%)             Topsoil silt fraction
+  Clay Content (%)             Topsoil clay fraction
+  pH                           Soil pH (method varies; typically H2O or CaCl2)
+  Bulk Density (g/cm3)         Soil bulk density
+  Soil Organic Carbon (%)      Soil organic carbon (see note in section 5)
+
+-- SITE --
+  Site Name                    Name of the experimental site
+  Site Latitude                Decimal degrees
+  Site Longitude               Decimal degrees
+  Country                      Country of the site (derived from coordinates)
+  Continent                    Continent of the site (derived from coordinates)
+  Mean Annual Precipitation (mm)   Site MAP
+  Mean Annual Temperature (°C)     Site MAT
 
 --------------------------------------------------------------------------------
-4. USAGE NOTES FOR MODELERS
+4. MEASURED vs MODELED DATA  (IMPORTANT)
 --------------------------------------------------------------------------------
-* SPATIAL AGGREGATION: 
-  Site coordinates (Lat/Lon) are provided at the experiment level. Be aware that 
-  some multi-year studies may have slight plot variations not captured in global 
-  coordinates.
+Some covariates are MODELED (gridded estimates) rather than reported by the
+source study. There is NO per-cell flag in the CSV — instead, the sites and
+treatments that carry estimated values are listed in the bundled file
+MODELED_VALUES.md. Cross-reference it by "Site Name" / "Treatment ID".
 
-* ZERO vs. NULL: 
-  Please distinguish between '0' (a measured zero flux) and '' (null/missing data). 
-  We strive to preserve the author's original reporting distinction.
+  * Soil pH, Bulk Density, and Soil Organic Carbon may be filled from
+    SoilGrids v2.0 (ISRIC, 0-30 cm depth-weighted) where the source study did
+    not report them.
+  * Mean Annual Precipitation / Temperature (MAP/MAT) may be filled from
+    NASA POWER climatology where not reported.
+  * Soil texture (Sand/Silt/Clay) is measured at most sites, but IS
+    SoilGrids-filled at some. This happens two ways: (a) FULLY estimated where
+    the source study reported no soil fractions, or (b) PARTIALLY — a measured
+    component (e.g. clay) is kept and the remaining fractions rescaled from
+    SoilGrids around it. In MODELED_VALUES.md these show up as "Sand", "Silt",
+    and/or "Clay" in the "Estimated soil" column (a subset of a site's three
+    fractions means only those were filled).
+  * Country and Continent are derived from site coordinates (offline
+    reverse-geocoding), not reported by the study.
 
-* N-FERTILIZER TIMING: 
-  Where available, fertilization events are flagged. 
+See MODELED_VALUES.md for the exact per-site breakdown, including the legacy-row
+caveat (older treatments have measured texture but SoilGrids-estimated
+pH/BD/SOM).
+
+--------------------------------------------------------------------------------
+5. USAGE NOTES FOR MODELERS
+--------------------------------------------------------------------------------
+  * TREATMENT-AVERAGED: rows are treatment means, not raw replicate-level data.
+
+  * ZERO vs. NULL: a measured 0 (e.g. 0 flux) is distinct from a blank/missing
+    value. We preserve the author's original reporting distinction.
+
+  * MEASUREMENT GAPS: most data comes from static chambers sampled every 1-2
+    weeks. GRAND does NOT gap-fill flux values — absent dates are simply absent.
+
+  * FIGURE-DIGITIZED VALUES: where data was published only inside a figure, it
+    was digitized point-by-point and carries the small reading uncertainty
+    inherent to that process.
+
+  * SOM vs SOC: the "Soil Organic Carbon (%)" column is sourced from the soil
+    organic matter field; treat the organic-matter/organic-carbon distinction
+    with care for your application.
 
 --------------------------------------------------------------------------------
 CONTACT & SUPPORT
 --------------------------------------------------------------------------------
-For data corrections or technical issues, please contact:
-admin@n2odb.org (or your specific contact email)
+For data corrections or technical issues, please use the Contact page on the
+GRAND Explorer site (/contact).

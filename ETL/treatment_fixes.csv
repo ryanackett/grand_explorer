@@ -1,0 +1,161 @@
+TreatmentID,PrimaryCrop,FluxInstrument,Tillage,Source
+335,Lupinus angustifolius (Lupin),Automatic Chamber,,data
+336,Triticum aestivum (Wheat),Automatic Chamber,,data
+337,Lupinus angustifolius (Lupin),Automatic Chamber,,data
+338,Triticum aestivum (Wheat),Automatic Chamber,,data
+339,Hordeum vulgare (Barley),Automatic Chamber,Offsetdisk,data
+340,Hordeum vulgare (Barley),Automatic Chamber,Offsetdisk,data
+341,Hordeum vulgare (Barley),Automatic Chamber,Offsetdisk,data
+342,Hordeum vulgare (Barley),Automatic Chamber,Offsetdisk,data
+343,Triticum aestivum (Wheat),,,infer:abstract
+344,Triticum aestivum (Wheat),,,infer:abstract
+345,Pasture,,,infer:name
+346,Triticum aestivum (Wheat),,,infer:abstract
+347,Oryza sativa (Rice),Static Chamber,,data
+348,Oryza sativa (Rice),Static Chamber,,data
+349,Oryza sativa (Rice),Static Chamber,,data
+350,Oryza sativa (Rice),Static Chamber,,data
+351,Rice-Winter Wheat,Static Chamber,,data
+352,Rice-Winter Wheat,Static Chamber,,data
+353,Rice-Winter Wheat,Static Chamber,,data
+354,Rice-Winter Wheat,Static Chamber,,data
+355,Oryza sativa (Rice),Static Chamber,,data
+356,Oryza sativa (Rice),Static Chamber,,data
+357,Oryza sativa (Rice),Static Chamber,,data
+358,Oryza sativa (Rice),Static Chamber,,data
+359,Sorghum bicolor (Sorghum),,,data
+360,Sorghum bicolor (Sorghum),,,data
+361,Sorghum bicolor (Sorghum),,,data
+362,Sorghum bicolor (Sorghum),,,data
+363,Sorghum bicolor (Sorghum),Automatic Chamber,Multi,data
+364,Sorghum bicolor (Sorghum),Automatic Chamber,Multiple,data
+365,Sorghum bicolor (Sorghum),Automatic Chamber,Multiple,data
+366,Sorghum bicolor (Sorghum),Automatic Chamber,Multiple,data
+367,Phaseolus vulgaris (Green Bean),,,data
+368,Phaseolus vulgaris (Green Bean),,,data
+369,Phaseolus vulgaris (Green Bean),,,data
+370,Phaseolus vulgaris (Green Bean),,,data
+371,Phaseolus vulgaris (Green Bean),,,data
+372,Zea mays (Corn),Automatic Chamber,Multiple,data
+373,Zea mays (Corn),Automatic Chamber,Multiple,data
+374,Zea mays (Corn),Automatic Chamber,Multiple,data
+375,Zea mays (Corn),Automatic Chamber,Multiple,data
+376,Pasture,Automatic Chamber,,data
+377,Pasture,Automatic Chamber,,data
+378,Pasture,Automatic Chamber,,data
+379,Pasture,,,data
+380,Pasture,,,data
+381,Pasture,,,data
+382,Pasture,,,data
+383,Triticum aestivum (Winter Wheat),,,manual
+384,Triticum aestivum (Winter Wheat),,,manual
+385,Triticum aestivum (Winter Wheat),,,manual
+386,Triticum aestivum (Winter Wheat),,,manual
+387,Zea mays (Corn),Automatic Chamber,Field Cultivator,data
+388,Zea mays (Corn),Automatic Chamber,Field Cultivator,data
+389,Grassland,Eddy Covariance,,manual
+390,Grassland,Eddy Covariance,,manual
+391,Grassland,Eddy Covariance,,manual
+392,Bromus inermis (Brome Grass),Static Chamber,,manual
+393,Glycine max (Soybean),Static Chamber,,manual
+394,Glycine max (Soybean),Static Chamber,,manual
+395,Glycine max (Soybean),Static Chamber,,manual
+396,Mid-successional,Static Chamber,,manual
+397,"Corn, Soybean, Wheat",Static Chamber,,manual
+398,"Corn, Soybean, Wheat",Static Chamber,,manual
+399,"Corn, Soybean, Wheat",Static Chamber,,manual
+400,"Corn, Soybean, Wheat",Static Chamber,,manual
+401,Populus (Poplar),Static Chamber,,manual
+402,Medicago sativa (Alfalfa),Static Chamber,,manual
+403,Early Successional,Static Chamber,,manual
+404,Grassland,Static Chamber,,manual
+405,Coniferous Forest,Static Chamber,,manual
+406,Deciduous Forest,Static Chamber,,manual
+407,Pasture,,,infer:name
+408,Pisum sativum (Pea),,,infer:name
+409,Pasture,,,infer:name
+410,Pisum sativum (Pea),,,infer:name
+411,Picea abies (Spruce),Automatic Chamber,,infer:name
+412,Pasture,Automatic Chamber,,data
+413,Pasture,Automatic Chamber,,data
+414,Pasture,Automatic Chamber,,data
+415,Pasture,Automatic Chamber,,data
+416,Pasture,Automatic Chamber,,data
+417,Pasture,Automatic Chamber,,data
+418,Pasture,Automatic Chamber,,data
+419,Pasture,Automatic Chamber,,data
+420,Pasture,Automatic Chamber,,data
+421,Pasture,Automatic Chamber,,data
+422,Pasture,Automatic Chamber,,data
+423,Pasture,Automatic Chamber,,data
+424,Pasture,Automatic Chamber,,data
+425,Pasture,Automatic Chamber,,data
+426,Pasture,Automatic Chamber,,data
+427,Pasture,Automatic Chamber,,data
+428,Pasture,,,manual
+429,Pasture,,,manual
+430,Pasture,,,manual
+431,"Corn, Soybean, Canola",Static Chamber,,manual
+432,Glycine max (Soybean),Automatic Chamber,,data
+433,Glycine max (Soybean),Automatic Chamber,,data
+434,Glycine max (Soybean),Automatic Chamber,,data
+435,Glycine max (Soybean),Automatic Chamber,,data
+436,Fallow,Automatic Chamber,,data
+437,Triticum aestivum (Wheat),Automatic Chamber,,data
+438,Fallow,Automatic Chamber,,data
+439,Triticum aestivum (Wheat),Automatic Chamber,,data
+440,Fallow,Automatic Chamber,,data
+441,Triticum aestivum (Wheat),Automatic Chamber,,data
+442,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+443,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+444,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+445,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+446,Triticum aestivum (Wheat),Automatic Chamber,,data
+447,Triticum aestivum (Wheat),Automatic Chamber,,data
+448,Triticum aestivum (Wheat),Automatic Chamber,,data
+449,Triticum aestivum (Wheat),Automatic Chamber,,data
+454,Bromus inermis (Brome Grass),Static Chamber,,data
+455,Glycine max (Soybean),Static Chamber,,infer:name
+456,Bromus inermis (Brome Grass),Static Chamber,,data
+457,Panicum virgatum (Switchgrass),Static Chamber,,data
+458,Panicum virgatum (Switchgrass),Static Chamber,,data
+459,Panicum virgatum (Switchgrass),Static Chamber,,data
+460,Panicum virgatum (Switchgrass),Static Chamber,,data
+461,Panicum virgatum (Switchgrass),Static Chamber,,data
+462,Panicum virgatum (Switchgrass),Static Chamber,,data
+463,Panicum virgatum (Switchgrass),Static Chamber,,data
+464,Panicum virgatum (Switchgrass),Static Chamber,,data
+465,Zea mays (Corn),Automatic Chamber,,manual
+466,Zea mays (Corn),Automatic Chamber,,manual
+467,Zea mays (Corn),Automatic Chamber,,manual
+468,Triticum aestivum (Wheat),Automatic Chamber,,data
+469,Triticum aestivum (Wheat),Automatic Chamber,,data
+470,Triticum aestivum (Wheat),Automatic Chamber,,data
+471,Gossypium hirsutum (Cotton),Automatic Chamber,,data
+472,Gossypium hirsutum (Cotton),Automatic Chamber,,data
+473,Gossypium hirsutum (Cotton),Automatic Chamber,,data
+474,Zea mays (Corn),Eddy Covariance,Harrow,data
+475,Zea mays (Corn),Eddy Covariance,Chisel/Harrow,data
+476,Zea mays (Corn),Eddy Covariance,Chisel/Harrow,data
+477,Zea mays (Corn),Eddy Covariance,Harrow,data
+478,Medicago sativa (Alfalfa),Eddy Covariance,Disk,data
+479,Hordeum vulgare (Barley),Eddy Covariance,Chisel,data
+480,Hordeum vulgare (Barley),Eddy Covariance,Chisel,data
+481,Medicago sativa (Alfalfa),Eddy Covariance,Disk,data
+482,Zea mays (Corn),Eddy Covariance,Chisel/Harrow,data
+483,Zea mays (Corn),Eddy Covariance,Chisel/Harrow,data
+484,Glycine max (Soybean),Eddy Covariance,Harrow,data
+485,Glycine max (Soybean),Eddy Covariance,Harrow,data
+486,Glycine max (Soybean),Eddy Covariance,Harrow,data
+487,Glycine max (Soybean),Eddy Covariance,Harrow,data
+488,Fallow,,,infer:name
+489,Forest,,,infer:name
+490,Grass,,,infer:name
+491,Pasture,,,infer:name
+492,Zea mays (Corn),Eddy Covariance,,data
+493,Zea mays (Corn),Eddy Covariance,Disking,data
+494,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+495,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+496,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+497,Sorghum bicolor (Sorghum),Automatic Chamber,,data
+498,Sorghum bicolor (Sorghum),Automatic Chamber,,data

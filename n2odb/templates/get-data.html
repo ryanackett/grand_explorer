@@ -252,38 +252,118 @@
     </style>
 
     <script>
-        function UpdateTable (update_data) {
-            // Update map
-            var siteData = JSON.parse(update_data.Site_update)
-            console.log(siteData)
+        // ==========================================
+        // MARKER JITTER (pixel-space, zoom-aware)
+        // ==========================================
+        // Overlapping markers can't be reliably separated by nudging lat/lon: a
+        // fixed degree offset is only a few pixels when the map is zoomed out and
+        // huge when zoomed in. Instead every point keeps its TRUE coordinate, and
+        // after each draw we find markers whose PROJECTED (pixel) positions collide
+        // and fan them out by a fixed number of *pixels* on a phyllotaxis
+        // ("sunflower") spiral. Because this runs on the chart's `render` event it
+        // recomputes on every zoom/pan, so markers stay a constant, clickable gap
+        // apart at any zoom. The true lat/lon is untouched, so the tooltip's
+        // real_lat/real_lon stay correct.
+        //
+        // The spacing is derived from the marker's ACTUAL rendered diameter, so it
+        // scales automatically with marker/map size (responsive) and only nudges
+        // markers by about their own size — never further than needed to click one.
+        //   JITTER_MERGE = only fan markers whose centres are within this × diameter
+        //                  (≤ ~1 = only genuinely overlapping ones).
+        // Fan-out spacing (neighbour distance) is, in marker-diameters:
+        //       JITTER_BASE + JITTER_ZOOM_MULT × zoom
+        //   JITTER_BASE      = the constant floor applied at every zoom (1.0 = just
+        //                      touching). This is what governs the global view.
+        //   JITTER_ZOOM_MULT = extra spacing added per unit of map zoom, so clusters
+        //                      bloom wider as you zoom in. 0 = no zoom response.
+        var JITTER_MERGE = 0.95;
+        var JITTER_BASE = 0.20;        // spacing (× diameter) at the fully-zoomed-out view
+        var JITTER_ZOOM_MULT = 0.6;   // extra spacing per 1× of zoom-in beyond full extent
 
-            sitePoints = []
-            for (let i = 0; i < siteData.length; i++) {
-                dict = {};
+        // Baseline map scale (px per projected unit) at the most zoomed-OUT state we've
+        // seen — used to turn the raw scale into a clean 0-based "how far zoomed in" term.
+        var _jitterBaseScale = Infinity;
 
-                dict['lat'] = siteData[i]['Latitude']
-                dict['lon'] = siteData[i]['Longitude']
-                dict['title'] = siteData[i]['Longitude']
-                dict['map'] = siteData[i]['MAP']
-                dict['mat'] = siteData[i]['MAT']
-                sitePoints.push(dict)
+        // Fan overlapping markers apart by mutating each point's plot position
+        // (plotX/plotY) rather than transforming its drawn graphic. This runs BEFORE
+        // Highcharts draws the markers and builds its hit-test kd-tree, so the marker,
+        // its hover/click target, and the tooltip all move together — no dead hotspot
+        // left behind at the original coordinate.
+        function jitterSeriesPlot(series) {
+            var chart = series.chart;
+            var pts = (series.points || []).filter(function (p) {
+                return !p.isNull && p.plotX != null && p.plotY != null;
+            });
+            if (!pts.length) return;
+
+            // Marker diameter drives the spacing (keeps it responsive to marker size).
+            var mr = (series.options.marker && series.options.marker.radius) || 6;
+            var diam = mr * 2;
+
+            // Map scale = pixels per projected unit. Unlike mapView.zoom (whose raw
+            // value is projection-dependent and can even drop on the first manual zoom
+            // of a fitted map), this ALWAYS grows as you zoom in. Normalised against
+            // the most-zoomed-out scale so the term is 0 at full extent.
+            var scale = null;
+            try {
+                var mv = chart.mapView;
+                if (mv && mv.projectedUnitsToPixels) {
+                    var a = mv.projectedUnitsToPixels({ x: 0, y: 0 });
+                    var b = mv.projectedUnitsToPixels({ x: 1, y: 0 });
+                    scale = Math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+                }
+            } catch (e) { /* scale stays null -> constant jitter */ }
+            if (scale && isFinite(scale) && scale > 0 && scale < _jitterBaseScale) {
+                _jitterBaseScale = scale;
             }
-            console.log(sitePoints)
-            // window.mapChart.series[0].remove();
-            // window.mapChart.addSeries(sitePoints)
-            var chart = window.mapChart
-            //for (var i = chart.series.length-1; i>=0; i--) {
-            //    console.log(chart.series[i])
-            //    chart.series[2].remove();
-            //}
+            var zoomTerm = (scale && isFinite(_jitterBaseScale)) ? (scale / _jitterBaseScale) - 1 : 0;
 
-            chart.series[2].setData(sitePoints)
-            chart.redraw();
-            console.log("finish")
+            var merge2 = Math.pow(diam * JITTER_MERGE, 2);
+            var step = diam * (JITTER_BASE + JITTER_ZOOM_MULT * zoomTerm);
+
+            var claimed = [];
+            for (var i = 0; i < pts.length; i++) {
+                if (claimed[i]) continue;
+                var group = [pts[i]];
+                claimed[i] = true;
+                for (var j = i + 1; j < pts.length; j++) {
+                    if (claimed[j]) continue;
+                    var dx = pts[j].plotX - pts[i].plotX;
+                    var dy = pts[j].plotY - pts[i].plotY;
+                    if (dx * dx + dy * dy <= merge2) {
+                        group.push(pts[j]);
+                        claimed[j] = true;
+                    }
+                }
+                // Anchor (k=0) keeps its true spot; the rest fan out on the spiral.
+                for (var k = 1; k < group.length; k++) {
+                    var angle = k * 2.399963229728653;    // golden angle
+                    var r = step * Math.sqrt(k);
+                    group[k].plotX += Math.cos(angle) * r;
+                    group[k].plotY += Math.sin(angle) * r;
+                }
+            }
+        }
+
+        // Apply the jitter right after the mappoint series computes plotX/plotY, so
+        // everything downstream (draw, kd-tree, tooltip) uses the fanned positions.
+        (function (H) {
+            if (H && H.seriesTypes && H.seriesTypes.mappoint) {
+                H.wrap(H.seriesTypes.mappoint.prototype, 'translate', function (proceed) {
+                    proceed.apply(this, Array.prototype.slice.call(arguments, 1));
+                    try { jitterSeriesPlot(this); } catch (e) { /* never break the draw */ }
+                });
+            }
+        })(window.Highcharts);
+
+        // Format a climate value to at most one decimal place (drops a trailing .0).
+        function fmt1(v) {
+            var n = parseFloat(v);
+            return isFinite(n) ? (Math.round(n * 10) / 10) : (v == null ? '—' : v);
         }
     </script>
 
- 
+
     <script>
         // 1. The Helper to get the CSRF Token (Keep this, it's good)
         function getCookie(name) {
@@ -310,6 +390,8 @@
                 fertilizer:  $('#fert').val() || [],
                 crops:       $('#crop').val() || [],
                 soil:        $('#soil').val() || [],
+                continent:   $('#cont').val() || [],
+                country:     $('#country').val() || [],
             };
 
             console.log("Sending Filter Data:", filterData);
@@ -340,27 +422,13 @@
                         }
                     } catch (e) { console.error("Error parsing experiments:", e); }
 
-                    // We need a registry to track jitter, just like in the initial load
-                    var coordRegistry = {};
-
                     var mapPoints = experiments.map(function(exp) {
                         if (!exp.Lat || !exp.Lon) return null;
 
+                        // True coordinate — overlap is resolved visually in pixel
+                        // space by the mappoint translate-wrap jitter.
                         var lat = parseFloat(exp.Lat);
                         var lon = parseFloat(exp.Lon);
-                        
-                        // JITTER LOGIC (Spiral Match)
-                        var coordKey = lat.toFixed(4) + "_" + lon.toFixed(4);
-                        if (coordRegistry[coordKey]) {
-                            coordRegistry[coordKey]++;
-                            var count = coordRegistry[coordKey];
-                            var angle = count * 2.4; 
-                            var radius = 0.8 * Math.sqrt(count); 
-                            lat += Math.cos(angle) * radius;
-                            lon += Math.sin(angle) * radius;
-                        } else {
-                            coordRegistry[coordKey] = 1;
-                        }
 
                         var primaryName = exp.PubTitle || exp.SiteName;
 
@@ -379,9 +447,9 @@
                             real_lon: parseFloat(exp.Lon).toFixed(4),
 
                             // 4. SIDEBAR DATA (This was missing!)
+                            ExperimentID: exp.ExperimentID,
                             Treatments: exp.TreatmentIDs || [],
                             Citation: exp.Citation,
-                            Abstract: exp.Abstract,
                             MAP: exp.MAP,
                             MAT: exp.MAT
                         };
@@ -409,7 +477,7 @@
             // 1. Find ALL selects with our new class, regardless of ID
             $('.dynamic-filter').each(function() {
                 // Check ID to set specific limits (optional)
-                var limit = (this.id === 'fert' || this.id === 'crop') ? 15 : 5;
+                var limit = ['fert', 'crop', 'country', 'cont'].includes(this.id) ? 15 : 5;
 
                 new Choices(this, {
                     removeItemButton: true,
@@ -444,27 +512,15 @@
         }
 
         var mapPoints = [];
-        var coordRegistry = {}; 
 
         for (let i = 0; i < experimentData.length; i++) {
             var ex = experimentData[i];
             if (!ex.Lat || !ex.Lon) continue;
 
+            // True coordinate — overlap is resolved visually in pixel space by
+            // the mappoint translate-wrap jitter.
             var lat = parseFloat(ex.Lat);
             var lon = parseFloat(ex.Lon);
-
-            // Jitter Logic
-            var coordKey = lat.toFixed(4) + "_" + lon.toFixed(4);
-            if (coordRegistry[coordKey]) {
-                coordRegistry[coordKey]++;
-                var count = coordRegistry[coordKey];
-                var angle = count * 2.4; 
-                var radius = 0.8 * Math.sqrt(count); 
-                lat += Math.cos(angle) * radius;
-                lon += Math.sin(angle) * radius;
-            } else {
-                coordRegistry[coordKey] = 1;
-            }
 
             var primaryName = ex.PubTitle || ex.SiteName;
 
@@ -484,7 +540,6 @@
                 MAP: ex.MAP,
                 MAT: ex.MAT,
                 Citation: ex.Citation,
-                Abstract: ex.Abstract,
                 // Ensure Treatments is an array.
                 // Assuming objects look like: { id: "123", name: "T1", crop: "Corn", mgmt: "Till" }
                 Treatments: ex.TreatmentIDs || [] 
@@ -509,7 +564,6 @@
                 }
 
                 // --- HEADER CARD ---
-                const safeAbstract = encodeURIComponent(p.Abstract || "No abstract text available for this publication.");
                 var html = `
                     <div class="info-panel">
                         <div class="exp-header">
@@ -518,16 +572,16 @@
                                 <i class="fas fa-map-marker-alt"></i> ${displaySite}
                             </div>
 
-                            <div class="btn-read-abstract" onclick='ReadAbstract("${safeAbstract}")'>
+                            <div class="btn-read-abstract" onclick='ReadAbstract("${p.ExperimentID}")'>
                                 <i class="fas fa-book text-primary"></i> Read Abstract
                             </div>
 
                             <div class="d-flex flex-wrap site-climate">
                                 <div class="stat-badge" title="Mean Annual Precip">
-                                    <i class="fas fa-tint text-primary" style="margin-right:5px;"></i> ${p.MAP} mm
+                                    <i class="fas fa-tint text-primary" style="margin-right:5px;"></i> ${fmt1(p.MAP)} mm
                                 </div>
                                 <div class="stat-badge" title="Mean Annual Temp">
-                                    <i class="fas fa-thermometer-half text-danger" style="margin-right:5px;"></i> ${p.MAT} °C
+                                    <i class="fas fa-thermometer-half text-danger" style="margin-right:5px;"></i> ${fmt1(p.MAT)} °C
                                 </div>
                             </div>
                             
@@ -608,11 +662,13 @@
 
         // 4. Initiate Map
         window.mapChart = Highcharts.mapChart('container', {
-            chart: { 
+            chart: {
                 map: topology,
                 backgroundColor: '#f8f9fa',
                 margin: [0, 0, 0, 0],
                 spacing: [0, 0, 0, 0],
+                // Marker fan-out is applied in the mappoint `translate` wrap above,
+                // which runs on every draw/zoom/pan before hit-testing is built.
             },
             mapNavigation: { 
                 enabled: true, 
@@ -893,10 +949,24 @@
     </style>
 
     <script>
-        function ReadAbstract(encodedText) {
-            const plainText = decodeURIComponent(encodedText);
-            document.getElementById('abstractTextContainer').innerText = plainText;
+        function ReadAbstract(experimentId) {
+            // Abstracts are no longer embedded in the map payload — fetch on demand.
+            var container = document.getElementById('abstractTextContainer');
+            container.innerText = 'Loading abstract…';
             document.getElementById('abstractModal').style.display = 'flex';
+
+            $.ajax({
+                type: "POST",
+                url: '/get-data/',
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' },
+                data: JSON.stringify({ action: 'fetch_abstract', experiment_id: experimentId }),
+                success: function (resp) {
+                    container.innerText = resp.abstract || "No abstract text available for this publication.";
+                },
+                error: function () {
+                    container.innerText = "Could not load the abstract. Please try again.";
+                }
+            });
         }
 
         // Closes the modal
@@ -1009,6 +1079,35 @@
 
         // Initialize the badge as soon as the DOM is ready
         window.addEventListener("load", initCart);
+
+        // Batch-add every treatment currently on the map (i.e. matching the active
+        // filters — the whole filtered set, regardless of pan/zoom) to the data cart.
+        // CartManager.add() de-duplicates, so re-clicking is safe.
+        function addFullMapToCart() {
+            var chart = window.mapChart;
+            var series = chart && chart.series &&
+                chart.series.find(function (s) { return s.type === 'mappoint'; });
+            if (!series) { alert('Map is not ready yet — try again in a moment.'); return; }
+
+            var ids = [];
+            series.points.forEach(function (p) {
+                (p.Treatments || []).forEach(function (t) {
+                    var id = t && (t.id != null ? t.id : t.TreatmentID);
+                    if (id != null && id !== '') ids.push(id);
+                });
+            });
+
+            if (!ids.length) {
+                alert('No treatments are visible to add — adjust your filters first.');
+                return;
+            }
+            CartManager.add(ids);
+        }
+
+        window.addEventListener("load", function () {
+            var btn = document.getElementById('add-all-cart-btn');
+            if (btn) btn.addEventListener('click', addFullMapToCart);
+        });
     </script>
 
     <script>

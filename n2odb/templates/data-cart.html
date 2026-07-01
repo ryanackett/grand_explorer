@@ -706,64 +706,22 @@
         // 4. RESPONSIVE: 'responsive: true' makes it resize with the browser window
         Plotly.newPlot('soil-chart', [trace], layout, {displayModeBar: false, responsive: true});
 
-        // --- 5. Histogram (Custom Fixed Bins) ---
-        if (data.flux_values && data.flux_values.length > 0) {
+        // --- 5. Histogram (bin counts computed in the DB over ALL rows) ---
+        if (data.flux_histogram && data.flux_histogram.length > 0) {
             
-            // 1. Clean Data
-            const rawValues = data.flux_values.map(Number).filter(n => !isNaN(n));
-            const negatives = rawValues.filter(v => v <= 0);
-            const positives = rawValues.filter(v => v > 0);
-
+            // Build bars straight from the server-computed bin counts (already over
+            // ALL measurements, so the bars sum to the total). Show only non-empty
+            // bins; brown for the "≤ 0" (uptake/zero) bin, green for the positives.
             const chartData = [];
             const categories = [];
 
-            // --- PART A: The "Negative/Zero" Bin ---
-            if (negatives.length > 0) {
-                chartData.push({
-                    y: negatives.length,
-                    color: '#8C5E45', // Brown
-                    name: '≤ 0'
-                });
-                categories.push('≤ 0');
-            }
-
-            // --- PART B: The Custom Positive Bins ---
-            // Define your requested upper limits. 
-            // The logic is: "Is value <= Limit?" (after passing previous limits)
-            const binDefinitions = [
-                { limit: 2.5,  label: '0-2.5' },
-                { limit: 5,    label: '2.5-5' },
-                { limit: 10,   label: '5-10' },
-                { limit: 20,   label: '10-20' },
-                { limit: 50,   label: '20-50' },
-                { limit: 100,  label: '50-100' },
-                { limit: 500,  label: '100-500' },
-                { limit: 1000, label: '500-1000' },
-                { limit: Infinity, label: '1000+' }
-            ];
-
-            // Initialize counts for each custom bin
-            const binCounts = new Array(binDefinitions.length).fill(0);
-
-            // Sort positives into bins
-            positives.forEach(val => {
-                for (let i = 0; i < binDefinitions.length; i++) {
-                    if (val <= binDefinitions[i].limit) {
-                        binCounts[i]++;
-                        break; // Stop once we find the right bucket
-                    }
-                }
-            });
-
-            // Add positive bins to chart data
-            binDefinitions.forEach((def, index) => {
-                // Only show bins that actually have data (Optional: remove 'if' to show empty bins)
-                if (binCounts[index] > 0) {
-                    categories.push(def.label);
+            data.flux_histogram.forEach(bin => {
+                if (bin.y > 0) {
+                    categories.push(bin.name);
                     chartData.push({
-                        y: binCounts[index],
-                        color: '#7A9E7E', // Green
-                        name: def.label
+                        y: bin.y,
+                        name: bin.name,
+                        color: bin.neg ? '#8C5E45' : '#7A9E7E'  // brown for ≤0, green for positive
                     });
                 }
             });

@@ -82,14 +82,31 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Writing {len(objects_to_update)} records to the database...")
 
-        # 5. Execute Bulk Update 
-        batch_size = 5000 
-        RawMeasurementTreatment.objects.bulk_update(
-            objects_to_update, 
-            ['hmmad', 'hmmcd'],  # Tells Django to strictly ONLY touch these two columns
-            batch_size=batch_size
-        )
+        # 5. Write the results.
+        #
+        # NOTE: do NOT use bulk_update() here. It emits a single
+        #   UPDATE ... SET hmmad = CASE WHEN pk=.. THEN .. ... END, hmmcd = CASE ... END
+        # with one WHEN branch per row per column. At ~79k rows that statement is huge
+        # enough to exhaust the db container's memory and get mysqld OOM-killed
+        # mid-query (the "Lost connection (2013)" then "Can't connect (2002)" you saw).
+        #
+        # hmmad/hmmcd are two booleans, so there are only 4 possible result
+        # combinations. Group the PKs by combination and issue one small, chunked
+        # UPDATE ... WHERE pk IN (...) per group — cheap, and safe to re-run.
+        from collections import defaultdict
 
-        self.stdout.write(self.style.SUCCESS(f"Success! Database fully updated with {len(objects_to_update)} records."))
+        buckets = defaultdict(list)
+        for obj in objects_to_update:
+            buckets[(bool(obj.hmmad), bool(obj.hmmcd))].append(obj.rawtreatmentid)
+
+        CHUNK = 2000
+        total = 0
+        for (mad_val, mcd_val), pks in buckets.items():
+            for i in range(0, len(pks), CHUNK):
+                total += RawMeasurementTreatment.objects.filter(
+                    rawtreatmentid__in=pks[i:i + CHUNK]
+                ).update(hmmad=mad_val, hmmcd=mcd_val)
+
+        self.stdout.write(self.style.SUCCESS(f"Success! Database fully updated with {total} records."))
 
                 
