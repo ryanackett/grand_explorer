@@ -21,6 +21,7 @@ from n2odb import views
 urlpatterns = [
     path( '', views.index, name ='home'),
     path( 'about/', views.about, name ='about'),
+    path( 'about-data/', views.about_data, name ='about-data'),
     path( 'query-filters/', views.query_filters, name ='query-filters'),
     path( 'get-data/', views.get_data, name ='get-data'),
     path( 'data-cart/', views.data_cart, name ='data-cart'),

@@ -71,16 +71,8 @@
                             <button id="fert" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Fertilizer Type</button>
                             <button id="soil" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Soil Measurements</button>
                             <button id="texture" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Soil Texture</button>
-
-
-                            <button hidden=True id="fert" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Fertilizer Form</button>
-                            <button hidden=True id="crop" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Crop</button>
-                            <button hidden=True id="cont" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Continent</button>
-                            <button hidden=True id="ins" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Instrument</button>
-                            <button hidden=True id="env" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Environmental Data</button>
-                            <button hidden=True id="mgmt" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Sustainable Management</button>
-                            <button hidden=True id="soil" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Soil Measurements</button>
-                            <button hidden=True id="texture" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Soil Texture</button>
+                            <button id="cont" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Continent</button>
+                            <button id="country" type="button" class="btn btn-secondary" style="background-color:#aab0b5" onclick="setColor(this)">Country</button>
 
 
                             <br>
@@ -135,6 +127,7 @@
         fert = document.getElementById("fert")
         crop = document.getElementById("crop")
         cont = document.getElementById("cont")
+        country = document.getElementById("country")
         soil = document.getElementById("soil")
         texture = document.getElementById("texture")
 
@@ -153,6 +146,9 @@
         }
         if (cont.style.backgroundColor == "rgb(130, 150, 140)") {
             selected = selected.concat("cont")
+        }
+        if (country.style.backgroundColor == "rgb(130, 150, 140)") {
+            selected = selected.concat("country")
         }
         if (env.style.backgroundColor == "rgb(130, 150, 140)") {
             selected = selected.concat("env")

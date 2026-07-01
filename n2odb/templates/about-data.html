@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% block head %}
+    {% load static %}
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About the Data | GRAND Explorer</title>
+    <style>
+        :root {
+            --grand-green:  #3B523D;
+            --grand-accent: #7A9E7E;
+            --grand-cream:  #f2ede5;
+            --text-color:   #333;
+            --section-bg:   #ffffff;
+        }
+
+        .about-wrap { color: var(--text-color); line-height: 1.6; }
+
+        .about-hero {
+            /* Plant illustration (same as the homepage) tinted under a green gradient
+               for visual continuity; more transparent on the right so the plant peeks
+               through as a subtle watermark while keeping the centred title legible. */
+            background-color: #2F3E30;
+            background-image:
+                linear-gradient(100deg, rgba(47,62,48,0.96) 45%, rgba(59,82,61,0.74) 100%),
+                url("{% static 'images/FluxappBackground.webp' %}");
+            background-size: cover, cover;
+            background-position: center, right center;
+            background-repeat: no-repeat, no-repeat;
+            color: #fff;
+            text-align: center;
+            /* Top pad clears the fixed-top navbar (~70px). */
+            padding: 9rem 2rem 6rem;
+        }
+        .about-hero h1 {
+            color: #fff; font-family: "Georgia", serif;
+            font-size: 4rem; margin: 0 0 0.6rem; font-weight: 700;
+        }
+        .about-hero .tagline {
+            font-size: 1.9rem; font-weight: 300; opacity: 0.92;
+            max-width: 640px; margin: 0 auto;
+        }
+
+        .about-card {
+            max-width: 900px; margin: -3.5rem auto 4rem;
+            background: var(--section-bg); border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 3rem 3.5rem;
+        }
+        .about-card h2 {
+            color: var(--grand-green); font-size: 2.3rem; font-weight: 700;
+            margin: 3rem 0 1rem; padding-bottom: 0.6rem; border-bottom: 2px solid #eef1ee;
+        }
+        .about-card h2:first-child { margin-top: 0.5rem; }
+        .about-card p { font-size: 1.65rem; margin: 0 0 1.1rem; }
+        .about-card strong { color: var(--grand-green); }
+        .about-card a { color: #2e7d5b; font-weight: 600; text-decoration: underline; }
+        .about-card a:hover { color: var(--grand-green); }
+
+        /* Pipeline / timeline */
+        .pipeline { margin: 1.6rem 0 0.5rem; }
+        .step {
+            position: relative;
+            padding: 0 0 2.2rem 5.5rem;
+            border-left: 3px solid #e4e9e4;
+            margin-left: 1.6rem;
+        }
+        .step:last-child { border-left-color: transparent; padding-bottom: 0.5rem; }
+        .step .num {
+            position: absolute; left: -1.75rem; top: -0.3rem;
+            width: 3.4rem; height: 3.4rem; border-radius: 50%;
+            background: var(--grand-green); color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.6rem; font-weight: 700; font-family: "Georgia", serif;
+            box-shadow: 0 3px 8px rgba(59,82,61,0.3);
+        }
+        .step h3 {
+            color: var(--grand-green); font-size: 1.7rem; font-weight: 700;
+            margin: 0 0 0.3rem;
+        }
+        .step p { font-size: 1.5rem; margin: 0; color: #555; }
+        .step .note { font-size: 1.3rem; color: #8a7a63; margin-top: 0.5rem; font-style: italic; }
+
+        /* Caveats callout */
+        .caveats {
+            background: var(--grand-cream); border: 1px solid #e4dccb;
+            border-radius: 10px; padding: 1.8rem 2rem; margin-top: 1.4rem;
+        }
+        .caveats h3 {
+            color: var(--grand-green); font-size: 1.7rem; margin: 0 0 0.8rem;
+            display: flex; align-items: center; gap: 0.6rem;
+        }
+        .caveats ul { margin: 0; padding-left: 1.6rem; }
+        .caveats li { font-size: 1.45rem; margin-bottom: 0.6rem; color: #444; }
+        .caveats li:last-child { margin-bottom: 0; }
+        .caveats strong { color: var(--grand-green); }
+
+        .closing-note {
+            font-size: 1.45rem; color: #666; margin-top: 1.4rem;
+            border-top: 1px solid #eef1ee; padding-top: 1.2rem;
+        }
+
+        .about-cta { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 2rem; }
+        .about-btn {
+            display: inline-flex; align-items: center; gap: 0.6rem;
+            padding: 0.9rem 1.8rem; border-radius: 50px;
+            font-size: 1.5rem; font-weight: 700; text-decoration: none;
+            transition: transform 0.15s ease;
+        }
+        .about-btn.primary { background: var(--grand-green); color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.2); }
+        .about-btn.secondary { background: #fff; color: var(--grand-green); border: 2px solid var(--grand-green); }
+        .about-btn:hover { transform: translateY(-2px); }
+
+        @media (max-width: 600px) {
+            .about-hero h1 { font-size: 3rem; }
+            .about-card { padding: 2rem 1.5rem; margin-top: -3rem; }
+            .step { padding-left: 4.5rem; }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="about-wrap">
+
+    <header class="about-hero">
+        <h1>About the Data</h1>
+        <p class="tagline">How the GRAND database is built — unifying science from around the globe.</p>
+    </header>
+
+    <div class="about-card">
+
+        <h2>Where it comes from</h2>
+        <p>
+            The GRAND database brings together temporally-resolved N<sub>2</sub>O flux measurements and their covariates from several major public sources — <strong>GRACEnet</strong>, <strong>Ag Data Commons</strong>, the <strong>NANORP N<sub>2</sub>O Network</strong>, and the <a href="https://ecoapps.nrel.colostate.edu/global_n2o/" target="_blank" rel="noopener">Global N<sub>2</sub>O Database</a> — plus roughly <strong>45 additional peer-reviewed publications</strong>. Every record carries its original source citation, delivered with each download.
+        </p>
+        <p>
+            Getting that data into one consistent, queryable form takes several careful steps:
+        </p>
+
+        <div class="pipeline">
+            <div class="step">
+                <div class="num">1</div>
+                <h3>Extraction</h3>
+                <p>Where data was published as tables, we ingest it directly. Where it lived only inside a figure, we digitize it point-by-point with <strong>WebPlotDigitizer</strong>, then add covariates and metadata by hand from the manuscript text.</p>
+                <p class="note">Values read from figures carry the small reading uncertainty inherent to digitizing a plot.</p>
+            </div>
+            <div class="step">
+                <div class="num">2</div>
+                <h3>Harmonization</h3>
+                <p>Source datasets rarely agree on units, names, or structure. Python pipelines convert every measurement to common units and map inconsistent terminology onto a single vocabulary — crops as <em>Scientific (Common)</em> names, instruments as Static Chamber / Automatic Chamber / Eddy Covariance, and so on.</p>
+            </div>
+            <div class="step">
+                <div class="num">3</div>
+                <h3>Treatment averaging</h3>
+                <p>Replicate plots within a treatment are averaged to a single daily value, so each record represents a treatment's <strong>mean</strong> flux on a given date (with the replicate spread retained alongside it), rather than one individual chamber reading.</p>
+            </div>
+            <div class="step">
+                <div class="num">4</div>
+                <h3>Covariate enrichment</h3>
+                <p>Soil texture, pH, bulk density, organic carbon, and site climate (MAP/MAT) are taken from the source study wherever reported. Where a study didn't report a value, we fall back to gridded global products — <strong>SoilGrids</strong> for soil, <strong>NASA POWER</strong> for climate — and flag every such value as <em>modeled</em> rather than measured, so its origin is always clear.</p>
+            </div>
+        </div>
+
+        <h2>Good to know</h2>
+        <p>A few characteristics of the data worth keeping in mind as you use it:</p>
+        <div class="caveats">
+            <h3><i class="fas fa-circle-info"></i> Before you model</h3>
+            <ul>
+                <li><strong>Measurement gaps.</strong> Most data comes from static chambers, which typically sample every 1–2 weeks. GRAND fills the calendar so dates are continuous, but it <strong>never invents flux values</strong> — there is no gap-filling.</li>
+                <li><strong>Treatment-averaged.</strong> Records are treatment means, not raw replicate-level data.</li>
+                <li><strong>Measured vs. modeled.</strong> Some soil and climate covariates are gridded estimates where the original study was silent — always flagged as such, so you can include or exclude them as your model requires.</li>
+                <li><strong>Figure-digitized values</strong> carry a small uncertainty from reading points off a plot.</li>
+            </ul>
+        </div>
+
+        <p class="closing-note">
+            Full column definitions and complete per-record citations ship in the README bundled with every download. For the complete methodology, see <strong>Ackett et&nbsp;al. (2026)</strong>.
+        </p>
+
+        <div class="about-cta">
+            <a class="about-btn primary" href="/query-filters/"><i class="fas fa-magnifying-glass"></i> Start exploring</a>
+            <a class="about-btn secondary" href="/about"><i class="fas fa-circle-info"></i> About the project</a>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

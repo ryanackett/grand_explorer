@@ -28,6 +28,10 @@ class Site(models.Model):
     #Name = models.CharField(db_column='Name', max_length=255, blank=True, null=True)  # Field name made lowercase.
     # New Field
     SiteName = models.CharField(db_column='SiteName', max_length=255, blank=True, null=True)  # Field name made lowercase.
+    # Derived from Latitude/Longitude by the backfill_geography management
+    # command (offline reverse-geocode). Re-run that command after adding sites.
+    Country = models.CharField(db_column='Country', max_length=64, blank=True, null=True)
+    Continent = models.CharField(db_column='Continent', max_length=32, blank=True, null=True)
     class Meta:
         db_table = 'Site'
 

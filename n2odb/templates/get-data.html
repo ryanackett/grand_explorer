@@ -252,39 +252,6 @@
     </style>
 
     <script>
-        function UpdateTable (update_data) {
-            // Update map
-            var siteData = JSON.parse(update_data.Site_update)
-            console.log(siteData)
-
-            sitePoints = []
-            for (let i = 0; i < siteData.length; i++) {
-                dict = {};
-
-                dict['lat'] = siteData[i]['Latitude']
-                dict['lon'] = siteData[i]['Longitude']
-                dict['title'] = siteData[i]['Longitude']
-                dict['map'] = siteData[i]['MAP']
-                dict['mat'] = siteData[i]['MAT']
-                sitePoints.push(dict)
-            }
-            console.log(sitePoints)
-            // window.mapChart.series[0].remove();
-            // window.mapChart.addSeries(sitePoints)
-            var chart = window.mapChart
-            //for (var i = chart.series.length-1; i>=0; i--) {
-            //    console.log(chart.series[i])
-            //    chart.series[2].remove();
-            //}
-
-            chart.series[2].setData(sitePoints)
-            chart.redraw();
-            console.log("finish")
-        }
-    </script>
-
-
-    <script>
         // ==========================================
         // MARKER JITTER (pixel-space, zoom-aware)
         // ==========================================
@@ -423,6 +390,8 @@
                 fertilizer:  $('#fert').val() || [],
                 crops:       $('#crop').val() || [],
                 soil:        $('#soil').val() || [],
+                continent:   $('#cont').val() || [],
+                country:     $('#country').val() || [],
             };
 
             console.log("Sending Filter Data:", filterData);
@@ -478,9 +447,9 @@
                             real_lon: parseFloat(exp.Lon).toFixed(4),
 
                             // 4. SIDEBAR DATA (This was missing!)
+                            ExperimentID: exp.ExperimentID,
                             Treatments: exp.TreatmentIDs || [],
                             Citation: exp.Citation,
-                            Abstract: exp.Abstract,
                             MAP: exp.MAP,
                             MAT: exp.MAT
                         };
@@ -508,7 +477,7 @@
             // 1. Find ALL selects with our new class, regardless of ID
             $('.dynamic-filter').each(function() {
                 // Check ID to set specific limits (optional)
-                var limit = (this.id === 'fert' || this.id === 'crop') ? 15 : 5;
+                var limit = ['fert', 'crop', 'country', 'cont'].includes(this.id) ? 15 : 5;
 
                 new Choices(this, {
                     removeItemButton: true,
@@ -571,7 +540,6 @@
                 MAP: ex.MAP,
                 MAT: ex.MAT,
                 Citation: ex.Citation,
-                Abstract: ex.Abstract,
                 // Ensure Treatments is an array.
                 // Assuming objects look like: { id: "123", name: "T1", crop: "Corn", mgmt: "Till" }
                 Treatments: ex.TreatmentIDs || [] 
@@ -596,7 +564,6 @@
                 }
 
                 // --- HEADER CARD ---
-                const safeAbstract = encodeURIComponent(p.Abstract || "No abstract text available for this publication.");
                 var html = `
                     <div class="info-panel">
                         <div class="exp-header">
@@ -605,7 +572,7 @@
                                 <i class="fas fa-map-marker-alt"></i> ${displaySite}
                             </div>
 
-                            <div class="btn-read-abstract" onclick='ReadAbstract("${safeAbstract}")'>
+                            <div class="btn-read-abstract" onclick='ReadAbstract("${p.ExperimentID}")'>
                                 <i class="fas fa-book text-primary"></i> Read Abstract
                             </div>
 
@@ -982,10 +949,24 @@
     </style>
 
     <script>
-        function ReadAbstract(encodedText) {
-            const plainText = decodeURIComponent(encodedText);
-            document.getElementById('abstractTextContainer').innerText = plainText;
+        function ReadAbstract(experimentId) {
+            // Abstracts are no longer embedded in the map payload — fetch on demand.
+            var container = document.getElementById('abstractTextContainer');
+            container.innerText = 'Loading abstract…';
             document.getElementById('abstractModal').style.display = 'flex';
+
+            $.ajax({
+                type: "POST",
+                url: '/get-data/',
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' },
+                data: JSON.stringify({ action: 'fetch_abstract', experiment_id: experimentId }),
+                success: function (resp) {
+                    container.innerText = resp.abstract || "No abstract text available for this publication.";
+                },
+                error: function () {
+                    container.innerText = "Could not load the abstract. Please try again.";
+                }
+            });
         }
 
         // Closes the modal
