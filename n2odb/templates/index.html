@@ -2,6 +2,10 @@
 {% extends 'base.html' %}
 {% block head %}
 
+    <!-- Fetch the hero background early so it paints without a flash of the page bg.
+         Path matches the inline background-image URL below exactly (same request). -->
+    <link rel="preload" as="image" href="static/images/FluxappBackground.webp" type="image/webp">
+
     <style>
         /* All the snapping stuff */
         .scroll-container {
@@ -224,7 +228,7 @@
     <div class="s-hero__slider">
         <div class="s-hero__slide">
             
-            <div class="s-hero__slide-bg" style="background-image: url('static/images/FluxappBackground.webp');"></div>    
+            <div class="s-hero__slide-bg" style="background-color: #f2ede5; background-image: url('static/images/FluxappBackground.webp');"></div>
             <div class="row s-hero__slide-content ">
 
                 <div class="column col-lg-10"> 

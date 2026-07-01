@@ -4,7 +4,12 @@ services:
     ports:
       - "3307:3306"
     volumes:
-      - ./db_data:/var/lib/mysql:Z
+      # Named Docker volume (managed under /var/lib/docker/volumes), NOT a bind
+      # mount into the repo. This keeps the live InnoDB datadir out of the git
+      # working tree so no git/file op can ever delete it (see the July 2026
+      # incident). Named volumes are SELinux-labelled by Docker automatically, so
+      # no `:Z` is needed here (that was only required for the host bind mount).
+      - mysql_data:/var/lib/mysql
     env_file:
       - ../.env
     networks:

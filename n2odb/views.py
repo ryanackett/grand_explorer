@@ -10,7 +10,7 @@ import json
 from django.db.models import F
 from collections import defaultdict
 import datetime
-from django.db.models import Count, Avg, Min, Max, Sum
+from django.db.models import Count, Avg, Min, Max, Sum, Q
 from django.views.decorators.csrf import csrf_exempt
 from .utils import Echo, _log_user_action
 from django.views.decorators.http import require_POST  
@@ -655,11 +655,33 @@ def get_cart_data(request):
                 for s in soil_stats
             ]
 
-            # F. Histogram Data (Raw Flux Values)
-            # Model field: n2oflux (lowercase)
-            # We filter out nulls to avoid errors
-            flux_values = list(measurements.filter(n2oflux__isnull=False)
-                               .values_list('n2oflux', flat=True)[:10000])
+            # F. Histogram Data — bin counts computed in the DB over ALL non-null
+            # measurements (not a truncated 10k sample), so the bars sum exactly to
+            # total_flux_measurements. Bins match the front-end labels/edges.
+            flux_bins = measurements.filter(n2oflux__isnull=False).aggregate(
+                le0=Count('pk', filter=Q(n2oflux__lte=0)),
+                b1=Count('pk', filter=Q(n2oflux__gt=0, n2oflux__lte=2.5)),
+                b2=Count('pk', filter=Q(n2oflux__gt=2.5, n2oflux__lte=5)),
+                b3=Count('pk', filter=Q(n2oflux__gt=5, n2oflux__lte=10)),
+                b4=Count('pk', filter=Q(n2oflux__gt=10, n2oflux__lte=20)),
+                b5=Count('pk', filter=Q(n2oflux__gt=20, n2oflux__lte=50)),
+                b6=Count('pk', filter=Q(n2oflux__gt=50, n2oflux__lte=100)),
+                b7=Count('pk', filter=Q(n2oflux__gt=100, n2oflux__lte=500)),
+                b8=Count('pk', filter=Q(n2oflux__gt=500, n2oflux__lte=1000)),
+                b9=Count('pk', filter=Q(n2oflux__gt=1000)),
+            )
+            flux_histogram = [
+                {'name': '≤ 0',  'y': flux_bins['le0'], 'neg': True},
+                {'name': '0-2.5',    'y': flux_bins['b1']},
+                {'name': '2.5-5',    'y': flux_bins['b2']},
+                {'name': '5-10',     'y': flux_bins['b3']},
+                {'name': '10-20',    'y': flux_bins['b4']},
+                {'name': '20-50',    'y': flux_bins['b5']},
+                {'name': '50-100',   'y': flux_bins['b6']},
+                {'name': '100-500',  'y': flux_bins['b7']},
+                {'name': '500-1000', 'y': flux_bins['b8']},
+                {'name': '1000+',    'y': flux_bins['b9']},
+            ]
 
             # 4. Return JSON
             data = {
@@ -669,7 +691,7 @@ def get_cart_data(request):
                 'hmmad_stats': {'HM': hmmad_true, 'BG': hmmad_false, 'HM_flux': hmmad_true_flux, 'BG_flux': hmmad_false_flux},
                 'crop_data': crop_data,
                 'soil_stats': soil_stats,
-                'flux_values': flux_values
+                'flux_histogram': flux_histogram
             }
             return JsonResponse(data)
 
