@@ -1,17 +1,7 @@
 {% extends 'base.html' %}
+{% block title %}Explore Data | GRAND Explorer{% endblock %}
 {% block head %}
     {% load static %}
-
-    <!--- basic page needs
-    ================================================== -->
-    <meta charset="utf-8">
-    <title>About - Calvin</title>
-    <meta name="description" content="">
-    <meta name="author" content="">
-
-    <!-- mobile specific metas
-    ================================================== -->
-    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <!-- CSS
     ================================================== -->
@@ -1019,11 +1009,9 @@
                 
                 // Feedback logic
                 if (addedCount > 0) {
-                    // Using console.log to avoid spamming alerts if adding 20 items
-                    console.log(`Added ${addedCount} items.`);
-                    alert(`Added ${addedCount} dataset(s) to cart.`);
+                    showToast(`Added ${addedCount} dataset(s) to cart.`, 'success');
                 } else {
-                    alert("Selected items are already in your cart.");
+                    showToast('Selected items are already in your cart.', 'warning');
                 }
             },
 
@@ -1087,7 +1075,7 @@
             var chart = window.mapChart;
             var series = chart && chart.series &&
                 chart.series.find(function (s) { return s.type === 'mappoint'; });
-            if (!series) { alert('Map is not ready yet — try again in a moment.'); return; }
+            if (!series) { showToast('Map is not ready yet — try again in a moment.', 'warning'); return; }
 
             var ids = [];
             series.points.forEach(function (p) {
@@ -1098,7 +1086,7 @@
             });
 
             if (!ids.length) {
-                alert('No treatments are visible to add — adjust your filters first.');
+                showToast('No treatments are visible to add — adjust your filters first.', 'warning');
                 return;
             }
             CartManager.add(ids);
@@ -1112,8 +1100,8 @@
 
     <script>
         function openGraphViz(treatmentId) {
-            // 1. UI Reset
-            $('#graphModal').modal('show');
+            // 1. UI Reset — open via Bootstrap 5's native API (no jQuery-plugin dependency)
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('graphModal')).show();
             $('#graph-loading').show();
             $('#graph-container').hide().empty();
             $('#graphModalTitle').text('Loading Data...');
@@ -1363,7 +1351,7 @@
         
             <div class="modal-header">
                 <h5 class="modal-title" id="graphModalTitle">Data Visualization</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="$('#graphModal').modal('hide')">
+                <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
                 <span aria-hidden="true" style="font-size: 5rem; line-height: 0.8;">&times;</span>
                 </button>
             </div>
@@ -1372,7 +1360,7 @@
                 
                 <div id="graph-loading" class="text-center py-5">
                     <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                        <span class="sr-only">Loading...</span>
+                        <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="mt-3 text-muted">Fetching dataset...</p>
                 </div>

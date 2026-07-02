@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 from pathlib import Path
-from decouple import config
+from decouple import config, Csv
 import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -47,6 +47,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Soft-launch gate runs before WhiteNoise so it also covers static assets
+    # while the site is private. No-op unless SITE_PASSWORD is set.
+    'n2odb.middleware.SoftLaunchGateMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -57,9 +61,20 @@ MIDDLEWARE = [
 ]
 
 # --- SQL Explorer Settings ---
-# This determines who can view/execute SQL queries (Default is only Superusers)
-EXPLORER_CONNECTIONS = { 'Default': 'default' }
-EXPLORER_DEFAULT_CONNECTION = 'default'
+# Explorer is a live SQL console over the DB. Two safeguards for production:
+#
+# 1. Read-only DB connection: set READONLY_DATABASE_URL (below, in DATABASES) to
+#    a SELECT-only database user so the console can NEVER modify data. Data
+#    management is done through the Django admin (import/export), not raw SQL.
+#    If READONLY_DATABASE_URL is unset (dev), Explorer falls back to 'default'.
+#
+# 2. Superuser-only: restrict the console to superusers, so granting a
+#    collaborator `is_staff` (for the admin) does not also hand them the SQL
+#    console over all data (incl. UserAction visitor emails).
+# NOTE: EXPLORER_CONNECTIONS / EXPLORER_DEFAULT_CONNECTION are set just after the
+# DATABASES block below (they depend on whether the read-only connection exists).
+EXPLORER_PERMISSION_VIEW = lambda request: request.user.is_superuser
+EXPLORER_PERMISSION_CHANGE = lambda request: request.user.is_superuser
 
 ROOT_URLCONF = 'fluxapp.urls'
 
@@ -79,10 +94,21 @@ TEMPLATES = [
     },
 ]
 
-# --- Email Settings (Development) ---
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'webmaster@grandexplorer.org'
-CONTACT_EMAIL = 'your.actual.email@gmail.com'
+# --- Email ---
+# Dev default: print emails to the console (no delivery). Production: set the
+# EMAIL_* env vars for a real SMTP provider (SendGrid/Mailgun/SES/Gmail, etc.)
+# and CONTACT_EMAIL to the address the contact form should reach.
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='GRAND Explorer <no-reply@grandexplorer.org>')
+# Where contact-form submissions are delivered. MUST be set in production.
+CONTACT_EMAIL = config('CONTACT_EMAIL', default='admin@example.com')   # primary (To)
+# Optional CC recipients — comma-separated (e.g. "copi@uni.edu,lab@uni.edu").
+CONTACT_CC = config('CONTACT_CC', default='', cast=Csv())
 
 WSGI_APPLICATION = 'fluxapp.wsgi.application'
 
@@ -98,6 +124,25 @@ DATABASES['default']['OPTIONS'] = {
     'charset': 'utf8mb4',
     'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
 }
+
+# Optional read-only connection for SQL Explorer. In production, point
+# READONLY_DATABASE_URL at a SELECT-only DB user so the Explorer console can
+# never modify data (writes go through the Django admin instead). Left unset in
+# dev, where Explorer simply uses the default connection.
+READONLY_DATABASE_URL = config('READONLY_DATABASE_URL', default='')
+if READONLY_DATABASE_URL:
+    # parse() the URL string directly — do NOT use dj_database_url.config(),
+    # which reads the DATABASE_URL env var first and would ignore this value.
+    DATABASES['readonly'] = dj_database_url.parse(READONLY_DATABASE_URL)
+    DATABASES['readonly']['OPTIONS'] = {'charset': 'utf8mb4'}
+    # Same physical DB as 'default' — tell the test runner to mirror it rather
+    # than try to create/migrate a separate (and unwritable) test database.
+    DATABASES['readonly']['TEST'] = {'MIRROR': 'default'}
+
+# Explorer uses the read-only connection when configured, else falls back.
+_EXPLORER_CONNECTION = 'readonly' if 'readonly' in DATABASES else 'default'
+EXPLORER_CONNECTIONS = {'Read-only': _EXPLORER_CONNECTION}
+EXPLORER_DEFAULT_CONNECTION = _EXPLORER_CONNECTION
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
@@ -136,9 +181,73 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'n2odb.User'
+
+# --- Production security ---
+# All off in dev (defaults). In production, set these in your hosting
+# environment (not in .env committed to git):
+#
+#   SECURE_SSL_REDIRECT=True
+#   SESSION_COOKIE_SECURE=True
+#   CSRF_COOKIE_SECURE=True
+#   SECURE_HSTS_SECONDS=31536000
+#   SECURE_HSTS_INCLUDE_SUBDOMAINS=True
+#   SECURE_HSTS_PRELOAD=True        # only after confirming HTTPS works end-to-end
+#
+# HSTS note: start with a short value (e.g. 300) in production to verify
+# HTTPS is working before committing to a year-long cache in browsers.
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
+SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+# Railway (like most PaaS) terminates TLS at the edge and forwards plain HTTP
+# internally. Without this, Django sees request.is_secure() == False, so
+# SECURE_SSL_REDIRECT=True would bounce every request into an INFINITE redirect
+# loop. This tells Django to trust the proxy's X-Forwarded-Proto header.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# --- Soft-launch gate ---
+# Set SITE_PASSWORD in production to lock the entire site behind a single shared
+# HTTP Basic Auth credential (private lab preview). Clear it to go fully public.
+# Username defaults to 'lab'. See n2odb.middleware.SoftLaunchGateMiddleware.
+SITE_PASSWORD = config('SITE_PASSWORD', default='')
+SITE_USERNAME = config('SITE_USERNAME', default='sahalab')
+
+# --- Logging ---
+# DEBUG=False silences Django's default console handler, so production errors
+# (and our logger.exception calls) would otherwise be invisible. Send everything
+# to stdout, which Railway captures in its log viewer. Add Sentry later if you
+# want alerting rather than just searchable logs.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {'format': '{levelname} {asctime} {name}: {message}', 'style': '{'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'simple'},
+    },
+    'root': {'handlers': ['console'], 'level': 'INFO'},
+    'loggers': {
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+    },
+}

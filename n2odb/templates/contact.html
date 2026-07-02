@@ -107,7 +107,13 @@
 
             <form method="POST" action="{% url 'contact' %}">
                 {% csrf_token %}
-                
+
+                <!-- Honeypot: hidden from humans; bots fill it and get silently dropped. Do not remove. -->
+                <div aria-hidden="true" style="position:absolute; left:-9999px; top:-9999px;">
+                    <label for="company">Company (leave this field blank)</label>
+                    <input type="text" id="company" name="company" tabindex="-1" autocomplete="off">
+                </div>
+
                 <div class="row">
                     <div class="col-md-6 mb-4">
                         <label for="name" class="form-label">Full Name</label>

@@ -1,10 +1,11 @@
 
 {% extends 'base.html' %}
+{% load static %}
 {% block head %}
 
     <!-- Fetch the hero background early so it paints without a flash of the page bg.
          Path matches the inline background-image URL below exactly (same request). -->
-    <link rel="preload" as="image" href="static/images/FluxappBackground.webp" type="image/webp">
+    <link rel="preload" as="image" href="{% static 'images/FluxappBackground.webp' %}" type="image/webp">
 
     <style>
         /* All the snapping stuff */

@@ -1,11 +1,11 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.db import models
 from n2odb.models import Publication, Site, Experiment, Treatment, Replication, RawMeasurementTreatment, UserAction
 from django.template.defaulttags import register
 from django.template import loader
 from django.template import Template, Context
 from json import dumps
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 import json
 from django.db.models import F
 from collections import defaultdict
@@ -19,7 +19,7 @@ import os
 import zipstream, zipfile
 from django.http import StreamingHttpResponse
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from django.contrib import messages
 import logging
 
@@ -851,8 +851,30 @@ def download_zip(request):
     
     return response
 
+def robots_txt(request):
+    """Let crawlers index public pages; keep them out of admin/data endpoints."""
+    lines = [
+        "User-agent: *",
+        "Disallow: /admin/",
+        "Disallow: /explorer/",
+        "Disallow: /api/",
+        "Disallow: /cart/",
+        "Disallow: /data-cart/",
+        "Allow: /",
+    ]
+    return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")
+
+
 def contact_view(request):
     if request.method == 'POST':
+        # Honeypot: the hidden 'company' field is invisible to humans but bots
+        # fill every field. If it's populated, silently drop and fake success so
+        # the bot can't tell it was filtered.
+        if request.POST.get('company'):
+            logger.info("Contact honeypot triggered; dropping submission.")
+            messages.success(request, "Thank you! Your message has been sent successfully.")
+            return redirect('contact')
+
         # 1. Extract Data
         name = request.POST.get('name')
         email = request.POST.get('email')
@@ -860,35 +882,38 @@ def contact_view(request):
         message_content = request.POST.get('message')
 
         # 2. Format the Email Subject & Body
-        # We put [GRAND] in the subject so you can filter these easily in your inbox
+        # We put [GRAND] in the subject so you can filter these easily in your inbox.
+        # Body is built line-by-line (no leading indentation, and robust to a
+        # multi-line message) so it renders clean in an inbox.
         email_subject = f"[GRAND Explorer] {subject_type}: {name}"
-        
-        email_body = f"""
-        You have received a new message via the GRAND Explorer Contact Form.
 
-        --------------------------------------------------
-        SENDER INFO
-        --------------------------------------------------
-        Name:    {name}
-        Email:   {email}
-        Subject: {subject_type}
-
-        --------------------------------------------------
-        MESSAGE
-        --------------------------------------------------
-        {message_content}
-        """
+        email_body = (
+            "You have received a new message via the GRAND Explorer Contact Form.\n\n"
+            "--------------------------------------------------\n"
+            "SENDER INFO\n"
+            "--------------------------------------------------\n"
+            f"Name:    {name}\n"
+            f"Email:   {email}\n"
+            f"Subject: {subject_type}\n\n"
+            "--------------------------------------------------\n"
+            "MESSAGE\n"
+            "--------------------------------------------------\n"
+            f"{message_content}\n"
+        )
 
         try:
-            # 3. Send Email
-            send_mail(
+            # 3. Send Email. EmailMessage (vs send_mail) lets us set CC and a
+            # Reply-To of the submitter, so hitting "Reply" reaches them directly
+            # instead of the no-reply From address.
+            EmailMessage(
                 subject=email_subject,
-                message=email_body,
-                from_email=settings.DEFAULT_FROM_EMAIL, # Must match your settings
-                recipient_list=[settings.CONTACT_EMAIL], # Where it goes (Admin)
-                fail_silently=False,
-            )
-            
+                body=email_body,
+                from_email=settings.DEFAULT_FROM_EMAIL,   # verified sender at your provider
+                to=[settings.CONTACT_EMAIL],              # primary recipient
+                cc=settings.CONTACT_CC,                   # optional CC list (CONTACT_CC env)
+                reply_to=[email] if email else [],        # submitter's address
+            ).send(fail_silently=False)
+
             # 4. Success Feedback
             messages.success(request, "Thank you! Your message has been sent successfully.")
             return redirect('contact')

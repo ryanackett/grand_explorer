@@ -20,6 +20,7 @@ from n2odb import views
 
 urlpatterns = [
     path( '', views.index, name ='home'),
+    path( 'robots.txt', views.robots_txt, name='robots'),
     path( 'about/', views.about, name ='about'),
     path( 'about-data/', views.about_data, name ='about-data'),
     path( 'query-filters/', views.query_filters, name ='query-filters'),

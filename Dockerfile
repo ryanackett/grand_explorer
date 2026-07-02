@@ -27,9 +27,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 3. Copy your actual code into /app
 COPY . .
 
-# 4. Prepare static files (Critical for CSS/Images to work)
-# This gathers everything into the 'staticfiles' folder we defined in settings.py
-#RUN python manage.py collectstatic --noinput
-
-# 5. Start the engine
-#CMD gunicorn blog.wsgi --bind 0.0.0.0:8000
+# 4. Start the engine.
+# migrate + collectstatic run at container start (not build) so they use the
+# real runtime env vars (SECRET_KEY, DATABASE_URL). Gunicorn binds Railway's
+# injected $PORT (falls back to 8000 locally). --timeout 120 gives large cart
+# ZIP exports room to stream without gunicorn killing the worker.
+CMD python manage.py migrate --noinput && \
+    python manage.py collectstatic --noinput && \
+    gunicorn fluxapp.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120

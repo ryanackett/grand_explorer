@@ -11,8 +11,8 @@
             GRAND Explorer
         {% endblock %}
     </title>
-    <meta name="description" content="">
-    <meta name="author" content="">
+    <meta name="description" content="GRAND Explorer — browse, filter, and download the Global Repository for Agricultural N₂O Data.">
+    <meta name="author" content="Ryan Ackett, Debasish Saha">
 
     <!-- mobile specific metas
     ================================================== -->
@@ -299,6 +299,66 @@
 
 <body id="top" style="background-color: #82968c">
 
+    <!-- Toast notification container (used site-wide via showToast()) -->
+    <div id="toast-container" style="
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        z-index: 1100;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.6rem;
+        pointer-events: none;
+    "></div>
+    <style>
+        .grand-toast {
+            pointer-events: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 1.2rem;
+            max-width: min(420px, calc(100vw - 3rem));
+            background: rgba(130, 150, 140, 0.97);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 6px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+            color: #fff;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-size: 1.8rem;
+            line-height: 1.4;
+            padding: 0.9rem 1rem 0.9rem 1.4rem;
+            opacity: 0;
+            transform: translateX(12px);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        .grand-toast.toast-success { border-left: 4px solid #a8d470; }
+        .grand-toast.toast-warning { border-left: 4px solid #f0c040; }
+        .grand-toast.toast-danger  { border-left: 4px solid #e06060; }
+        .grand-toast.is-visible    { opacity: 1; transform: translateX(0); }
+        .grand-toast__msg          { flex: 1; }
+        .grand-toast__close {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.65);
+            font-size: 2.2rem;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+            flex-shrink: 0;
+        }
+        .grand-toast__close:hover { color: #fff; }
+        @media (max-width: 576px) {
+            #toast-container {
+                left: 0.75rem;
+                right: 0.75rem;
+                bottom: 0.75rem;
+                align-items: stretch;
+            }
+            .grand-toast { max-width: none; }
+        }
+    </style>
 
     <!-- preloader
     ================================================== -->
@@ -330,7 +390,7 @@
                     </li>
                     <!-- Commenting out the "Submit Data" link for now, as the functionality is not yet implemented. 
                     <li class="nav-item mx-3">
-                        <a class="nav-link grand-nav-link" onclick="alert('Submit Data functionality coming soon!')">Submit Data</a>
+                        <a class="nav-link grand-nav-link" onclick="showToast('Submit Data functionality coming soon!', 'warning'); return false;">Submit Data</a>
                     </li>
                     -->
                     <li class="nav-item dropdown mx-3">
@@ -366,6 +426,34 @@
 
 
 </footer>
+
+<script>
+function showToast(message, type) {
+    var typeClass = type === 'warning' ? 'toast-warning' : type === 'danger' ? 'toast-danger' : 'toast-success';
+    var el = document.createElement('div');
+    el.className = 'grand-toast ' + typeClass;
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'assertive');
+    el.innerHTML = '<span class="grand-toast__msg">' + message + '</span>'
+        + '<button class="grand-toast__close" aria-label="Dismiss">&times;</button>';
+    document.getElementById('toast-container').appendChild(el);
+
+    requestAnimationFrame(function() {
+        requestAnimationFrame(function() { el.classList.add('is-visible'); });
+    });
+
+    var timer = setTimeout(dismiss, 4000);
+    el.querySelector('.grand-toast__close').addEventListener('click', function() {
+        clearTimeout(timer);
+        dismiss();
+    });
+
+    function dismiss() {
+        el.classList.remove('is-visible');
+        el.addEventListener('transitionend', function() { el.remove(); }, { once: true });
+    }
+}
+</script>
 </body>
 
 

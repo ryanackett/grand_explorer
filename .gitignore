@@ -8,6 +8,7 @@ __pycache__/
 # --- Django ---
 db.sqlite3
 media/
+staticfiles/
 
 # --- MySQL data directory ---
 # Bind-mounted into the `db` devcontainer service; holds the live database,

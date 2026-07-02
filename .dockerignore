@@ -5,3 +5,16 @@ venv
 .git
 .env
 .devcontainer
+
+# --- Not needed in the runtime image ---
+# ETL tooling + 82MB RawData.csv (data is loaded separately, not served by the app)
+ETL
+# Regenerated at container start by collectstatic; shipping the local copy risks a stale manifest
+staticfiles
+# Dev artifacts
+.idea
+*.ipynb
+debug_log.txt
+feature_importance.png
+hot_moments_dry_run.csv
+.~lock.*

@@ -805,7 +805,7 @@
 
         // Safety check: Don't submit if empty
         if (ids.length === 0) {
-            alert("No items selected for export.");
+            showToast('No items selected for export.', 'warning');
             return;
         }
 
@@ -871,7 +871,7 @@
         const storedData = localStorage.getItem('grand_explorer_cart_v1');
         const ids = storedData ? JSON.parse(storedData) : [];
         if (ids.length === 0) {
-            alert("No items selected for export.");
+            showToast('No items selected for export.', 'warning');
             return;
         }
 
