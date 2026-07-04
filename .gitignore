@@ -10,6 +10,9 @@ db.sqlite3
 media/
 staticfiles/
 
+# --- Dev artifacts (should never be in the repo) ---
+debug_log.txt
+
 # --- MySQL data directory ---
 # Bind-mounted into the `db` devcontainer service; holds the live database,
 # auto-generated SSL keys (*.pem), and binlogs. Must never be versioned.

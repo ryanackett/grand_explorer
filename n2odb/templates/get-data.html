@@ -239,6 +239,96 @@
             color: #2c3e50;
             transform: scale(1.15);
         }
+
+        /* ---- Graph modal (#graphModal) polish ---- */
+        #graphModal .modal-content {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+            overflow: hidden;
+        }
+        #graphModal .modal-header {
+            align-items: center;
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        /* Match the chart's sans-serif so the whole modal reads as one piece */
+        #graphModal .modal-title {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: #2c3e50;
+            letter-spacing: 0.2px;
+        }
+        /* Solid, themed circular close button — prominent but on-brand (#2c3e50).
+           Note: the site's global `button` rule sets large padding/margin/uppercase
+           spacing, so we must reset those here or the button renders as a wide oval. */
+        #graphModal .graph-close-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            box-sizing: border-box;
+            width: 40px;
+            height: 40px;
+            min-width: 0;
+            padding: 0;
+            margin: 0;
+            border: none;
+            border-radius: 50%;
+            background: #2c3e50;
+            color: #fff;
+            font-size: 1.9rem;
+            line-height: 1;
+            letter-spacing: 0;
+            text-transform: none;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(44, 62, 80, 0.35);
+            transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+        #graphModal .graph-close-btn:hover {
+            background: #1c2a38;
+            transform: scale(1.08);
+            box-shadow: 0 4px 10px rgba(44, 62, 80, 0.45);
+        }
+        #graphModal .graph-close-btn:focus-visible {
+            outline: 2px solid #2c3e50;
+            outline-offset: 2px;
+        }
+
+        /* ---- Mobile: keep the map action-bar buttons inside the viewport ----
+           The site-wide button rule (uppercase, .4em letter-spacing, 3.2rem side
+           padding, nowrap) makes "Add Full Map to Data Cart" wider than a phone
+           screen; the overflow widens the page and breaks the whole layout. */
+        @media (max-width: 800px) {
+            /* Graph modal: give the chart the full screen width. The dialog
+               carries an inline max-width: 95%, hence the !important. */
+            #graphModal .modal-dialog {
+                max-width: 100% !important;
+                margin: 0.5rem auto;
+            }
+            #graphModal .modal-body {
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+            }
+            #graphModal .modal-header {
+                padding: 10px 16px;
+            }
+
+            .map-action-bar {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            .map-action-bar .btn {
+                white-space: normal;   /* allow the label to wrap */
+                letter-spacing: 0.05em;
+                padding: 0.6rem 1.2rem;
+                height: auto;          /* fixed --btn-height clips wrapped labels */
+                line-height: 1.4;
+                margin: 0;
+                max-width: 100%;
+            }
+        }
     </style>
 
     <script>
@@ -1118,14 +1208,12 @@
                     treatment_id: treatmentId
                 }),
                 success: function(response) {
-                    $('#graph-loading').hide();
-                    
                     if (response.error) {
+                        $('#graph-loading').hide();
                         $('#graph-container').show().html('<div class="alert alert-warning">' + response.error + '</div>');
                         return;
                     }
 
-                    $('#graph-container').show();
                     $('#graphModalTitle').text(response.title);
 
                     // 3. COLOR MAPPING
@@ -1153,21 +1241,35 @@
                     if (hasWFPS) moistureLabel = 'WFPS';
                     else if (hasVWC) moistureLabel = 'VWC';
 
-                    // 5. STYLE DEFINITIONS
-                    const labelStyle = { color: '#000000', fontSize: '12px', fontWeight: 'bold' };
-                    const titleStyle = { color: '#000000', fontSize: '14px', fontWeight: 'bold' };
+                    // Detect whether the bottom-pane right axes actually have data, so we
+                    // can hide the axis (and its floating title) when the treatment has none.
+                    const hasTemp = response.series.some(s => s.name === 'Soil Temp' || s.name === 'Air Temp');
+                    const hasPrecip = response.series.some(s => s.name === 'Precipitation');
 
-                    // 6. RENDER CHART
-                    Highcharts.chart('graph-container', {
+                    // 5. STYLE DEFINITIONS
+                    // Softer than pure black: mid-gray axis chrome, dark-gray labels.
+                    const AXIS_COLOR = '#9ca3af';   // axis lines + ticks
+                    const CHART_FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+                    const labelStyle = { color: '#374151', fontSize: '12px', fontWeight: 'normal' };
+                    const titleStyle = { color: '#374151', fontSize: '13px', fontWeight: 'bold' };
+
+                    // 6. RENDER CHART (deferred one beat — see setTimeout below).
+                    // The fetch is fast; the real wait is Highcharts synchronously
+                    // drawing tens of thousands of points, which blocks the main
+                    // thread. Rendering straight from this handler freezes the page
+                    // before the browser ever paints the spinner, so the spinner
+                    // never appears. Build the options now, render on a short delay.
+                    const chartOptions = {
                         chart: {
                             zoomType: 'x',
                             alignTicks: false,
                             // FIX 1: Reserve fixed space on the right so both graphs align perfectly
-                            marginRight: 150, 
-                            style: { fontFamily: 'sans-serif' }
+                            marginRight: 150,
+                            style: { fontFamily: CHART_FONT }
                         },
                         title: { text: null },
                         credits: { enabled: false },
+                        exporting: { enabled: false }, // hide the hamburger context menu
 
                         // DISABLE TOOLTIPS (As requested)
                         tooltip: { enabled: false },
@@ -1190,8 +1292,8 @@
                             type: 'datetime', 
                             title: { text: 'Date', style: titleStyle },
                             labels: { style: labelStyle },
-                            lineColor: '#000000',
-                            tickColor: '#000000'
+                            lineColor: AXIS_COLOR,
+                            tickColor: AXIS_COLOR
                         },
 
                         // --- Y AXES ---
@@ -1201,7 +1303,7 @@
                                 title: { text: 'N2O Flux (g N/ha/d)', style: titleStyle },
                                 labels: { format: '{value}', style: labelStyle },
                                 height: '45%',
-                                lineWidth: 1, lineColor: '#000000', tickColor: '#000000', tickWidth: 1
+                                lineWidth: 1, lineColor: AXIS_COLOR, tickColor: AXIS_COLOR, tickWidth: 1
                             },
                             { // 1: Nitrogen Applied (Right)
                                 title: { text: 'Nitrogen Applied (kg N per ha)', style: titleStyle },
@@ -1216,25 +1318,29 @@
                                 title: { text: moistureLabel, style: titleStyle },
                                 labels: { format: '{value}', style: labelStyle },
                                 top: '55%', height: '45%', offset: 0,
-                                lineWidth: 1, lineColor: '#000000', tickColor: '#000000', tickWidth: 1
+                                lineWidth: 1, lineColor: AXIS_COLOR, tickColor: AXIS_COLOR, tickWidth: 1
                             },
                             { // 3: Temp (Right - Inner)
-                                title: { text: 'Temp', style: titleStyle },
-                                labels: { 
-                                    format: '{value}°C', 
+                                title: { text: 'Temp (°C)', style: titleStyle },
+                                labels: {
+                                    format: '{value}',
                                     style: labelStyle,
                                     x: 5 // Pull labels slightly closer to axis line
                                 },
                                 top: '55%', height: '45%', opposite: true,
                                 offset: 0, // FIX 2: Hug the graph edge
-                                gridLineWidth: 0 // Cleaner look
+                                gridLineWidth: 0, // Cleaner look
+                                visible: hasTemp // Hide the floating axis when no temp data
                             },
                             { // 4: Precip (Right - Outer)
-                                title: { text: 'Precip', style: titleStyle },
-                                labels: { format: '{value}mm', style: labelStyle },
+                                title: { text: 'Precip (mm)', style: titleStyle },
+                                labels: { format: '{value}', style: labelStyle },
                                 top: '55%', height: '45%', opposite: true,
-                                offset: 60, // FIX 3: Push this axis out by 60px to avoid overlap
-                                gridLineWidth: 0
+                                // Tick labels no longer carry units, so the Temp axis is
+                                // narrower — 40px clears it (was 60 when labels said "30°C")
+                                offset: hasTemp ? 40 : 0,
+                                gridLineWidth: 0,
+                                visible: hasPrecip // Hide the floating axis when no precip data
                             }
                         ],
 
@@ -1259,8 +1365,57 @@
                             line: { zIndex: 10 }
                         },
 
-                        series: response.series 
-                    });
+                        // --- MOBILE ---
+                        // The fixed 150px right margin (desktop axis alignment) and
+                        // the 16px legend eat ~40% of a phone screen. Below 500px,
+                        // null re-enables Highcharts' AUTOMATIC margin: it measures
+                        // the right-side axis labels/titles and allocates exactly
+                        // that, so nothing clips and no pixel guessing is involved.
+                        responsive: {
+                            rules: [{
+                                condition: { maxWidth: 500 },
+                                chartOptions: {
+                                    chart: {
+                                        marginRight: null,
+                                        spacingLeft: 5,   // default 10 each side —
+                                        spacingRight: 5   // reclaim the outer gutters
+                                    },
+                                    // Axis arrays merge by index in responsive rules
+                                    yAxis: [
+                                        {}, // 0: Flux
+                                        // Shorter title = one rotated line instead of two
+                                        { title: { text: 'N Applied (kg N/ha)' } },
+                                        {}, // 2: Moisture
+                                        {}, // 3: Temp
+                                        // Hug the Temp axis tighter than on desktop
+                                        { offset: hasTemp ? 30 : 0 }
+                                    ],
+                                    legend: {
+                                        itemStyle: {
+                                            color: '#000000',
+                                            fontSize: '12px',
+                                            fontWeight: 'bold'
+                                        },
+                                        symbolHeight: 12,
+                                        symbolWidth: 12,
+                                        itemDistance: 10
+                                    }
+                                }
+                            }]
+                        },
+
+                        series: response.series
+                    };
+
+                    // 200ms lets the modal fade finish and the spinner actually paint
+                    // before the blocking render starts; the spinner (frozen or spinning
+                    // via compositor) stays on screen for the whole render, and is
+                    // dismissed only once the chart truly exists.
+                    setTimeout(function () {
+                        $('#graph-container').show();
+                        Highcharts.chart('graph-container', chartOptions);
+                        $('#graph-loading').hide();
+                    }, 200);
                 },
                 error: function(xhr, errmsg, err) {
                     $('#graph-loading').hide();
@@ -1351,8 +1506,8 @@
         
             <div class="modal-header">
                 <h5 class="modal-title" id="graphModalTitle">Data Visualization</h5>
-                <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
-                <span aria-hidden="true" style="font-size: 5rem; line-height: 0.8;">&times;</span>
+                <button type="button" class="graph-close-btn" data-bs-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
                 </button>
             </div>
 

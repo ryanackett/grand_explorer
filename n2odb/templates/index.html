@@ -137,6 +137,40 @@
                 margin-top: 1rem;   /* Adds spacing above it */
                 font-size: 3.5rem;  /* Slightly smaller for mobile fit */
             }
+
+            /* The plant illustration sits in the right third of the artwork, so
+               desktop 'cover + center' crops it entirely off on tall/narrow
+               screens. Instead, anchor the image bottom-right at a fixed height:
+               the artwork's flat cream field matches the hero background-color,
+               so it blends seamlessly and the plant reads as a corner
+               illustration tucked below the copy, not a backdrop behind it. */
+            .s-hero__slide-bg {
+                background-size: auto 42vh;
+                background-position: right bottom;
+            }
+
+            /* min-width: 380px overflows phones narrower than ~400px, causing
+               horizontal scroll on the whole hero */
+            .btn-modern {
+                min-width: 0;
+                width: min(380px, 88vw);
+            }
+
+            /* Fit the hero to the VISIBLE viewport on phones. vh ignores the
+               browser URL bar, so the inline 105vh guaranteed off-screen content
+               plus a jump when the bar hides; svh is the actual visible height.
+               (!important needed to beat the inline style; the vh lines are
+               fallbacks for browsers without svh support.) Also drop the
+               desktop min-height (~816px), which alone overflows most phones. */
+            #hero {
+                height: 100vh !important;
+                height: 100svh !important;
+            }
+            .s-hero__slider .s-hero__slide {
+                height: 100vh;
+                height: 100svh;
+                min-height: 0;
+            }
         }
 
     </style>
@@ -229,7 +263,7 @@
     <div class="s-hero__slider">
         <div class="s-hero__slide">
             
-            <div class="s-hero__slide-bg" style="background-color: #f2ede5; background-image: url('static/images/FluxappBackground.webp');"></div>
+            <div class="s-hero__slide-bg" style="background-color: #f2ede5; background-image: url('{% static 'images/FluxappBackground.webp' %}');"></div>
             <div class="row s-hero__slide-content ">
 
                 <div class="column col-lg-10"> 

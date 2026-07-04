@@ -2333,10 +2333,10 @@ button:hover,
 input[type="submit"]:hover, 
 input[type="reset"]:hover, 
 input[type="button"]:hover, 
-.btn:focus, button:focus, 
-input[type="submit"]:focus, 
-input[type="reset"]:focus, 
-input[type="button"]:focus {
+.btn:focus-visible, button:focus-visible,
+input[type="submit"]:focus-visible,
+input[type="reset"]:focus-visible,
+input[type="button"]:focus-visible {
     background-color: var(--color-btn-hover);
     border-color: var(--color-btn-hover);
     color: var(--color-btn-hover-text);
@@ -2360,11 +2360,11 @@ button.btn--primary:hover,
 input[type="submit"].btn--primary:hover, 
 input[type="reset"].btn--primary:hover, 
 input[type="button"].btn--primary:hover, 
-.btn.btn--primary:focus, 
-button.btn--primary:focus, 
-input[type="submit"].btn--primary:focus, 
-input[type="reset"].btn--primary:focus, 
-input[type="button"].btn--primary:focus {
+.btn.btn--primary:focus-visible,
+button.btn--primary:focus-visible,
+input[type="submit"].btn--primary:focus-visible,
+input[type="reset"].btn--primary:focus-visible,
+input[type="button"].btn--primary:focus-visible {
     background: var(--color-btn-primary-hover);
     border-color: var(--color-btn-primary-hover);
     color: var(--color-btn-primary-hover-text);

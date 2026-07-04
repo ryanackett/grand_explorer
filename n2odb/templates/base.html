@@ -374,8 +374,18 @@
                 <img src="{% static 'images/plant-data-logo.png' %}" alt="Logo" style="width: auto; margin-right: 15px;">
                 <div class="d-flex flex-column">
                     <span class="h4 mb-0 text-white fw-bold" style="font-family: 'Georgia', serif; line-height: 1;  margin-top: 0 !important;">GRAND Explorer</span>
-                    <span class="small text-white-50" style="font-size: 1rem; letter-spacing: 1px; margin-top: 0 !important;">Global Repository for Agricultural N2O Data</span>
+                    <span class="small text-white-50 d-none d-sm-block" style="font-size: 1rem; letter-spacing: 1px; margin-top: 0 !important;">Global Repository for Agricultural N2O Data</span>
                 </div>
+            </a>
+
+            <!-- Cart lives OUTSIDE the collapse so it stays visible on mobile
+                 (its badge is live feedback when items are added). ms-auto pushes
+                 it right next to the hamburger; order-lg-last moves it to the far
+                 right on desktop, after the nav links. -->
+            <a href="/data-cart" class="btn btn-tactile rounded-pill d-flex align-items-center px-4 py-2 text-white text-decoration-none flex-shrink-0 ms-auto me-3 order-lg-last ms-lg-4 me-lg-0 data-cart">
+                <i class="fas fa-shopping-cart me-2"></i>
+                <span class="fw-bold d-none d-sm-inline" style="letter-spacing: 0.5px;"> Data Cart</span>
+                <span id="cart-count" class="cart-badge-pop badge bg-white text-success ms-3 rounded-circle d-flex justify-content-center align-items-center shadow-sm" style="width: 24px; height: 24px; font-weight: 800;">0</span>
             </a>
 
             <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -404,14 +414,6 @@
                             <li><hr class="dropdown-divider my-0"></li>
                             <li><a class="dropdown-item py-2" href="/contact">Contact Us</a></li>
                         </ul>
-                    </li>
-
-                    <li class="nav-item mx-3 mt-4 mt-lg-0 data-cart">
-                        <a href="/data-cart" class="btn btn-tactile rounded-pill d-flex align-items-center px-4 py-2 text-white text-decoration-none">
-                            <i class="fas fa-shopping-cart me-2"></i>
-                            <span class="fw-bold" style="letter-spacing: 0.5px;"> Data Cart</span>
-                            <span id="cart-count" class="cart-badge-pop badge bg-white text-success ms-3 rounded-circle d-flex justify-content-center align-items-center shadow-sm" style="width: 24px; height: 24px; font-weight: 800;">0</span>
-                        </a>
                     </li>
 
                 </ul>

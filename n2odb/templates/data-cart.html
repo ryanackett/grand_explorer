@@ -209,18 +209,18 @@
             border-right: none;
             border-bottom: 2px solid #dcd9d2; /* Divider below cart */
             padding: 1rem;             /* Reduce padding to save space */
-            
-            /* OPTIONAL: Move Sidebar to bottom? Uncomment below: */
-            /* order: 2; */ 
+
+            /* Cards go BELOW the dashboard on mobile: with many cart items the
+               card list is arbitrarily long, and putting it first buried the
+               widgets under a huge scroll. */
+            order: 2;
         }
 
         /* 3. DASHBOARD: Full width & Reorder */
         .dashboard-area {
             width: 100%;
             padding: 1rem;             /* Reduce padding */
-            
-            /* OPTIONAL: If moving Sidebar to bottom, uncomment below: */
-            /* order: 1; */
+            order: 1;                  /* Dashboard first on mobile */
         }
 
         /* 4. GRID RESET: Force single column for widgets */
@@ -394,8 +394,11 @@
 
             // 3. Success: Swap Loader for Content
             loadingDiv.style.display = 'none';
+            // Only toggle visibility here — the stylesheet owns display
+            // (grid on desktop, single flex column under 900px). An inline
+            // display:'grid' would override the mobile media query and force
+            // three columns on phones.
             contentDiv.style.visibility = 'visible';
-            contentDiv.style.display = 'grid'; 
 
             renderSidebar(data.sidebar_list, data.total_rows);
             renderCharts(data);

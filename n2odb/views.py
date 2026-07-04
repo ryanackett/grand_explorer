@@ -197,11 +197,16 @@ def get_data(request):
             for item in date_aggregates
         }
 
-        # Attach treatments to experiments
+        # Attach treatments to experiments. Drop any treatment with no
+        # RawMeasurementTreatment rows: with no data its graph is empty and it is
+        # useless on the map. A treatment has data iff it appears in date_lookup
+        # (built from the measurement aggregates above).
         treatment_map = defaultdict(list)
         for t in filtered_treatments:
-            t_dates = date_lookup.get(t['TreatmentID'], {})
-            
+            if t['TreatmentID'] not in date_lookup:
+                continue
+            t_dates = date_lookup[t['TreatmentID']]
+
             row = {
                 'id': t['TreatmentID'],
                 'name': t['TreatmentName'] if t['TreatmentName'] else "Unnamed Treatment",
@@ -210,12 +215,17 @@ def get_data(request):
                 'ins': t.get('FluxInstrument'),
                 'first_date': t_dates.get('first_date'),
                 'last_date': t_dates.get('last_date'),
-                
+
             }
             treatment_map[t['ExperimentID']].append(row)
 
+        # Drop experiments left with no data-bearing treatments (empty map points).
+        experiment_data = [
+            exp for exp in experiment_data
+            if treatment_map.get(exp['ExperimentID'])
+        ]
         for exp in experiment_data:
-            exp['TreatmentIDs'] = treatment_map.get(exp['ExperimentID'], [])
+            exp['TreatmentIDs'] = treatment_map[exp['ExperimentID']]
 
         # 5. RETURN VALID JSON
         # Only json_experiments is consumed by the front-end (submitFilter);
@@ -371,10 +381,15 @@ def get_data(request):
             for item in date_aggregates
         }
 
-        # 3. Group Treatments by ExperimentID using a Python dictionary
+        # 3. Group Treatments by ExperimentID using a Python dictionary.
+        #    Drop treatments with no RawMeasurementTreatment rows: no data means
+        #    an empty graph, so they are useless on the map. Membership in
+        #    date_lookup means the treatment has at least one measurement.
         treatment_map = defaultdict(list)
         for t in treatments:
-            t_dates = date_lookup.get(t['TreatmentID'], {})
+            if t['TreatmentID'] not in date_lookup:
+                continue
+            t_dates = date_lookup[t['TreatmentID']]
             row = {
                 'id': t['TreatmentID'],
                 'name': t['TreatmentName'] if t['TreatmentName'] else "Unnamed Treatment",
@@ -385,10 +400,14 @@ def get_data(request):
             }
             treatment_map[t['ExperimentID']].append(row)
 
-        # 4. Attach the Treatment list to each Experiment object
+        # 4. Attach the Treatment list to each Experiment object, and drop
+        #    experiments left with no data-bearing treatments (empty map points).
+        experiment_data = [
+            exp for exp in experiment_data
+            if treatment_map.get(exp['ExperimentID'])
+        ]
         for exp in experiment_data:
-            # Look up the list of treatments using the ID, default to empty list if none
-            exp['TreatmentIDs'] = treatment_map.get(exp['ExperimentID'], [])
+            exp['TreatmentIDs'] = treatment_map[exp['ExperimentID']]
 
         # 5. Add to your dropdown_dict for the frontend
         dropdown_dict['json_experiments'] = dumps(experiment_data)        
