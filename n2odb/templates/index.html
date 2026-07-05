@@ -156,20 +156,38 @@
                 width: min(380px, 88vw);
             }
 
-            /* Fit the hero to the VISIBLE viewport on phones. vh ignores the
-               browser URL bar, so the inline 105vh guaranteed off-screen content
-               plus a jump when the bar hides; svh is the actual visible height.
-               (!important needed to beat the inline style; the vh lines are
-               fallbacks for browsers without svh support.) Also drop the
-               desktop min-height (~816px), which alone overflows most phones. */
+            /* Fill the VISIBLE viewport (svh, not vh which ignores the URL bar),
+               but let the hero GROW when the copy is taller than one screen —
+               a fixed height plus .s-hero's overflow:hidden is what clipped the
+               big G-R-A-N-D caps under the navbar. (vh lines are fallbacks for
+               browsers without svh.) */
             #hero {
-                height: 100vh !important;
-                height: 100svh !important;
+                height: auto !important;
+                min-height: 100vh;
+                min-height: 100svh;
             }
             .s-hero__slider .s-hero__slide {
-                height: 100vh;
-                height: 100svh;
-                min-height: 0;
+                height: auto;
+                min-height: 100vh;
+                min-height: 100svh;
+            }
+
+            /* The template BOTTOM-anchors the copy with a 20vh pad (content
+               grows upward and clips at the top), and Bootstrap's .row class
+               on this element adds negative side margins that shift everything
+               ~12px left of center. Flow top-down instead, clearing the fixed
+               navbar, and zero the row margins. */
+            .s-hero__slide-content {
+                margin-left: 0;
+                margin-right: 0;
+                height: auto;
+                padding-top: 10rem;   /* clear the fixed navbar */
+                padding-bottom: 5vh;
+            }
+            .s-hero__slide-content > .column {
+                align-self: auto;     /* was flex-end (bottom-anchored) */
+                flex: 0 0 100%;
+                max-width: 100%;
             }
         }
 
