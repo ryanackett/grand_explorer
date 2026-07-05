@@ -83,6 +83,16 @@ def get_data(request):
             'Soil Ammonium':    'soilnh4',
         }
 
+        # For moisture metrics a treatment counts as "having" the variable if
+        # either the directly measured column OR the derived *Calculated column
+        # (filled by the soil_moisture_calculation command from the alternate
+        # metric + bulk density) is populated. Measured and calculated are
+        # treated as equivalent for availability filtering.
+        ENV_CALCULATED_MAP = {
+            'vwc':  'vwccalculated',
+            'wfps': 'wfpscalculated',
+        }
+
         SOIL_COLUMN_MAP = {
             'Soil pH':      'pHMean',       
             'Soil Bulk Density': 'BulkDensityMean',
@@ -100,11 +110,17 @@ def get_data(request):
             for env_label in selected_env:
                 if env_label in ENV_COLUMN_MAP:
                     column_name = ENV_COLUMN_MAP[env_label]
-                    lookup_key = f"measurements__{column_name}__isnull"
-                    
+
+                    # Measured value present...
+                    availability = Q(**{f"measurements__{column_name}__isnull": False})
+                    # ...or, for VWC/WFPS, the calculated equivalent present.
+                    if column_name in ENV_CALCULATED_MAP:
+                        calc_column = ENV_CALCULATED_MAP[column_name]
+                        availability |= Q(**{f"measurements__{calc_column}__isnull": False})
+
                     # 1. Find IDs that have THIS variable
                     ids_with_var = set(
-                        Treatment.objects.filter(**{lookup_key: False})
+                        Treatment.objects.filter(availability)
                         .values_list('pk', flat=True)
                     )
                     
