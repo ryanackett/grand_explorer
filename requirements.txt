@@ -16,3 +16,17 @@ pandas
 pyod
 reverse_geocoder
 pycountry_convert
+django-allauth>=65,<66   # contributor auth: registration + mandatory email verification
+# --- Assisted-upload workbench: source-document ingestion ---
+# Text extraction from uploaded papers. Licenses are deliberate: pdfplumber (MIT),
+# pypdf (BSD), python-docx (MIT). Do NOT add PyMuPDF/fitz — it is AGPL.
+pdfplumber
+pypdf
+python-docx
+openpyxl             # XLSX parsing for the data-file upload (Plane A)
+charset-normalizer   # encoding sniffing for CSV uploads
+rapidfuzz            # fuzzy column-header → canonical-field matching
+anthropic            # used only by the language-model module (§5); safe to install now
+# Phase C OCR only (also add tesseract-ocr + poppler-utils to the Dockerfile):
+# pytesseract
+# pdf2image

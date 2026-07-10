@@ -1,0 +1,80 @@
+{% comment %}
+Site-branded base for all django-allauth pages (login, signup, email verification,
+password reset). Overrides allauth's plain default layout. Self-contained (its own
+document) to avoid block-name collisions with the site base; allauth's element system
+renders the forms into `{% block content %}`, which we style below.
+{% endcomment %}
+{% load static i18n %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block head_title %}{% endblock %} | GRAND Explorer</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/icons8-plant-doodle-32.png' %}">
+    <style>
+        :root { --grand:#82968c; --grand-dark:#6b7e75; --ink:#2c3e50; --muted:#6b7c73; }
+        * { box-sizing:border-box; }
+        body.auth-body { margin:0; min-height:100vh; display:flex; flex-direction:column;
+            align-items:center; justify-content:center; padding:2rem 1rem;
+            background:linear-gradient(160deg,#eef3f0 0%,#e3ece7 100%);
+            font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; color:#3c4d45; }
+        .auth-brand { font-family:'Georgia', serif; font-size:2.2rem; font-weight:700;
+            color:var(--ink); text-decoration:none; margin-bottom:1.5rem; letter-spacing:-.5px; }
+        .auth-brand span { color:var(--grand); }
+        .auth-card { width:100%; max-width:430px; background:#fff; border:1px solid #e3ebe7;
+            border-radius:16px; padding:2.5rem 2.5rem 2.25rem; box-shadow:0 12px 40px rgba(44,62,50,.10); }
+        .auth-card h1 { font-family:'Georgia', serif; color:var(--ink); font-size:1.9rem;
+            margin:0 0 1.25rem; text-align:center; }
+        .auth-card p { font-size:1.05rem; color:var(--muted); line-height:1.5; margin:.5rem 0 1rem; }
+        .auth-card a { color:#4a7c8f; text-decoration:none; font-weight:600; }
+        .auth-card a:hover { text-decoration:underline; }
+
+        /* allauth field.html renders <p><label>…</label><input…></p> */
+        .auth-card form p { margin:0 0 1rem; }
+        .auth-card label { display:block; font-size:1rem; font-weight:600; color:#4a5d54;
+            margin-bottom:.35rem; }
+        .auth-card input[type=email], .auth-card input[type=text],
+        .auth-card input[type=password] {
+            width:100%; padding:12px 14px; border:1px solid #ced4da; border-radius:9px;
+            font-size:1.1rem; color:var(--ink); background:#fff; }
+        .auth-card input:focus { outline:none; border-color:var(--grand);
+            box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+        .auth-card input[type=checkbox] { margin-right:.4rem; }
+
+        /* allauth button element → <button type=submit> */
+        .auth-card button, .auth-card [type=submit] {
+            width:100%; margin-top:.5rem; padding:12px 18px; border:none; border-radius:50px;
+            background:var(--grand); color:#fff; font-size:1.15rem; font-weight:700;
+            font-family:'Georgia', serif; cursor:pointer; transition:background .2s ease; }
+        .auth-card button:hover, .auth-card [type=submit]:hover { background:var(--grand-dark); }
+        .auth-card [tags~="outline"] { background:#fff; color:var(--grand); border:2px solid #c3cec8; }
+        .auth-card [tags~="outline"]:hover { background:#eef3f0; }
+
+        .auth-card hr { border:none; border-top:1px solid #e6ece9; margin:1.5rem 0; }
+        .auth-card ul { padding-left:1.2rem; }
+        .auth-card .errorlist, .auth-card ul.errorlist {
+            list-style:none; padding:.6rem .9rem; margin:0 0 1rem; border-radius:8px;
+            background:#fbeaea; border:1px solid #edc9cd; color:#a0505a; font-size:1rem; }
+        .auth-flash { padding:.7rem 1rem; border-radius:8px; margin-bottom:1rem; font-size:1.05rem; }
+        .auth-flash--success { background:#e7f3ec; color:#2c7a4b; border:1px solid #bfe0cb; }
+        .auth-flash--error { background:#fbeaea; color:#a0505a; border:1px solid #edc9cd; }
+        .auth-back { margin-top:1.5rem; font-size:1.05rem; color:var(--muted); }
+        .auth-back a { color:var(--muted); }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="auth-body">
+    <a href="/" class="auth-brand">GRAND <span>Explorer</span></a>
+    <div class="auth-card">
+        {% if messages %}
+            {% for message in messages %}
+            <div class="auth-flash auth-flash--{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+    <p class="auth-back"><a href="/">&larr; Back to GRAND Explorer</a></p>
+    {% block extra_body %}{% endblock %}
+</body>
+</html>

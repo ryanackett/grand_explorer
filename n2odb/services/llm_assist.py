@@ -1,0 +1,138 @@
+"""Shared language-model seam.
+
+A tiny gate the rest of the app checks before doing anything that would call a
+model, plus the single structured-extraction call helper. Keeping both here means
+there is one place that answers "is the model assist usable?" and one place that
+talks to the Anthropic SDK (manuscript-llm-module.md §2).
+
+The manuscript feature calls ``parse_structured`` from
+``manuscript_extract.extract_facts``; this module owns the on/off decision and the
+raw API boundary, nothing domain-specific.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+import anthropic
+from decouple import config
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+# Per-million-token USD rates (input, output). Cache writes bill at 1.25× input,
+# cache reads at 0.1× input. Used only to annotate the usage log — approximate.
+_PRICES = {
+    "claude-opus-4-8": (15.0, 75.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5-20251001": (1.0, 5.0),
+}
+
+
+def _log_usage(model: str, usage: Any) -> None:
+    """Emit one line with token counts and an estimated USD cost for a call."""
+    if usage is None:
+        return
+    inp = getattr(usage, "input_tokens", 0) or 0
+    out = getattr(usage, "output_tokens", 0) or 0
+    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+    in_rate, out_rate = _PRICES.get(model, (0.0, 0.0))
+    cost = (
+        inp * in_rate
+        + cache_write * in_rate * 1.25
+        + cache_read * in_rate * 0.1
+        + out * out_rate
+    ) / 1_000_000
+    logger.info(
+        "manuscript LLM call: model=%s input=%d cache_write=%d cache_read=%d "
+        "output=%d est_cost=$%.4f",
+        model, inp, cache_write, cache_read, out, cost,
+    )
+
+
+class LLMUnavailable(Exception):
+    """A model call could not be completed (API error or no parseable output).
+
+    Callers translate this into a graceful "failed"/"skipped" outcome — the seam
+    never lets a model problem surface as an unhandled exception in a request.
+    """
+
+
+def cache_control() -> dict:
+    """The ``cache_control`` block for cached prompt segments.
+
+    Defaults to a 1-hour TTL so re-running extraction later in the same wizard
+    session (minutes apart) still hits the cache — the 5-minute default would
+    expire between the upload and a re-run, forcing a full-price re-send.
+    """
+    ttl = getattr(settings, "WORKBENCH_LLM_CACHE_TTL", "1h")
+    if ttl not in ("5m", "1h"):
+        ttl = "1h"
+    return {"type": "ephemeral", "ttl": ttl}
+
+
+def is_enabled() -> bool:
+    """True only if the feature flag is on AND an API key is configured.
+
+    Both must hold: the flag (``WORKBENCH_LLM_ENABLED``) is the operator's switch,
+    and a key is what makes a call actually possible. With either missing the
+    manuscript pipeline degrades gracefully — text is still captured and the
+    deterministic parsers still run.
+    """
+    if not getattr(settings, "WORKBENCH_LLM_ENABLED", False):
+        return False
+    api_key = config("ANTHROPIC_API_KEY", default="")
+    return bool(api_key)
+
+
+def _client() -> "anthropic.Anthropic":
+    # This app keeps secrets in a .env read by python-decouple (not the process
+    # environment the SDK auto-reads), so pass the key through explicitly. Only
+    # called after ``is_enabled()`` has confirmed a key is present.
+    #
+    # Bounded timeout + one retry: extraction runs synchronously inside the
+    # request, so a stalled call must fail fast (→ "failed") rather than pin a
+    # worker for the SDK's default multi-minute, max_tokens-scaled timeout.
+    return anthropic.Anthropic(
+        api_key=config("ANTHROPIC_API_KEY", default=""),
+        timeout=120.0,
+        max_retries=1,
+    )
+
+
+def parse_structured(
+    *,
+    system: str,
+    content: list,
+    output_model: type,
+    model: str,
+    max_tokens: int = 8000,
+) -> Any:
+    """One structured-output call → a validated ``output_model`` instance.
+
+    The ``system`` block (stable instructions + field catalogue) is sent as a
+    cacheable text block; ``content`` is the per-request user content (the delimited
+    manuscript). Raises ``LLMUnavailable`` on any API failure or if the model
+    returns nothing parseable — it never returns ``None``.
+    """
+    try:
+        resp = _client().messages.parse(
+            model=model,
+            max_tokens=max_tokens,
+            system=[{
+                "type": "text",
+                "text": system,
+                "cache_control": cache_control(),
+            }],
+            messages=[{"role": "user", "content": content}],
+            output_format=output_model,
+        )
+    except anthropic.APIError as exc:  # network, rate-limit, 4xx/5xx, etc.
+        raise LLMUnavailable(str(exc)) from exc
+
+    _log_usage(model, getattr(resp, "usage", None))
+    parsed = resp.parsed_output
+    if parsed is None:
+        raise LLMUnavailable("model returned no parseable structured output")
+    return parsed

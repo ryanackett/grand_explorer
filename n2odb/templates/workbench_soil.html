@@ -1,0 +1,518 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Soil &amp; Management | GRAND Explorer{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% include '_wizard_head.html' %}
+<style>
+    /* Wider than the other stages: the per-treatment matrices need the room, and
+       there is no side panel here. */
+    .workbench-container.soil-container { max-width:1180px; }
+
+    .soil-status { display:flex; gap:1.25rem; align-items:baseline; flex-wrap:wrap;
+        margin-bottom:1rem; font-size:1.3rem; }
+    .soil-required--ok { color:#4a7c62; font-weight:600; }
+    .soil-required--warn { color:#b9832f; font-weight:600; }
+    .soil-saved { color:#9aa8a0; font-size:1.15rem; }
+
+    /* Treatments panel */
+    .trt-panel { background:#f7f9f8; border:1px solid #e6ece9; border-radius:12px;
+        padding:1.1rem 1.25rem 1.25rem; margin-bottom:1.75rem; }
+    .trt-note { font-size:1.2rem; color:#8a978f; margin:.15rem 0 .9rem; }
+    .trt-note code { background:#eef3f0; border-radius:4px; padding:1px 6px; color:#4a5d54; }
+    .trt-empty { color:#9aa8a0; font-size:1.2rem; font-style:italic; margin:.2rem 0 .8rem; }
+    .trt-row { display:flex; gap:.6rem; align-items:center; margin-bottom:.55rem; }
+    .trt-name { flex:0 0 13rem; width:13rem; padding:7px 10px; border:1px solid #cdd6d1;
+        border-left:4px solid #82968c; border-radius:6px; font-size:1.2rem; font-family:inherit;
+        color:#2c3e50; background:#fff; font-weight:600; }
+    .trt-desc { flex:1; min-width:0; padding:7px 10px; border:1px solid #ced4da; border-radius:6px;
+        font-size:1.2rem; font-family:inherit; color:#2c3e50; background:#fff; }
+    .trt-name:focus, .trt-desc:focus { outline:none; border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+    .trt-row__x { border:none; background:none; color:#a2b0a8; cursor:pointer; font-size:1.5rem;
+        line-height:1; padding:0 4px; margin:0; height:auto; width:auto; text-transform:none; letter-spacing:normal; }
+    .trt-row__x:hover { color:#c0704a; background:none; box-shadow:none; }
+    .trt-add { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-top:.85rem; }
+    .trt-add input { padding:7px 11px; border:1px solid #ced4da; border-radius:6px;
+        font-size:1.2rem; font-family:inherit; min-width:13rem; }
+
+    /* Group section + scope toggle */
+    .grp { margin-bottom:2.25rem; }
+    .grp__head { display:flex; align-items:center; justify-content:space-between;
+        gap:1rem; flex-wrap:wrap; border-bottom:1px solid #eceeed; padding-bottom:.55rem; margin-bottom:1rem; }
+    .grp__name { font-family:'Georgia', serif; color:#2c3e50; font-size:1.75rem; margin:0; }
+    .seg { display:inline-flex; border:1px solid #cdd6d1; border-radius:50px; overflow:hidden; background:#fff; }
+    .seg button { border:none; background:none; margin:0; height:auto; width:auto;
+        font-family:inherit; text-transform:none; letter-spacing:normal; line-height:1.3;
+        font-size:1.2rem; color:#5a6b63; padding:.4rem 1.2rem; cursor:pointer; transition:background .15s ease; }
+    .seg button.on { background:#82968c; color:#fff; }
+    .seg button:disabled { opacity:.4; cursor:not-allowed; }
+    .grp__hint { font-size:1.15rem; color:#8a978f; margin:-.4rem 0 1rem; }
+
+    /* Global-mode fields */
+    .soil-field { margin-bottom:.9rem; }
+    .soil-field__label { font-size:1.3rem; color:#2c3e50; display:block; margin-bottom:.3rem; }
+    .soil-field__unit { color:#8a978f; font-size:1.1rem; }
+    .req { color:#c0704a; font-weight:700; }
+    .soil-field__row { display:flex; align-items:center; gap:.6rem; max-width:34rem; }
+
+    .soil-input, .cell-input {
+        padding:7px 10px; border:1px solid #ced4da; border-radius:6px;
+        font-size:1.2rem; font-family:inherit; background:#fff; color:#2c3e50; min-width:0;
+        border-left-width:4px; border-left-color:#e3e8e5;
+    }
+    .soil-input { flex:1; }
+    .soil-input:focus, .cell-input:focus { outline:none; border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+    [data-source="document"] { border-left-color:#7fae92; }
+    [data-source="user"]     { border-left-color:#b7c2ba; }
+    /* No spinner arrows — they waste width for little utility. */
+    .soil-input[type=number], .cell-input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+    .soil-input[type=number]::-webkit-outer-spin-button, .soil-input[type=number]::-webkit-inner-spin-button,
+    .cell-input[type=number]::-webkit-outer-spin-button, .cell-input[type=number]::-webkit-inner-spin-button {
+        -webkit-appearance:none; margin:0; }
+
+    .prov { font-size:1.05rem; border-radius:50px; padding:2px 10px; white-space:nowrap; cursor:default; }
+    .prov--document { background:#eef3f0; color:#4a7c62; cursor:help; }
+    .prov--user     { background:#eef1f4; color:#7a8894; }
+    .prov--empty    { display:none; }
+
+    /* Per-treatment matrix */
+    .matrix-wrap { overflow-x:auto; border:1px solid #e6ece9; border-radius:10px; }
+    table.matrix { border-collapse:collapse; width:100%; font-size:1.15rem; }
+    table.matrix th, table.matrix td { padding:.45rem .55rem; border-bottom:1px solid #eef1ef; text-align:center; vertical-align:middle; }
+    table.matrix thead th { background:#f2f6f4; color:#4a5d54; font-family:inherit; font-weight:600; white-space:nowrap; }
+    table.matrix thead th .th-unit { color:#8a978f; font-weight:400; font-size:.95rem; }
+    table.matrix .trt-cell { font-weight:600; color:#2c3e50; white-space:nowrap;
+        position:sticky; left:0; background:#fff; border-right:1px solid #eef1ef; }
+    table.matrix .cell-input, table.matrix select.cell-input { width:100%; text-align:center; text-align-last:center; }
+</style>
+
+<section class="workbench-section">
+  <div class="workbench-container soil-container"
+       data-save-url="{% url 'workbench-soil-save' public_token %}"
+       data-back-url="{% url 'workbench-site' public_token %}"
+       data-next-url="{% url 'workbench-timeline' public_token %}">
+
+    {% include '_wizard_progress.html' %}
+
+    <h1>Soil &amp; management</h1>
+    <p class="step-lead">
+      Soil properties and management practices often differ between treatments
+      (contrasting rotations, tillage, amended vs. control). For each section below,
+      choose whether the value is the same across the whole study
+      (<strong>global</strong>) or entered <strong>per&nbsp;treatment</strong>.
+    </p>
+
+    <div class="soil-status">
+      <span id="soil-required" class="soil-required--warn">…</span>
+      <span id="soil-saved" class="soil-saved"></span>
+    </div>
+
+    <div class="trt-panel">
+      <h2 class="wb-subhead" style="margin-top:.2rem;">Treatments</h2>
+      <p class="trt-note" id="trt-note"></p>
+      <div id="trt-list"></div>
+      <div class="trt-add">
+        <input id="trt-add-input" type="text" placeholder="Add a treatment…" autocomplete="off">
+        <button type="button" class="wb-btn wb-btn--outline wb-btn--sm" id="trt-add-btn">Add</button>
+        <button type="button" class="wb-btn wb-btn--outline wb-btn--sm" id="trt-reset" hidden>Reset to detected</button>
+      </div>
+    </div>
+
+    <div id="groups"></div>
+
+    <div class="wb-actions">
+      <a href="{% url 'workbench-site' public_token %}" class="wb-btn wb-btn--outline">&larr;&nbsp;Back</a>
+      <button type="button" class="wb-btn wb-btn--primary" id="soil-continue">Continue&nbsp;&rarr;</button>
+    </div>
+
+  </div>
+</section>
+
+{{ field_groups|json_script:"fields-data" }}
+{{ treatment_groups|json_script:"groups-data" }}
+{{ detected_treatments|json_script:"detected-data" }}
+{{ saved_details|json_script:"saved-data" }}
+{{ paper_facts|json_script:"paper-data" }}
+{{ required_ids|json_script:"required-data" }}
+{{ treatment_column|json_script:"trtcol-data" }}
+
+<script>
+(function () {
+  const root      = document.querySelector('.soil-container');
+  const saveUrl   = root.dataset.saveUrl;
+  const nextUrl   = root.dataset.nextUrl;
+  const fieldGroups = JSON.parse(document.getElementById('fields-data').textContent);
+  const groupNames  = JSON.parse(document.getElementById('groups-data').textContent);
+  const detected    = JSON.parse(document.getElementById('detected-data').textContent);
+  const saved       = JSON.parse(document.getElementById('saved-data').textContent) || {};
+  const paper       = JSON.parse(document.getElementById('paper-data').textContent) || {};
+  const requiredIds = JSON.parse(document.getElementById('required-data').textContent);
+  const trtColumn   = JSON.parse(document.getElementById('trtcol-data').textContent);
+
+  const fieldById = {};
+  fieldGroups.forEach(g => g.fields.forEach(f => { fieldById[f.id] = f; }));
+  const fieldsInGroup = {};
+  fieldGroups.forEach(g => { fieldsInGroup[g.name] = g.fields; });
+
+  // An option-backed field only accepts a value already in its list. Anything else
+  // (stale free-text saved before the dropdowns were strict, or an unresolved paper
+  // value) is treated as empty, so the field re-fills from the paper or stays blank
+  // rather than showing a silently-blanked <select>.
+  function validForField(fid, value) {
+    const f = fieldById[fid];
+    if (!f || !f.options || !f.options.length) return true;
+    return f.options.indexOf(String(value)) !== -1;
+  }
+  function purgeInvalid(bucket) {
+    Object.keys(bucket).forEach(fid => {
+      const e = bucket[fid];
+      if (e && e.value != null && !validForField(fid, e.value)) delete bucket[fid];
+    });
+  }
+
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+  const csrftoken = getCookie('csrftoken');
+
+
+  // --- state ---------------------------------------------------------------
+  const state = {
+    treatments: (saved.treatments && saved.treatments.length) ? saved.treatments.slice() : detected.slice(),
+    descriptions: Object.assign({}, saved.descriptions || {}),
+    scopes: {},
+    global: Object.assign({}, saved.global || {}),
+    per: {},
+  };
+  groupNames.forEach(g => { state.scopes[g] = (saved.scopes && saved.scopes[g]) || 'global'; });
+  Object.keys(saved.per_treatment || {}).forEach(t => { state.per[t] = Object.assign({}, saved.per_treatment[t]); });
+
+  // Discard any saved value that is no longer a legal option (e.g. free text saved
+  // before the dropdowns became strict) so it can be re-seeded below.
+  purgeInvalid(state.global);
+  Object.keys(state.per).forEach(t => purgeInvalid(state.per[t]));
+
+  // Values loaded from a prior save are already confirmed (the contributor saw and
+  // kept them); mark them so autosave keeps persisting them even though their origin
+  // is the document. Paper gaps seeded below stay unconfirmed until Continue.
+  const markConfirmed = obj => Object.values(obj).forEach(e => { if (e) e._c = true; });
+  markConfirmed(state.global);
+  Object.keys(state.per).forEach(t => markConfirmed(state.per[t]));
+
+  function paperEntry(fid) {
+    const p = paper[fid];
+    return p ? { value: p.value, source: 'document', source_quote: p.source_quote } : null;
+  }
+  function ensureTreatment(t, seedPaper) {
+    if (!state.per[t]) state.per[t] = {};
+    if (seedPaper) fieldGroups.forEach(g => g.fields.forEach(f => {
+      if (!state.per[t][f.id]) {
+        const p = paperEntry(f.id);
+        if (p && validForField(f.id, p.value)) state.per[t][f.id] = p;
+      }
+    }));
+  }
+  // Pre-fill any field the contributor hasn't already answered with the paper's
+  // value — for both scopes, on every visit. Saved answers were loaded into state
+  // above and take precedence; only genuine gaps get seeded, so a fresh upload's
+  // extracted soil/crop/management values always appear. Off-list paper values are
+  // skipped (they can't populate a strict dropdown) so the field stays blank.
+  fieldGroups.forEach(g => g.fields.forEach(f => {
+    if (!state.global[f.id]) {
+      const p = paperEntry(f.id);
+      if (p && validForField(f.id, p.value)) state.global[f.id] = p;
+    }
+  }));
+  state.treatments.forEach(t => ensureTreatment(t, true));
+
+  // --- elements ------------------------------------------------------------
+  const groupsEl = document.getElementById('groups');
+  const listEl   = document.getElementById('trt-list');
+  const trtNote  = document.getElementById('trt-note');
+  const addInput = document.getElementById('trt-add-input');
+  const soilReq  = document.getElementById('soil-required');
+  const soilSaved= document.getElementById('soil-saved');
+  const resetBtn = document.getElementById('trt-reset');
+
+  function el(tag, attrs, text) {
+    const n = document.createElement(tag);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  // --- treatments UI -------------------------------------------------------
+  function reconcileTreatments() {
+    Object.keys(state.per).forEach(t => { if (!state.treatments.includes(t)) delete state.per[t]; });
+    Object.keys(state.descriptions).forEach(t => { if (!state.treatments.includes(t)) delete state.descriptions[t]; });
+    state.treatments.forEach(t => ensureTreatment(t, true));
+  }
+  function renderTreatments() {
+    listEl.innerHTML = '';
+    if (!state.treatments.length) {
+      listEl.appendChild(el('p', { class: 'trt-empty' },
+        'No treatments yet — add them below, or keep every section global.'));
+    }
+    state.treatments.forEach((t, idx) => {
+      const row = el('div', { class: 'trt-row' });
+      const name = el('input', { class: 'trt-name', type: 'text', value: t, 'aria-label': 'Treatment name' });
+      name.addEventListener('change', () => renameTreatment(idx, name.value.trim()));
+      const desc = el('input', { class: 'trt-desc', type: 'text',
+        placeholder: 'Description — rotation, tillage, N rate… (optional)' });
+      desc.value = state.descriptions[t] || '';
+      desc.addEventListener('input', () => { state.descriptions[t] = desc.value; scheduleSave(); });
+      const x = el('button', { type: 'button', class: 'trt-row__x', 'aria-label': 'Remove treatment' }, '×');
+      x.addEventListener('click', () => removeTreatment(idx));
+      row.appendChild(name); row.appendChild(desc); row.appendChild(x);
+      listEl.appendChild(row);
+    });
+    const note = trtColumn
+      ? 'Detected from column <code>' + trtColumn + '</code>. Rename, describe, or add/remove as needed.'
+      : 'No treatment column was mapped. Add treatments manually if any section varies by treatment.';
+    trtNote.innerHTML = note;
+    const differs = detected.length && JSON.stringify(state.treatments) !== JSON.stringify(detected);
+    resetBtn.hidden = !differs;
+  }
+  function renameTreatment(idx, newName) {
+    const old = state.treatments[idx];
+    if (!newName || newName === old) { renderTreatments(); return; }
+    if (state.treatments.includes(newName)) { showToast('That treatment already exists.', 'warning'); renderTreatments(); return; }
+    if (state.per[old]) { state.per[newName] = state.per[old]; delete state.per[old]; }
+    if (state.descriptions[old] != null) { state.descriptions[newName] = state.descriptions[old]; delete state.descriptions[old]; }
+    state.treatments[idx] = newName;
+    renderAll(); scheduleSave();
+  }
+  function removeTreatment(idx) {
+    const name = state.treatments[idx];
+    state.treatments.splice(idx, 1);
+    delete state.per[name]; delete state.descriptions[name];
+    renderAll(); scheduleSave();
+  }
+  function addTreatment(name) {
+    name = (name || '').trim();
+    if (!name) return;
+    if (state.treatments.includes(name)) { showToast('That treatment already exists.', 'warning'); return; }
+    state.treatments.push(name);
+    ensureTreatment(name, true);
+    renderAll(); scheduleSave();
+  }
+  document.getElementById('trt-add-btn').addEventListener('click', () => { addTreatment(addInput.value); addInput.value = ''; addInput.focus(); });
+  addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTreatment(addInput.value); addInput.value = ''; } });
+  resetBtn.addEventListener('click', () => { state.treatments = detected.slice(); reconcileTreatments(); renderAll(); scheduleSave(); });
+
+  // --- groups UI -----------------------------------------------------------
+  function renderGroups() {
+    groupsEl.innerHTML = '';
+    groupNames.forEach(gname => {
+      const sec = el('div', { class: 'grp' });
+      sec.dataset.group = gname;
+      const head = el('div', { class: 'grp__head' });
+      head.appendChild(el('h2', { class: 'grp__name' }, gname));
+      const seg = el('div', { class: 'seg' });
+      const scope = state.scopes[gname];
+      const gBtn = el('button', { type: 'button' }, 'Global');
+      const pBtn = el('button', { type: 'button' }, 'Per-treatment');
+      if (scope === 'global') gBtn.classList.add('on'); else pBtn.classList.add('on');
+      if (!state.treatments.length) { pBtn.disabled = true; pBtn.title = 'Add treatments first'; }
+      gBtn.addEventListener('click', () => setScope(gname, 'global'));
+      pBtn.addEventListener('click', () => { if (state.treatments.length) setScope(gname, 'per_treatment'); });
+      seg.appendChild(gBtn); seg.appendChild(pBtn);
+      head.appendChild(seg);
+      sec.appendChild(head);
+
+      if (scope === 'per_treatment' && state.treatments.length) {
+        sec.appendChild(el('p', { class: 'grp__hint' }, 'One value per treatment.'));
+        sec.appendChild(renderMatrix(gname));
+      } else {
+        sec.appendChild(el('p', { class: 'grp__hint' }, 'One value for the whole study.'));
+        sec.appendChild(renderGlobalDense(gname));
+      }
+      groupsEl.appendChild(sec);
+    });
+  }
+
+  function setScope(gname, mode) {
+    if (state.scopes[gname] === mode) return;
+    state.scopes[gname] = mode;
+    renderAll(); scheduleSave();
+  }
+
+  // Global mode uses the same dense table as per-treatment, with a single
+  // "Whole study" row — carrying the compact layout across both modes.
+  function matrixHead(fields, corner) {
+    const thead = el('thead'); const htr = el('tr');
+    htr.appendChild(el('th', null, corner));
+    fields.forEach(f => {
+      const th = el('th');
+      th.innerHTML = f.label + (f.required ? ' <span class="req">*</span>' : '')
+        + (f.unit ? '<br><span class="th-unit">' + f.unit + '</span>' : '');
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr); return thead;
+  }
+
+  function renderGlobalDense(gname) {
+    const fields = fieldsInGroup[gname];
+    const wrap = el('div', { class: 'matrix-wrap' });
+    const table = el('table', { class: 'matrix' });
+    table.appendChild(matrixHead(fields, ''));
+    const tbody = el('tbody'); const tr = el('tr');
+    tr.appendChild(el('td', { class: 'trt-cell' }, 'Whole study'));
+    fields.forEach(f => { const td = el('td'); td.appendChild(makeGlobalCell(f)); tr.appendChild(td); });
+    tbody.appendChild(tr); table.appendChild(tbody); wrap.appendChild(table);
+    return wrap;
+  }
+
+  function makeGlobalCell(f) {
+    const input = makeControl(f, 'cell-input');
+    const e = state.global[f.id];
+    if (e && e.value != null) {
+      applyValue(input, e.value, e.source);
+      if (e.source === 'document' && e.source_quote) input.title = 'From paper: ' + e.source_quote;
+    }
+    input.addEventListener('input', () => {
+      const v = input.value.trim();
+      state.global[f.id] = v === '' ? { value: null, source: null } : { value: v, source: 'user' };
+      input.dataset.source = v === '' ? '' : 'user';
+      input.removeAttribute('title');
+      renderStatus(); scheduleSave();
+    });
+    return input;
+  }
+
+  function makeControl(f, cls) {
+    if (f.options && f.options.length) {
+      // Strict dropdown of existing values (USDA texture, or DB Management / Flux).
+      const sel = el('select', { class: cls });
+      sel.appendChild(el('option', { value: '' }, '—'));
+      f.options.forEach(o => sel.appendChild(el('option', { value: o }, o)));
+      return sel;
+    }
+    const numeric = (f.dtype === 'int' || f.dtype === 'float');
+    const input = el('input', { class: cls, type: numeric ? 'number' : 'text', autocomplete: 'off' });
+    if (f.dtype === 'float') input.setAttribute('step', 'any');
+    return input;
+  }
+
+  // Set a control's value. A strict <select> only accepts a value already in its
+  // option list — the server resolves AI-extracted terms to the allowed vocabulary
+  // (or drops them), so an off-list value here just stays blank rather than being
+  // injected as a new, non-canonical option.
+  function applyValue(input, value, source) {
+    if (value == null || value === '') { input.value = ''; input.dataset.source = ''; return; }
+    const v = String(value);
+    if (input.tagName === 'SELECT' && ![].some.call(input.options, o => o.value === v)) {
+      input.value = ''; input.dataset.source = ''; return;
+    }
+    input.value = v;
+    input.dataset.source = source || 'user';
+  }
+
+  function renderMatrix(gname) {
+    const fields = fieldsInGroup[gname];
+    const wrap = el('div', { class: 'matrix-wrap' });
+    const table = el('table', { class: 'matrix' });
+    table.appendChild(matrixHead(fields, 'Treatment'));
+    const tbody = el('tbody');
+    state.treatments.forEach(t => {
+      const tr = el('tr');
+      const tc = el('td', { class: 'trt-cell' }, t);
+      if (state.descriptions[t]) tc.title = state.descriptions[t];
+      tr.appendChild(tc);
+      fields.forEach(f => { const td = el('td'); td.appendChild(makeCell(t, f)); tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); wrap.appendChild(table);
+    return wrap;
+  }
+
+  function makeCell(t, f) {
+    const input = makeControl(f, 'cell-input');
+    const e = (state.per[t] || {})[f.id];
+    if (e && e.value != null) applyValue(input, e.value, e.source);
+    input.addEventListener('input', () => {
+      const v = input.value.trim();
+      ensureTreatment(t, false);
+      state.per[t][f.id] = v === '' ? { value: null, source: null } : { value: v, source: 'user' };
+      input.dataset.source = v === '' ? '' : 'user';
+      renderStatus(); scheduleSave();
+    });
+    return input;
+  }
+
+  // --- status + save -------------------------------------------------------
+  function missingRequired() {
+    const missing = [];
+    groupNames.forEach(gname => {
+      const scope = state.scopes[gname];
+      fieldsInGroup[gname].forEach(f => {
+        if (!f.required) return;
+        if (scope === 'per_treatment' && state.treatments.length) {
+          const gaps = state.treatments.filter(t => !((state.per[t] || {})[f.id] && (state.per[t][f.id].value || state.per[t][f.id].value === 0)));
+          if (gaps.length) missing.push(f.label + ' (' + gaps.length + ' treatment' + (gaps.length > 1 ? 's' : '') + ')');
+        } else {
+          if (!(state.global[f.id] && (state.global[f.id].value || state.global[f.id].value === 0))) missing.push(f.label);
+        }
+      });
+    });
+    return missing;
+  }
+  function renderStatus() {
+    const missing = missingRequired();
+    soilReq.textContent = missing.length ? (missing.length + ' required value(s) still needed') : 'All required values filled';
+    soilReq.className = missing.length ? 'soil-required--warn' : 'soil-required--ok';
+  }
+
+  let saveTimer = null;
+  function scheduleSave() { soilSaved.textContent = 'Saving…'; clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); }
+  function payloadFrom(obj) {
+    const out = {};
+    Object.keys(obj).forEach(fid => {
+      const e = obj[fid];
+      // Persist anything the contributor entered/edited (source 'user') or has
+      // confirmed (a prior save, or Continue on this stage — see confirmAll). Unedited,
+      // unconfirmed paper prefills are left out of autosaves so a future re-extraction
+      // can still refresh them; hitting Continue commits them. Empty fields never save.
+      if (e && (e.value || e.value === 0) && (e.source === 'user' || e._c)) out[fid] = e;
+    });
+    return out;
+  }
+  async function save() {
+    const descriptions = {};
+    state.treatments.forEach(t => { if ((state.descriptions[t] || '').trim()) descriptions[t] = state.descriptions[t].trim(); });
+    const payload = { treatments: state.treatments, descriptions: descriptions, scopes: state.scopes, global: payloadFrom(state.global), per_treatment: {} };
+    state.treatments.forEach(t => { if (state.per[t]) { const p = payloadFrom(state.per[t]); if (Object.keys(p).length) payload.per_treatment[t] = p; } });
+    try {
+      const resp = await fetch(saveUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken }, body: JSON.stringify(payload),
+      });
+      soilSaved.textContent = resp.ok ? 'Saved' : 'Save failed';
+    } catch (e) { soilSaved.textContent = 'Save failed'; }
+  }
+
+  // Continue = the contributor confirms the page as shown. Accepting a paper-suggested
+  // value (no edit) is a confirmation, so mark every non-blank field confirmed before
+  // the final save — a good extraction should need no edits, yet still be persisted.
+  function confirmAll() {
+    const mark = obj => Object.values(obj).forEach(e => { if (e && (e.value || e.value === 0)) e._c = true; });
+    mark(state.global);
+    state.treatments.forEach(t => { if (state.per[t]) mark(state.per[t]); });
+  }
+
+  document.getElementById('soil-continue').addEventListener('click', async () => {
+    const missing = missingRequired();
+    if (missing.length) { showToast('Please fill the required value(s): ' + missing.join(', '), 'warning'); return; }
+    confirmAll();
+    await save();
+    window.location.href = nextUrl;
+  });
+
+  // --- initial paint -------------------------------------------------------
+  function renderAll() { renderTreatments(); renderGroups(); renderStatus(); }
+  renderAll();
+})();
+</script>
+{% endblock %}

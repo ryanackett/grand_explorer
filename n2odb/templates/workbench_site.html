@@ -1,0 +1,383 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Site Information | GRAND Explorer{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% include '_wizard_head.html' %}
+<style>
+    .site-status { display:flex; gap:1.25rem; align-items:baseline; flex-wrap:wrap;
+        margin-bottom:1.25rem; font-size:1.3rem; }
+    .site-required--ok { color:#4a7c62; font-weight:600; }
+    .site-required--warn { color:#b9832f; font-weight:600; }
+    .site-saved { color:#9aa8a0; font-size:1.15rem; }
+
+    .site-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:2rem; align-items:start; }
+    @media (max-width:860px) {
+        .site-grid { grid-template-columns:1fr; gap:1.25rem; }
+        .site-columns { position:static !important; max-height:none !important; }
+    }
+    .site-columns { position:sticky; top:1rem; max-height:calc(100vh - 3rem); overflow:auto; }
+
+    .field-group__name { font-size:1.1rem; text-transform:uppercase; letter-spacing:.08em;
+        color:#9aa8a0; margin:1.4rem 0 .6rem; }
+
+    .site-field { margin-bottom:1rem; padding:.5rem .6rem; border-radius:8px; transition:background .15s ease; }
+    .site-field.drop-over { background:#eef3f0; outline:2px dashed #82968c; }
+    .site-field__label { font-size:1.3rem; color:#2c3e50; display:block; margin-bottom:.3rem; }
+    .site-field__unit { color:#8a978f; font-size:1.1rem; }
+    .req { color:#c0704a; font-weight:700; }
+    .site-field__row { display:flex; align-items:center; gap:.6rem; }
+    .site-input {
+        flex:1; padding:8px 11px; border:1px solid #ced4da; border-radius:6px;
+        font-size:1.25rem; font-family:inherit; background:#fff; color:#2c3e50; min-width:0;
+    }
+    .site-input:focus { outline:none; border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+    .site-input--area { resize:vertical; min-height:5.5rem; line-height:1.45; }
+    .site-field__row:has(.site-input--area) { align-items:flex-start; }
+
+    .prov {
+        font-size:1.05rem; border-radius:50px; padding:2px 10px; white-space:nowrap;
+        cursor:default;
+    }
+    .prov--document { background:#eef3f0; color:#4a7c62; cursor:help; }
+    .prov--column   { background:#fbf1e5; color:#b9832f; }
+    .prov--user     { background:#eef1f4; color:#7a8894; }
+    .prov--empty    { display:none; }
+    .prov__clear { border:none; background:none; color:inherit; cursor:pointer; font-size:1.2rem;
+        padding:0 0 0 4px; margin:0; height:auto; width:auto; text-transform:none; letter-spacing:normal; }
+    .prov__clear:hover { background:none; box-shadow:none; }
+
+    /* Leftover-column cloud (same language as the mapping step) */
+    .site-columns .wb-subhead { margin-top:.5rem; }
+    .map-hint { font-size:1.2rem; color:#8a978f; margin:.1rem 0 .9rem; }
+    .cloud-search { width:100%; padding:8px 11px; margin-bottom:.6rem; border:1px solid #ced4da;
+        border-radius:6px; font-size:1.2rem; font-family:inherit; }
+    .cloud { display:flex; flex-wrap:wrap; gap:.6rem; align-content:flex-start; min-height:110px;
+        border:2px dashed #dfe5e2; border-radius:10px; padding:1rem; background:#fafbfa; }
+    .cloud-empty { color:#9aa8a0; font-size:1.2rem; margin:auto; }
+    .col-chip { display:inline-flex; align-items:center; gap:.45rem; background:#fff;
+        border:1px solid #cdd6d1; border-left:4px solid #c3cec8; border-radius:50px;
+        padding:.4rem .85rem; font-size:1.25rem; color:#2c3e50; cursor:grab; user-select:none;
+        transition:box-shadow .12s ease, border-color .12s ease; }
+    .col-chip:hover { box-shadow:0 2px 9px rgba(0,0,0,.08); }
+    .col-chip.armed { border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.22); }
+    .col-chip.suggested { border-left-color:#d8a657; }
+    .col-chip.dragging { opacity:.4; }
+    .col-chip__dtype { font-size:.95rem; text-transform:uppercase; letter-spacing:.04em;
+        color:#82968c; background:#eef3f0; border-radius:4px; padding:1px 6px; }
+    .site-grid.arming .site-field { outline:1px dashed #d4dcd7; }
+</style>
+
+<section class="workbench-section">
+  <div class="workbench-container site-container"
+       data-save-url="{% url 'workbench-site-save' public_token %}"
+       data-back-url="{% url 'workbench-mapping' public_token %}"
+       data-next-url="{% url 'workbench-soil' public_token %}">
+
+    {% include '_wizard_progress.html' %}
+
+    <h1>Site &amp; study details</h1>
+    <p class="step-lead">
+      One-per-study facts about where and how the data was collected. We've pre-filled
+      what we could from your paper (<span class="prov prov--document" style="cursor:default;">from paper</span>);
+      confirm or edit each one. If a detail is a column in your CSV instead, drag it from
+      the box on the right onto the matching field.
+    </p>
+
+    <div class="site-status">
+      <span id="site-required" class="site-required--warn">…</span>
+      <span id="site-saved" class="site-saved"></span>
+    </div>
+
+    <div class="site-grid">
+      <div class="site-form">
+        {% for group in field_groups %}
+        <div class="field-group">
+          <div class="field-group__name">{{ group.name }}</div>
+          {% for f in group.fields %}
+          <div class="site-field" data-field="{{ f.id }}">
+            <label class="site-field__label" for="in-{{ f.id }}">
+              {{ f.label }}{% if f.unit %} <span class="site-field__unit">({{ f.unit }})</span>{% endif %}{% if f.required %} <span class="req">*</span>{% endif %}
+            </label>
+            <div class="site-field__row">
+              {% if f.options %}
+              <select class="site-input" id="in-{{ f.id }}" data-field="{{ f.id }}">
+                <option value="">—</option>
+                {% for opt in f.options %}<option value="{{ opt }}">{{ opt }}</option>{% endfor %}
+              </select>
+              {% elif f.dtype == 'text' %}
+              <textarea class="site-input site-input--area" id="in-{{ f.id }}" data-field="{{ f.id }}"
+                        rows="4" autocomplete="off"></textarea>
+              {% else %}
+              <input class="site-input" id="in-{{ f.id }}" data-field="{{ f.id }}"
+                     type="{% if f.dtype == 'int' or f.dtype == 'float' %}number{% else %}text{% endif %}"
+                     {% if f.dtype == 'float' %}step="any"{% endif %} autocomplete="off">
+              {% endif %}
+              <span class="prov prov--empty" data-prov="{{ f.id }}"></span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="site-columns">
+        <h2 class="wb-subhead">Columns from your file</h2>
+        <p class="map-hint">
+          Leftover columns from your spreadsheet. If one holds a site value
+          (coordinates, MAP/MAT…), drag it onto the matching field — or click it, then
+          click a field. Soil and management columns come up on the next step.
+        </p>
+        <input id="cloud-search" class="cloud-search" type="search" placeholder="Filter columns…">
+        <div id="column-cloud" class="cloud"></div>
+      </div>
+    </div>
+
+    <div class="wb-actions">
+      <a href="{% url 'workbench-mapping' public_token %}" class="wb-btn wb-btn--outline">&larr;&nbsp;Back</a>
+      <button type="button" class="wb-btn wb-btn--primary" id="site-continue">Continue&nbsp;&rarr;</button>
+    </div>
+
+  </div>
+</section>
+
+{{ field_groups|json_script:"fields-data" }}
+{{ initial_values|json_script:"values-data" }}
+{{ leftover_columns|json_script:"columns-data" }}
+{{ required_ids|json_script:"required-data" }}
+
+<script>
+(function () {
+  const root       = document.querySelector('.site-container');
+  const grid       = document.querySelector('.site-grid');
+  const saveUrl    = root.dataset.saveUrl;
+  const nextUrl    = root.dataset.nextUrl;
+  const fieldGroups= JSON.parse(document.getElementById('fields-data').textContent);
+  const initial    = JSON.parse(document.getElementById('values-data').textContent);
+  const columns    = JSON.parse(document.getElementById('columns-data').textContent);
+  const requiredIds= JSON.parse(document.getElementById('required-data').textContent);
+
+  const fieldById = {};
+  fieldGroups.forEach(g => g.fields.forEach(f => { fieldById[f.id] = f; }));
+
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+  const csrftoken = getCookie('csrftoken');
+
+  // Per-field state: {value, source, column?, source_quote?}. Values loaded from a
+  // prior save (_saved) are already confirmed; paper-only prefills stay unconfirmed
+  // until Continue, so a re-extraction can still refresh them in the meantime.
+  const state = {};
+  fieldGroups.forEach(g => g.fields.forEach(f => {
+    const seed = initial[f.id] ? Object.assign({}, initial[f.id]) : { value: null, source: null };
+    if (seed._saved) seed._c = true;
+    state[f.id] = seed;
+  }));
+
+  const cloud    = document.getElementById('column-cloud');
+  const search   = document.getElementById('cloud-search');
+  const siteReq  = document.getElementById('site-required');
+  const siteSaved= document.getElementById('site-saved');
+  let armed = null;
+
+  function el(tag, attrs, text) {
+    const n = document.createElement(tag);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  // Which field (if any) currently pulls from a given column.
+  function fieldForColumn(name) {
+    return Object.keys(state).find(fid => state[fid].source === 'column' && state[fid].column === name) || null;
+  }
+
+  function renderProvenance(fid) {
+    const badge = document.querySelector('[data-prov="' + fid + '"]');
+    const s = state[fid];
+    badge.className = 'prov';
+    badge.innerHTML = '';
+    badge.removeAttribute('title');
+    if (!s.value && s.value !== 0) { badge.classList.add('prov--empty'); return; }
+    if (s.source === 'document') {
+      badge.classList.add('prov--document');
+      badge.appendChild(el('span', null, 'from paper'));
+      if (s.source_quote) badge.title = s.source_quote;
+    } else if (s.source === 'column') {
+      badge.classList.add('prov--column');
+      badge.appendChild(el('span', null, 'from column “' + s.column + '”'));
+      const x = el('button', { type: 'button', class: 'prov__clear', 'aria-label': 'Clear' }, '×');
+      x.addEventListener('click', () => setField(fid, null, null));
+      badge.appendChild(x);
+    } else {
+      badge.classList.add('prov--user');
+      badge.appendChild(el('span', null, 'you entered'));
+    }
+  }
+
+  function setInput(fid) {
+    const input = document.getElementById('in-' + fid);
+    if (input) input.value = (state[fid].value == null ? '' : state[fid].value);
+  }
+
+  function setField(fid, value, source, extra) {
+    state[fid] = Object.assign({ value: value, source: value == null ? null : source }, extra || {});
+    setInput(fid);
+    renderProvenance(fid);
+    renderCloud();
+    renderStatus();
+    scheduleSave();
+  }
+
+  function assignColumn(colName, fid) {
+    const col = columns.find(c => c.name === colName);
+    if (!col) return;
+    // a column feeds only one field at a time
+    const prev = fieldForColumn(colName);
+    if (prev && prev !== fid) setField(prev, null, null);
+    setField(fid, col.value, 'column', { column: colName });
+    if (armed === colName) setArmed(null);
+  }
+
+  function setArmed(colName) {
+    armed = colName;
+    grid.classList.toggle('arming', !!armed);
+    renderCloud();
+  }
+
+  function makeChip(c) {
+    const sug = c.suggestion || {};
+    const chip = el('div', {
+      class: 'col-chip', draggable: 'true', role: 'button', tabindex: '0',
+      title: (c.samples && c.samples.length ? c.name + ' — e.g. ' + c.samples.join(', ') : c.name)
+        + (c.distinct > 1 ? ' (varies across rows)' : ''),
+    });
+    chip.dataset.col = c.name;
+    if (armed === c.name) chip.classList.add('armed');
+    if (sug.canonical_field && sug.confidence >= 0.6) chip.classList.add('suggested');
+    chip.appendChild(el('span', null, c.name));
+    chip.appendChild(el('span', { class: 'col-chip__dtype' }, c.dtype));
+    if (sug.canonical_field && sug.confidence >= 0.6 && fieldById[sug.canonical_field]) {
+      const accept = el('button', { type: 'button', class: 'col-chip__accept',
+        style: 'border:none;background:none;color:#b9832f;cursor:pointer;font-size:1.1rem;padding:0 0 0 .15rem;text-transform:none;letter-spacing:normal;height:auto;margin:0;' },
+        '→ ' + fieldById[sug.canonical_field].label);
+      accept.addEventListener('click', (e) => { e.stopPropagation(); assignColumn(c.name, sug.canonical_field); });
+      chip.appendChild(accept);
+    }
+    chip.addEventListener('click', () => setArmed(armed === c.name ? null : c.name));
+    chip.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setArmed(armed === c.name ? null : c.name); }
+    });
+    chip.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', c.name);
+      e.dataTransfer.effectAllowed = 'copy';
+      chip.classList.add('dragging');
+    });
+    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+    return chip;
+  }
+
+  function renderCloud() {
+    const q = (search.value || '').trim().toLowerCase();
+    cloud.innerHTML = '';
+    // A column stays available even once used (it may map elsewhere); mark used ones.
+    const shown = columns.filter(c => !q || c.name.toLowerCase().includes(q));
+    if (!shown.length) {
+      cloud.appendChild(el('div', { class: 'cloud-empty' },
+        columns.length ? 'No columns match.' : 'No leftover columns — everything was mapped as time-series.'));
+      return;
+    }
+    shown.forEach(c => {
+      const usedBy = fieldForColumn(c.name);
+      const chip = makeChip(c);
+      if (usedBy) { chip.style.opacity = '.5'; chip.title = c.name + ' → ' + (fieldById[usedBy] ? fieldById[usedBy].label : usedBy); }
+      cloud.appendChild(chip);
+    });
+  }
+
+  function renderStatus() {
+    const filled = requiredIds.filter(id => state[id] && (state[id].value || state[id].value === 0)).length;
+    siteReq.textContent = filled + ' of ' + requiredIds.length + ' required details filled';
+    siteReq.className = (filled === requiredIds.length) ? 'site-required--ok' : 'site-required--warn';
+  }
+
+  // Wire the form inputs + drop targets.
+  document.querySelectorAll('.site-field').forEach(fieldEl => {
+    const fid = fieldEl.dataset.field;
+    const input = document.getElementById('in-' + fid);
+    input.addEventListener('input', () => {
+      const v = input.value.trim();
+      state[fid] = { value: v === '' ? null : v, source: v === '' ? null : 'user' };
+      renderProvenance(fid); renderCloud(); renderStatus(); scheduleSave();
+    });
+    fieldEl.addEventListener('dragover', (e) => { e.preventDefault(); fieldEl.classList.add('drop-over'); });
+    fieldEl.addEventListener('dragleave', () => fieldEl.classList.remove('drop-over'));
+    fieldEl.addEventListener('drop', (e) => {
+      e.preventDefault(); fieldEl.classList.remove('drop-over');
+      const col = e.dataTransfer.getData('text/plain');
+      if (col) assignColumn(col, fid);
+    });
+    fieldEl.addEventListener('click', () => { if (armed) assignColumn(armed, fid); });
+  });
+
+  search.addEventListener('input', renderCloud);
+
+  let saveTimer = null;
+  function scheduleSave() {
+    siteSaved.textContent = 'Saving…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 600);
+  }
+  async function save() {
+    const payload = { values: {} };
+    Object.keys(state).forEach(fid => {
+      const e = state[fid];
+      // Persist the contributor's own answers (typed / filled from a CSV column) and
+      // anything confirmed (a prior save, or Continue on this stage — see confirmAll).
+      // Unconfirmed paper prefills are left out of autosaves so a re-extraction can
+      // still refresh them; empty fields never save.
+      if (e && (e.value || e.value === 0) &&
+          (e._c || (e.source && e.source !== 'document'))) {
+        payload.values[fid] = e;
+      }
+    });
+    try {
+      const resp = await fetch(saveUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify(payload),
+      });
+      siteSaved.textContent = resp.ok ? 'Saved' : 'Save failed';
+    } catch (e) { siteSaved.textContent = 'Save failed'; }
+  }
+
+  // Continue = the contributor confirms the page as shown. Accepting a paper-suggested
+  // value without editing it is a confirmation, so mark every non-blank field confirmed
+  // before the final save — a good extraction should need no edits, yet still persist.
+  function confirmAll() {
+    Object.values(state).forEach(e => { if (e && (e.value || e.value === 0)) e._c = true; });
+  }
+
+  document.getElementById('site-continue').addEventListener('click', async () => {
+    const missing = requiredIds.filter(id => !(state[id] && (state[id].value || state[id].value === 0)));
+    if (missing.length) {
+      showToast('Please fill the required detail(s): '
+        + missing.map(id => fieldById[id] ? fieldById[id].label : id).join(', '), 'warning');
+      return;
+    }
+    confirmAll();
+    await save();
+    window.location.href = nextUrl;
+  });
+
+  // Initial paint.
+  Object.keys(state).forEach(fid => { setInput(fid); renderProvenance(fid); });
+  renderCloud();
+  renderStatus();
+})();
+</script>
+{% endblock %}

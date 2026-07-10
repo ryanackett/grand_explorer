@@ -1,0 +1,364 @@
+{% comment %}
+Shared data-review panel: the global study/site aside + per-treatment treatment
+switcher, stacked Highcharts graph, and scrollable data table. Included by both the
+contributor Review stage and the staff curation page. Requires ``review_data`` in
+context (the _build_review payload) and Highcharts loaded in the page <head>.
+Page-agnostic: no wizard URLs here — the Review stage adds its own Continue handler.
+{% endcomment %}
+{{ review_data|json_script:"review-data" }}
+<style>
+    .rv-layout { display:grid; grid-template-columns:320px minmax(0,1fr); gap:1.75rem;
+        align-items:start; }
+
+    /* --- Left: global site/study panel ------------------------------------ */
+    .rv-side { position:sticky; top:9rem; background:#f7f9f8; border:1px solid #e6ece9;
+        border-radius:12px; padding:1.25rem 1.35rem 1.5rem; }
+    .rv-side h2 { font-family:'Georgia', serif; color:#2c3e50; font-size:1.6rem;
+        margin:0 0 1rem; padding-bottom:.6rem; border-bottom:2px solid #e0e8e3; }
+    .rv-side__group { margin-bottom:1.35rem; }
+    .rv-side__group:last-child { margin-bottom:0; }
+    .rv-side__gname { font-size:1.15rem; font-weight:700; text-transform:uppercase;
+        letter-spacing:.04em; color:#82968c; margin:0 0 .5rem; }
+    .rv-kv { display:flex; justify-content:space-between; gap:.75rem; padding:.15rem 0;
+        border-bottom:1px dotted #e2e8e5; font-size:1.25rem; line-height:1.3; }
+    .rv-kv:last-child { border-bottom:none; }
+    .rv-kv__k { color:#6b7c73; flex:0 0 auto; max-width:52%; }
+    .rv-kv__v { color:#2c3e50; font-weight:600; text-align:right; word-break:break-word; }
+    .rv-kv__v a { color:#4a7c8f; word-break:break-all; }
+    .rv-kv__na { color:#c4ccc7; }
+    .rv-kv--stack { flex-direction:column; align-items:stretch; }
+    .rv-abstract { margin-top:.3rem; max-height:9rem; overflow-y:auto; text-align:left;
+        font-size:1.15rem; font-weight:400; color:#3c4d45; line-height:1.4;
+        padding:.5rem .6rem; background:#fff; border:1px solid #e2e8e5; border-radius:6px; }
+    .rv-side__empty { color:#9aa8a0; font-style:italic; font-size:1.2rem; }
+
+    /* --- Right: treatment switcher + graph + table ------------------------ */
+    .rv-main { min-width:0; }
+    .rv-switch { display:flex; align-items:center; gap:1rem; margin-bottom:.35rem; }
+    .rv-arrow { flex:0 0 auto; width:44px; height:44px; border-radius:50%; border:2px solid #c3cec8;
+        background:#fff; color:#5a6b63; font-size:1.7rem; line-height:1; cursor:pointer;
+        display:flex; align-items:center; justify-content:center; padding:0;
+        text-transform:none; letter-spacing:normal; transition:all .2s ease; }
+    .rv-arrow:hover:not(:disabled) { border-color:#82968c; background:#eef3f0; color:#4a5d54; }
+    .rv-arrow:disabled { opacity:.35; cursor:default; }
+    .rv-tname { flex:1; text-align:center; min-width:0; }
+    .rv-tname__name { font-family:'Georgia', serif; font-size:2.1rem; font-weight:700;
+        color:#2c3e50; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .rv-tname__count { display:block; font-size:1.2rem; color:#9aa8a0; margin-top:.15rem; }
+
+    /* Per-treatment Treatment-table fields (Soil / Crop & management, per-treatment
+       scope). Every field shows — blanks included — so a reviewer can verify each. */
+    .rv-details { margin:.9rem 0 1.1rem; }
+    .rv-desc { font-size:1.3rem; color:#5a6b63; font-style:italic; margin:0 0 .55rem; }
+    .rv-tgroup { margin:0 0 .55rem; }
+    .rv-tgname { display:block; font-size:1.05rem; font-weight:700; text-transform:uppercase;
+        letter-spacing:.04em; color:#82968c; margin:0 0 .35rem; }
+    .rv-tkv { display:inline-block; font-size:1.2rem; color:#3c4d45; background:#f4f7f5;
+        border:1px solid #e6ece9; border-radius:6px; padding:.2rem .55rem; margin:0 .4rem .4rem 0; }
+    .rv-tkv b { color:#6b7c73; font-weight:600; }
+    .rv-tna { color:#c4ccc7; }
+
+    .rv-chart { width:100%; height:680px; }
+    .rv-noplot { padding:3rem 1rem; text-align:center; color:#9aa8a0; font-size:1.4rem;
+        background:#f7f9f8; border:1px dashed #d7e0db; border-radius:12px; }
+
+    /* Table */
+    .rv-tablewrap { margin-top:1.5rem; }
+    .rv-tablewrap h3 { font-family:'Georgia', serif; color:#2c3e50; font-size:1.6rem;
+        margin:0 0 .35rem; }
+    .rv-tablewrap__note { font-size:1.2rem; color:#9aa8a0; margin:0 0 .7rem; }
+    .rv-tablescroll { max-height:460px; overflow:auto; border:1px solid #e6ece9; border-radius:10px; }
+    table.rv-table { border-collapse:collapse; width:100%; font-size:1.2rem; }
+    table.rv-table th, table.rv-table td { padding:.45rem .8rem; text-align:right;
+        border-bottom:1px solid #eef2f0; white-space:nowrap; }
+    table.rv-table th { position:sticky; top:0; background:#f2f6f4; color:#3c4d45;
+        font-weight:700; z-index:1; text-align:right; }
+    table.rv-table th small { display:block; font-weight:400; color:#8a978f; font-size:.85em; }
+    table.rv-table td:first-child, table.rv-table th:first-child { text-align:left; position:sticky;
+        left:0; background:#fff; }
+    table.rv-table th:first-child { background:#f2f6f4; z-index:2; }
+    table.rv-table tbody tr:nth-child(even) td { background:#fafcfb; }
+    table.rv-table tbody tr:nth-child(even) td:first-child { background:#fafcfb; }
+
+    @media (max-width:900px) {
+        .rv-layout { grid-template-columns:1fr; }
+        .rv-side { position:static; }
+    }
+</style>
+
+<div class="rv-layout">
+    <!-- Left: global site/study info -->
+    <aside class="rv-side">
+        <h2>Study &amp; Site</h2>
+        {% for group in review_data.global %}
+        <div class="rv-side__group">
+            <p class="rv-side__gname">{{ group.name }}</p>
+            {% for item in group.items %}
+            {% if item.label == 'Abstract' and not item.empty %}
+            <div class="rv-kv rv-kv--stack">
+                <span class="rv-kv__k">{{ item.label }}</span>
+                <div class="rv-abstract">{{ item.value }}</div>
+            </div>
+            {% else %}
+            <div class="rv-kv">
+                <span class="rv-kv__k">{{ item.label }}</span>
+                <span class="rv-kv__v">{% if item.empty %}<span class="rv-kv__na">—</span>{% elif item.label == 'Link' %}<a href="{{ item.value }}" target="_blank" rel="noopener">{{ item.value }}</a>{% else %}{{ item.value }}{% if item.unit %} <small>{{ item.unit }}</small>{% endif %}{% endif %}</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% empty %}
+        <p class="rv-side__empty">No global study details were filled in.</p>
+        {% endfor %}
+    </aside>
+
+    <!-- Right: per-treatment tabular + graphical -->
+    <div class="rv-main">
+        <div class="rv-switch">
+            <button type="button" class="rv-arrow" id="rv-prev" aria-label="Previous treatment">&larr;</button>
+            <div class="rv-tname">
+                <p class="rv-tname__name" id="rv-tname">—</p>
+                <span class="rv-tname__count" id="rv-tcount"></span>
+            </div>
+            <button type="button" class="rv-arrow" id="rv-next" aria-label="Next treatment">&rarr;</button>
+        </div>
+
+        <div class="rv-details" id="rv-details"></div>
+
+        <div class="rv-chart" id="rv-chart"></div>
+        <div class="rv-noplot" id="rv-noplot" style="display:none;">
+            No plottable time-series for this treatment (no dated numeric measurements were mapped).
+        </div>
+
+        <div class="rv-tablewrap">
+            <h3>Data table</h3>
+            <p class="rv-tablewrap__note" id="rv-tnote"></p>
+            <div class="rv-tablescroll">
+                <table class="rv-table">
+                    <thead id="rv-thead"></thead>
+                    <tbody id="rv-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const DATA = JSON.parse(document.getElementById('review-data').textContent);
+    const TREATMENTS = DATA.treatments || [];
+    const META = DATA.fieldMeta || {};
+
+    // Which pane / axis / render style each series field uses.
+    const CFG = {
+        n2oflux:          { pane:'top', axis:'n2o',   type:'scatter', color:'#c0392b' },
+        nitrogenapplied:  { pane:'top', axis:'mgmt',  type:'column',  color:'#8e44ad' },
+        irrigationapplied:{ pane:'top', axis:'mgmt',  type:'column',  color:'#2980b9' },
+        vwc:   { pane:'mid', axis:'moist',  type:'scatter', color:'#2471a3' },
+        wfps:  { pane:'mid', axis:'moist',  type:'scatter', color:'#16a085' },
+        soilt: { pane:'mid', axis:'temp',   type:'scatter', color:'#e67e22' },
+        airt:  { pane:'mid', axis:'temp',   type:'scatter', color:'#f1c40f' },
+        precip:{ pane:'mid', axis:'precip', type:'column',  color:'#85c1e9' },
+        soilnh4:{ pane:'bot', axis:'minn',  type:'scatter', color:'#27ae60' },
+        soilno3:{ pane:'bot', axis:'minn',  type:'scatter', color:'#c0392b' },
+    };
+    const PANE_OF = { top:['n2oflux','nitrogenapplied','irrigationapplied'],
+                      mid:['vwc','wfps','soilt','airt','precip'],
+                      bot:['soilnh4','soilno3'] };
+    const EVENT_COLOR = { fert:'#8e44ad', plant:'#27ae60', harvest:'#b9832f', tillage:'#7f8c8d', other:'#95a5a6' };
+
+    function label(fid) { return (META[fid] && META[fid].label) || fid; }
+    function unit(fid)  { return (META[fid] && META[fid].unit) || ''; }
+    function nonEmpty(series, fids) { return fids.some(f => series[f] && series[f].length); }
+
+    let idx = 0;
+    let chart = null;
+
+    function buildChart(t) {
+        const rec = DATA.perTreatment[t] || {};
+        const series = rec.series || {};
+        const noplot = document.getElementById('rv-noplot');
+        const chartEl = document.getElementById('rv-chart');
+
+        const panes = ['top', 'mid', 'bot'].filter(p => nonEmpty(series, PANE_OF[p]));
+        if (chart) { chart.destroy(); chart = null; }
+        if (!panes.length) {
+            chartEl.style.display = 'none';
+            noplot.style.display = '';
+            return;
+        }
+        chartEl.style.display = '';
+        noplot.style.display = 'none';
+
+        // Vertical layout: split the plot area across the active panes, leaving a
+        // clear band between them so the stack doesn't read as one busy block.
+        const gap = 8;
+        const h = (100 - gap * (panes.length - 1)) / panes.length;
+        const paneTop = {}, paneH = {};
+        panes.forEach((p, i) => { paneTop[p] = i * (h + gap); paneH[p] = h; });
+
+        const yAxis = [], axisIndex = {};
+        function addAxis(key, opts) { axisIndex[key] = yAxis.length; yAxis.push(opts); }
+        const AXC = '#9ca3af';
+        const titleStyle = { color:'#374151', fontSize:'12px', fontWeight:'bold' };
+        const labelStyle = { color:'#374151', fontSize:'11px' };
+        function band(p, extra) {
+            return Object.assign({ top: paneTop[p] + '%', height: paneH[p] + '%', offset: 0,
+                lineColor: AXC, tickColor: AXC, labels:{ style: labelStyle },
+                title:{ style: titleStyle } }, extra);
+        }
+        const fluxU = unit('n2oflux'), minnU = unit('soilnh4') || unit('soilno3'),
+              fertU = unit('nitrogenapplied');
+        if (panes.includes('top')) {
+            addAxis('n2o',  band('top', { title:{ text:'N₂O Flux' + (fluxU ? ' (' + fluxU + ')' : ''), style:titleStyle } }));
+            addAxis('mgmt', band('top', { title:{ text:'Fertilizer Applied' + (fertU ? ' (' + fertU + ')' : ''), style:titleStyle }, opposite:true, gridLineWidth:0 }));
+        }
+        if (panes.includes('mid')) {
+            addAxis('moist',  band('mid', { title:{ text:'Moisture (%)', style:titleStyle } }));
+            addAxis('temp',   band('mid', { title:{ text:'Temp (°C)', style:titleStyle }, opposite:true, gridLineWidth:0,
+                                            visible: nonEmpty(series, ['soilt','airt']) }));
+            addAxis('precip', band('mid', { title:{ text:'Precip (mm)', style:titleStyle }, opposite:true, gridLineWidth:0,
+                                            offset: nonEmpty(series, ['soilt','airt']) ? 46 : 0,
+                                            visible: !!(series.precip && series.precip.length) }));
+        }
+        if (panes.includes('bot')) {
+            addAxis('minn', band('bot', { title:{ text:'Soil Mineral N' + (minnU ? ' (' + minnU + ')' : ''), style:titleStyle } }));
+        }
+
+        const chartSeries = [];
+        Object.keys(CFG).forEach(fid => {
+            const data = series[fid];
+            if (!data || !data.length) return;
+            const c = CFG[fid];
+            if (axisIndex[c.axis] === undefined) return;
+            const u = unit(fid);
+            chartSeries.push({
+                name: label(fid) + (u ? ' (' + u + ')' : ''),
+                type: c.type, color: c.color, data: data,
+                yAxis: axisIndex[c.axis],
+                // Bars sit in the back row; scatter markers (and event lines) draw on
+                // top, so a marker at the same date isn't hidden behind a bar.
+                zIndex: c.type === 'column' ? 1 : 5,
+                marker: c.type === 'scatter' ? { radius: 3.5, symbol:'circle' } : { enabled:false },
+                pointWidth: c.type === 'column' ? 8 : undefined,
+                tooltip: { valueSuffix: u ? ' ' + u : '' },
+            });
+        });
+
+        // Dated timeline events → dashed vertical markers. Drawn per-pane with the
+        // renderer (not xAxis plotLines) so each line BREAKS in the gap between panes,
+        // reinforcing the visual separation of the stacked graphs. Redrawn on every
+        // render/zoom so the lines stay locked to their dates.
+        const events = rec.events || [];
+        function drawEventMarks() {
+            const c = this;
+            (c.__evMarks || []).forEach(e => e.destroy());
+            c.__evMarks = [];
+            if (!events.length) return;
+            const xa = c.xAxis[0];
+            const L = c.plotLeft, Rt = c.plotLeft + c.plotWidth, pTop = c.plotTop, pH = c.plotHeight;
+            events.forEach(ev => {
+                const x = xa.toPixels(ev.ms, false);
+                if (x < L - 0.5 || x > Rt + 0.5) return;
+                const color = EVENT_COLOR[ev.kind] || EVENT_COLOR.other;
+                panes.forEach(p => {
+                    const yTop = pTop + pH * (paneTop[p] / 100);
+                    const yBot = yTop + pH * (paneH[p] / 100);
+                    c.__evMarks.push(c.renderer.path(['M', x, yTop, 'L', x, yBot])
+                        .attr({ stroke: color, 'stroke-width': 1.5, dashstyle: 'ShortDash', zIndex: 4 }).add());
+                });
+                const yLabel = pTop + pH * (paneTop[panes[0]] / 100) + 3;
+                c.__evMarks.push(c.renderer.text(ev.label, x + 3, yLabel)
+                    .attr({ rotation: 90, zIndex: 5 })
+                    .css({ color: color, fontSize: '10px' }).add());
+            });
+        }
+
+        // Reserve extra right-hand room when the middle pane stacks a Temp *and* an
+        // (offset) Precip axis, so neither the outer axis nor its title gets clipped.
+        const stackedRight = nonEmpty(series, ['soilt','airt']) && !!(series.precip && series.precip.length);
+        chart = Highcharts.chart('rv-chart', {
+            chart: { zoomType:'x', marginRight: stackedRight ? 132 : 96, spacingTop: 6,
+                     style:{ fontFamily:'"Helvetica Neue", Helvetica, Arial, sans-serif' },
+                     events: { render: drawEventMarks } },
+            title: { text: null },
+            credits: { enabled: false },
+            legend: { verticalAlign:'bottom', itemStyle:{ fontSize:'13px', fontWeight:'bold' },
+                      symbolHeight:12, symbolWidth:12 },
+            tooltip: {
+                shared: false,
+                headerFormat: '<span style="font-size:11px;color:#6b7c73">{point.x:%e %b %Y}</span><br/>',
+                pointFormat: '<span style="color:{series.color}">●</span> {series.name}: <b>{point.y}</b>',
+            },
+            xAxis: { type:'datetime', lineColor:AXC, tickColor:AXC, labels:{ style:labelStyle } },
+            yAxis: yAxis,
+            plotOptions: {
+                series: { states: { inactive:{ opacity:1 } } },
+                column: { borderWidth:0, grouping:false, shadow:false },
+                line:   { lineWidth:2, marker:{ enabled:false } },
+            },
+            series: chartSeries,
+        });
+    }
+
+    function renderDetails(t) {
+        const rec = DATA.perTreatment[t] || {};
+        const d = rec.details || {};
+        const el = document.getElementById('rv-details');
+        let html = '';
+        if (d.description) html += '<p class="rv-desc">' + esc(d.description) + '</p>';
+        (d.groups || []).forEach(g => {
+            html += '<div class="rv-tgroup"><span class="rv-tgname">' + esc(g.name) + '</span>';
+            (g.items || []).forEach(it => {
+                const v = it.empty ? '<span class="rv-tna">—</span>'
+                    : esc(String(it.value)) + (it.unit ? ' ' + esc(it.unit) : '');
+                html += '<span class="rv-tkv"><b>' + esc(it.label) + ':</b> ' + v + '</span>';
+            });
+            html += '</div>';
+        });
+        el.innerHTML = html;
+    }
+
+    function renderTable(t) {
+        const rec = DATA.perTreatment[t] || {};
+        const cols = DATA.columns || [];
+        const rows = rec.rows || [];
+        const thead = document.getElementById('rv-thead');
+        const tbody = document.getElementById('rv-tbody');
+        thead.innerHTML = '<tr>' + cols.map(c =>
+            '<th>' + esc(c.label) + (c.unit ? '<small>' + esc(c.unit) + '</small>' : '') + '</th>'
+        ).join('') + '</tr>';
+        tbody.innerHTML = rows.map(r =>
+            '<tr>' + cols.map((c, i) => '<td>' + esc(r[i] == null ? '' : r[i]) + '</td>').join('') + '</tr>'
+        ).join('');
+        document.getElementById('rv-tnote').textContent =
+            rows.length + ' row' + (rows.length === 1 ? '' : 's') + ' — scroll to see all';
+    }
+
+    function esc(s) {
+        return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    }
+
+    function render() {
+        const t = TREATMENTS[idx];
+        document.getElementById('rv-tname').textContent = t;
+        document.getElementById('rv-tcount').textContent =
+            TREATMENTS.length > 1 ? ('Treatment ' + (idx + 1) + ' of ' + TREATMENTS.length) : '';
+        document.getElementById('rv-prev').disabled = idx === 0;
+        document.getElementById('rv-next').disabled = idx === TREATMENTS.length - 1;
+        renderDetails(t);
+        renderTable(t);
+        buildChart(t);
+    }
+
+    document.getElementById('rv-prev').addEventListener('click', () => { if (idx > 0) { idx--; render(); } });
+    document.getElementById('rv-next').addEventListener('click', () => { if (idx < TREATMENTS.length - 1) { idx++; render(); } });
+
+    if (TREATMENTS.length) {
+        render();
+    } else {
+        document.getElementById('rv-tname').textContent = 'No data to review';
+        document.getElementById('rv-chart').style.display = 'none';
+    }
+})();
+</script>

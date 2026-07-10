@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}My submissions | GRAND Explorer{% endblock %}
+
+{% block content %}
+<style>
+    .mine-sec { background:#fff; padding:10.5rem 20px 60px; min-height:80vh; }
+    .mine-wrap { max-width:1000px; margin:0 auto; }
+    .mine-wrap h1 { font-family:'Georgia', serif; color:#2c3e50; margin:0 0 .4rem; }
+    .mine-lead { font-size:1.4rem; color:#5a6b63; margin:0 0 1.75rem; }
+    .mine-new { display:inline-block; margin-bottom:1.75rem; padding:11px 24px; border-radius:50px;
+        background:#82968c; color:#fff; text-decoration:none; font-size:1.35rem; font-family:'Georgia', serif; }
+    .mine-new:hover { background:#6b7e75; color:#fff; }
+    table.mine-tbl { width:100%; border-collapse:collapse; font-size:1.35rem; }
+    table.mine-tbl th, table.mine-tbl td { padding:.7rem .9rem; text-align:left; border-bottom:1px solid #eef2f0; }
+    table.mine-tbl th { color:#7a8b82; font-weight:700; font-size:1.15rem; text-transform:uppercase; letter-spacing:.03em; }
+    table.mine-tbl a { color:#4a7c8f; font-weight:600; text-decoration:none; }
+    table.mine-tbl a:hover { text-decoration:underline; }
+    .mine-empty { color:#9aa8a0; font-style:italic; padding:2rem 0; }
+    .badge { display:inline-block; padding:.15rem .6rem; border-radius:20px; font-size:1.1rem; font-weight:700; color:#fff; }
+    .badge--draft { background:#9aa8a0; } .badge--submitted { background:#4a7c8f; }
+    .badge--in_review { background:#8e6fb0; } .badge--changes_requested { background:#c0704a; }
+    .badge--approved { background:#4a7c62; } .badge--promoted { background:#2c7a4b; }
+    .badge--rejected { background:#a0505a; }
+</style>
+
+<section class="mine-sec">
+    <div class="mine-wrap">
+        <h1>My submissions</h1>
+        <p class="mine-lead">Resume a draft, or track a contribution through curator review.</p>
+        <a href="{% url 'submit-data' %}" class="mine-new">+ Start a new submission</a>
+
+        <table class="mine-tbl">
+            <thead>
+                <tr><th>Study</th><th>Status</th><th>Last updated</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>{{ r.title }}</td>
+                    <td><span class="badge badge--{{ r.status }}">{{ r.status_label }}</span></td>
+                    <td>{{ r.updated_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if r.resumable %}
+                        <a href="{% url 'workbench-resume' r.token %}">{% if r.status == 'changes_requested' %}Edit &amp; resubmit{% else %}Resume{% endif %} &rarr;</a>
+                        {% else %}
+                        <a href="{% url 'workbench-review' r.token %}">View &rarr;</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="mine-empty">No submissions yet — start your first above.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

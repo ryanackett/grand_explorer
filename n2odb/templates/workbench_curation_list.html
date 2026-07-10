@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Curation queue | GRAND Explorer{% endblock %}
+
+{% block content %}
+<style>
+    .cur-sec { background:#fff; padding:10.5rem 20px 60px; min-height:80vh; }
+    .cur-wrap { max-width:1120px; margin:0 auto; }
+    .cur-wrap h1 { font-family:'Georgia', serif; color:#2c3e50; margin:0 0 1.5rem; }
+    table.cur-tbl { width:100%; border-collapse:collapse; font-size:1.35rem; }
+    table.cur-tbl th, table.cur-tbl td { padding:.7rem .9rem; text-align:left;
+        border-bottom:1px solid #eef2f0; }
+    table.cur-tbl th { color:#7a8b82; font-weight:700; font-size:1.15rem; text-transform:uppercase;
+        letter-spacing:.03em; }
+    table.cur-tbl tbody tr:hover { background:#f7f9f8; }
+    table.cur-tbl a { color:#2c3e50; font-weight:600; text-decoration:none; }
+    table.cur-tbl a:hover { color:#4a7c8f; text-decoration:underline; }
+    .cur-empty { color:#9aa8a0; font-style:italic; padding:2rem 0; }
+    .cur-dup { color:#b9832f; font-weight:700; font-size:1.15rem; }
+    .cur-trust { display:inline-block; padding:.05rem .5rem; border-radius:20px; font-size:1rem;
+        font-weight:700; }
+    .cur-trust--academic { background:#e7f3ec; color:#2c7a4b; }
+    .cur-trust--personal { background:#fff6e0; color:#8a6d3b; }
+    .cur-trust--other { background:#eef1f3; color:#5a6b63; }
+    .badge { display:inline-block; padding:.15rem .6rem; border-radius:20px; font-size:1.1rem;
+        font-weight:700; color:#fff; }
+    .badge--submitted { background:#4a7c8f; }
+    .badge--in_review { background:#8e6fb0; }
+    .badge--changes_requested { background:#c0704a; }
+    .badge--approved { background:#4a7c62; }
+    .badge--promoted { background:#2c7a4b; }
+    .badge--rejected { background:#a0505a; }
+</style>
+
+<section class="cur-sec">
+    <div class="cur-wrap">
+        <h1>Contribution queue</h1>
+        <table class="cur-tbl">
+            <thead>
+                <tr>
+                    <th>Study</th><th>Contributor</th><th>Treatments</th>
+                    <th>Status</th><th>Submitted</th><th>Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td><a href="{% url 'workbench-curation-detail' r.token %}">{{ r.title }}</a></td>
+                    <td>{{ r.contributor }}</td>
+                    <td>{{ r.treatments }}</td>
+                    <td><span class="badge badge--{{ r.status }}">{{ r.status_label }}</span></td>
+                    <td>{{ r.submitted_at|date:"Y-m-d"|default:"—" }}</td>
+                    <td>
+                        {% if r.trust %}<span class="cur-trust cur-trust--{{ r.trust.kind }}" title="{{ r.trust.domain }}">{{ r.trust.kind }}</span> {% endif %}
+                        {% if r.dup_doi %}<span class="cur-dup" title="This DOI already exists in the database">⚠ DOI</span>{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="cur-empty">No contributions submitted yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

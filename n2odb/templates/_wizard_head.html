@@ -1,0 +1,49 @@
+{% comment %}
+Shared visual shell for every wizard stage: the white content section, the
+centred container, section headings, the themed pill buttons, and the bottom
+action bar. Include once near the top of each wizard page's content block, then
+add page-specific styles after it. Keeps the stages visually consistent.
+{% endcomment %}
+<style>
+    /* 10.5rem top clears the fixed navbar and leaves breathing room above the
+       progress rail. */
+    .workbench-section { background:#ffffff; padding:10.5rem 20px 60px; min-height:80vh; }
+    .workbench-container { max-width: 900px; margin: 0 auto; }
+    .workbench-container h1 { font-family:'Georgia', serif; color:#2c3e50; margin-top:0; }
+    .step-lead { font-size:1.5rem; color:#5a6b63; margin-bottom:2rem; }
+
+    .wb-subhead {
+        font-family:'Georgia', serif; color:#2c3e50; font-size:1.9rem;
+        margin:2.75rem 0 .35rem;
+    }
+    .wb-subhead--optional { margin-top:3.25rem; padding-top:2.5rem; border-top:1px solid #eceeed; }
+    .wb-subhead__note { font-size:1.3rem; color:#8a978f; margin:0 0 1.25rem; }
+
+    /* Buttons — match the site's themed pill button (cf. the contact form),
+       explicitly overriding the global uppercase/letter-spaced <button> rule
+       (styles.css) so labels read normally and stay centred. */
+    .wb-btn {
+        display:inline-flex; align-items:center; justify-content:center; gap:8px;
+        font-family:'Georgia', serif; text-transform:none; letter-spacing:normal;
+        font-size:1.35rem; line-height:1; height:auto; width:auto; margin:0;
+        padding:12px 32px; border-radius:50px; border:2px solid transparent;
+        cursor:pointer; transition:all .25s ease; white-space:nowrap; text-decoration:none;
+    }
+    .wb-btn--sm { padding:8px 20px; font-size:1.2rem; }
+    .wb-btn--primary { background:#82968c; color:#fff; border-color:#82968c; }
+    .wb-btn--primary:hover {
+        background:#6b7e75; border-color:#6b7e75; color:#fff;
+        transform:translateY(-2px); box-shadow:0 5px 15px rgba(0,0,0,.1);
+    }
+    .wb-btn--outline { background:#ffffff; color:#5a6b63; border-color:#c3cec8; }
+    .wb-btn--outline:hover { background:#eef3f0; color:#4a5d54; border-color:#82968c; }
+    .wb-btn:disabled { opacity:.55; cursor:default; transform:none; box-shadow:none; }
+
+    .wb-actions {
+        display:flex; align-items:center; justify-content:space-between;
+        gap:1rem; flex-wrap:wrap; margin-top:2.25rem;
+        border-top:1px solid #eceeed; padding-top:1.5rem;
+    }
+    .wb-actions .hint { font-size:1.25rem; color:#8a978f; max-width:46em; }
+    mark.provenance { background:#ffe9a8; }
+</style>

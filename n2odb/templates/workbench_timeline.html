@@ -1,0 +1,407 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Timeline | GRAND Explorer{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% include '_wizard_head.html' %}
+<style>
+    .workbench-container.tl-container { max-width:1180px; }
+
+    .tl-status { display:flex; gap:1.25rem; align-items:baseline; flex-wrap:wrap;
+        margin-bottom:1rem; font-size:1.45rem; }
+    .tl-count { color:#4a7c62; font-weight:600; }
+    .tl-saved { color:#9aa8a0; font-size:1.3rem; }
+
+    /* Event-type section + scope toggle */
+    .tl-sec { margin-bottom:2.6rem; }
+    .tl-sec__head { display:flex; align-items:center; justify-content:space-between;
+        gap:1rem; flex-wrap:wrap; border-bottom:1px solid #eceeed; padding-bottom:.55rem; margin-bottom:.9rem; }
+    .tl-sec__title { display:flex; align-items:baseline; gap:.7rem; }
+    .tl-sec__name { font-family:'Georgia', serif; color:#2c3e50; font-size:1.9rem; margin:0; }
+    .tl-sec__n { font-size:1.3rem; color:#9aa8a0; }
+    .seg { display:inline-flex; border:1px solid #cdd6d1; border-radius:50px; overflow:hidden; background:#fff; }
+    .seg button { border:none; background:none; margin:0; height:auto; width:auto;
+        font-family:inherit; text-transform:none; letter-spacing:normal; line-height:1.3;
+        font-size:1.35rem; color:#5a6b63; padding:.5rem 1.35rem; cursor:pointer; transition:background .15s ease; }
+    .seg button.on { background:#82968c; color:#fff; }
+    .seg button:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* Each treatment is a clearly separated block within a section. */
+    .tl-trt { margin:1.6rem 0 0; padding-top:1.4rem; border-top:2px solid #e0e8e3; }
+    .tl-trt:first-of-type { border-top:none; padding-top:.2rem; }
+    .tl-trt__name { font-size:1.75rem; font-weight:700; color:#3c4d45; margin:0 0 .75rem;
+        border-left:5px solid #82968c; padding-left:.7rem; }
+    .tl-bucket { display:flex; flex-direction:column; gap:.7rem; }
+
+    /* Event card: inline row of fields that grows to use the full width */
+    .ev-card { display:flex; flex-wrap:wrap; align-items:flex-end; gap:1rem 1.15rem;
+        background:#f7f9f8; border:1px solid #e6ece9; border-left:4px solid #e3e8e5;
+        border-radius:10px; padding:.95rem 1.15rem; }
+    .ev-card[data-source="document"] { border-left-color:#7fae92; }
+    .ev-card[data-source="user"]     { border-left-color:#b7c2ba; }
+    .ev-field { display:flex; flex-direction:column; gap:.3rem; }
+    /* Text / dropdown fields stretch to fill the row so the right side isn't wasted. */
+    .ev-field--grow { flex:1 1 15rem; }
+    .ev-field--grow .ev-input { width:100%; }
+    .ev-field__label { font-size:1.3rem; color:#7a8a80; }
+    .ev-field__unit { color:#9aa8a0; }
+    /* The paper's timing suggestion: a full-width row at the bottom of the card, so
+       it can run wide without widening the date column or shifting the other fields. */
+    .ev-card__hint { flex:0 0 100%; width:100%; font-size:1.25rem; color:#b9832f;
+        margin-top:.1rem; cursor:help; line-height:1.35; }
+    .ev-input {
+        padding:10px 13px; border:1px solid #ced4da; border-radius:7px;
+        font-size:1.45rem; font-family:inherit; background:#fff; color:#2c3e50; min-width:0; }
+    .ev-input:focus { outline:none; border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+    .ev-input--date { width:18rem; font-size:1.6rem; padding:13px 15px; }
+    .ev-input--num  { width:11rem; }
+    .ev-input--text { width:16rem; }
+    .ev-input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+    .ev-input[type=number]::-webkit-outer-spin-button, .ev-input[type=number]::-webkit-inner-spin-button {
+        -webkit-appearance:none; margin:0; }
+
+    .ev-badge { font-size:1.15rem; color:#4a7c62; background:#eef3f0; border-radius:50px;
+        padding:2px 11px; cursor:help; align-self:center; }
+    .ev-card__x { margin-left:auto; align-self:flex-start; border:none; background:none; color:#a2b0a8;
+        cursor:pointer; font-size:2.4rem; line-height:1; padding:0 .4rem; height:auto; width:auto;
+        text-transform:none; letter-spacing:normal; }
+    .ev-card__x:hover { color:#c0704a; background:none; box-shadow:none; }
+
+    .tl-bucket__foot { display:flex; gap:1rem; align-items:center; margin-top:.7rem; flex-wrap:wrap; }
+    .tl-empty { color:#9aa8a0; font-size:1.35rem; font-style:italic; margin:.1rem 0; }
+    .tl-hint { font-size:1.3rem; color:#8a978f; margin:-.3rem 0 .9rem; }
+    .link-btn { border:none; background:none; color:#4a7c62; cursor:pointer; font-size:1.3rem;
+        font-family:inherit; text-transform:none; letter-spacing:normal; padding:0; height:auto; }
+    .link-btn:hover { text-decoration:underline; background:none; box-shadow:none; }
+</style>
+
+<section class="workbench-section">
+  <div class="workbench-container tl-container"
+       data-save-url="{% url 'workbench-timeline-save' public_token %}"
+       data-back-url="{% url 'workbench-soil' public_token %}">
+
+    {% include '_wizard_progress.html' %}
+
+    <h1>Timeline of events</h1>
+    <p class="step-lead">
+      The dated field operations the study reports — fertiliser applications, plantings,
+      harvests and tillage passes. We've pre-filled what we found in your paper
+      (<span class="ev-badge" style="cursor:default;">from paper</span>); add, edit or
+      remove events so each one is right. For each type, choose whether the schedule is
+      the same across the whole study (<strong>global</strong>) or entered
+      <strong>per&nbsp;treatment</strong>.
+    </p>
+
+    <div class="tl-status">
+      <span id="tl-count" class="tl-count">…</span>
+      <span id="tl-saved" class="tl-saved"></span>
+    </div>
+
+    <div id="sections"></div>
+
+    <div class="wb-actions">
+      <a href="{% url 'workbench-soil' public_token %}" class="wb-btn wb-btn--outline">&larr;&nbsp;Back</a>
+      <button type="button" class="wb-btn wb-btn--primary" id="tl-continue">Continue&nbsp;&rarr;</button>
+    </div>
+
+  </div>
+</section>
+
+{{ event_types|json_script:"types-data" }}
+{{ treatments|json_script:"treatments-data" }}
+{{ paper_events|json_script:"paper-data" }}
+{{ saved_events|json_script:"saved-data" }}
+
+<script>
+(function () {
+  const root       = document.querySelector('.tl-container');
+  const saveUrl    = root.dataset.saveUrl;
+  const sections   = JSON.parse(document.getElementById('types-data').textContent);
+  const treatments = JSON.parse(document.getElementById('treatments-data').textContent) || [];
+  const paper      = JSON.parse(document.getElementById('paper-data').textContent) || {};
+  const saved      = JSON.parse(document.getElementById('saved-data').textContent) || {};
+
+  const sectionById = {};
+  sections.forEach(s => { sectionById[s.id] = s; });
+
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+  const csrftoken = getCookie('csrftoken');
+  const clone = (o) => JSON.parse(JSON.stringify(o || []));
+
+  // --- state ---------------------------------------------------------------
+  const state = { scopes: {}, global: {}, per: {} };
+  sections.forEach(s => {
+    state.scopes[s.id] = (saved.scopes && saved.scopes[s.id]) || 'global';
+    state.global[s.id] = (saved.global && saved.global[s.id]) ? clone(saved.global[s.id]) : [];
+  });
+  treatments.forEach(t => {
+    state.per[t] = {};
+    sections.forEach(s => {
+      const has = saved.per_treatment && saved.per_treatment[t] && saved.per_treatment[t][s.id];
+      state.per[t][s.id] = has ? clone(saved.per_treatment[t][s.id]) : [];
+    });
+  });
+
+  // Seed from the paper only on a fresh visit (nothing saved yet), so we never
+  // clobber a curated timeline. The per-section "↻ from paper" button is the
+  // explicit way to pull a re-extraction's events back in later.
+  const hasSaved =
+    Object.values(state.global).some(a => a.length) ||
+    Object.values(state.per).some(sec => Object.values(sec).some(a => a.length));
+  if (!hasSaved) {
+    sections.forEach(s => { state.global[s.id] = clone(paper[s.id]); });
+  }
+
+  // --- helpers -------------------------------------------------------------
+  const sectionsEl = document.getElementById('sections');
+  const countEl    = document.getElementById('tl-count');
+  const savedEl    = document.getElementById('tl-saved');
+
+  function el(tag, attrs, text) {
+    const n = document.createElement(tag);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  const paperCount = (sid) => (paper[sid] || []).length;
+
+  function makeControl(fd) {
+    if (fd.options && fd.options.length) {
+      const sel = el('select', { class: 'ev-input ev-input--text' });
+      sel.appendChild(el('option', { value: '' }, '—'));
+      fd.options.forEach(o => sel.appendChild(el('option', { value: o }, o)));
+      return sel;
+    }
+    if (fd.dtype === 'float') {
+      const inp = el('input', { class: 'ev-input ev-input--num', type: 'number', step: 'any', autocomplete: 'off' });
+      return inp;
+    }
+    // A true date picker: only a real calendar date is stored. The paper's vague
+    // timing ("late July") is shown separately as a hint, never as the value.
+    if (fd.dtype === 'date') {
+      return el('input', { class: 'ev-input ev-input--date', type: 'date', autocomplete: 'off' });
+    }
+    return el('input', { class: 'ev-input ev-input--text', type: 'text', autocomplete: 'off' });
+  }
+
+  // A strict <select> only accepts a value already in its list; an off-list value
+  // (unresolved paper term) stays blank rather than being injected as a new option.
+  function applyValue(input, value) {
+    if (value == null || value === '') { input.value = ''; return; }
+    const v = String(value);
+    if (input.tagName === 'SELECT' && ![].some.call(input.options, o => o.value === v)) {
+      input.value = ''; return;
+    }
+    input.value = v;
+  }
+
+  function makeCard(section, list, ev) {
+    const card = el('div', { class: 'ev-card' });
+    card.dataset.source = ev.source || 'user';
+    section.fields.forEach(fd => {
+      // Text and dropdown fields grow to fill the row; date/number stay compact.
+      const grow = (fd.options && fd.options.length) || fd.dtype === 'string';
+      const wrap = el('div', { class: 'ev-field' + (grow ? ' ev-field--grow' : '') });
+      const lab = el('label', { class: 'ev-field__label' });
+      lab.textContent = fd.label;
+      if (fd.unit) lab.appendChild(el('span', { class: 'ev-field__unit' }, ' (' + fd.unit + ')'));
+      const input = makeControl(fd);
+      applyValue(input, (ev.fields || {})[fd.key]);
+      input.addEventListener('input', () => {
+        const v = (input.value || '').trim();
+        ev.fields = ev.fields || {};
+        if (v === '') delete ev.fields[fd.key];
+        else ev.fields[fd.key] = v;
+        // Pair a numeric N amount with its unit so the stored value is unambiguous.
+        if (fd.key === 'n_amount' && fd.unit) {
+          if (v === '') delete ev.fields.n_unit; else ev.fields.n_unit = fd.unit;
+        }
+        // Editing keeps the event's paper provenance (the "from paper" tag stays).
+        renderStatus(); scheduleSave();
+      });
+      wrap.appendChild(lab); wrap.appendChild(input);
+      card.appendChild(wrap);
+    });
+    if (ev.source === 'document') {
+      const badge = el('span', { class: 'ev-badge' }, 'from paper');
+      if (ev.source_quote) badge.title = ev.source_quote;
+      card.appendChild(badge);
+    }
+    const x = el('button', { type: 'button', class: 'ev-card__x', 'aria-label': 'Remove event' }, '×');
+    x.addEventListener('click', () => {
+      const i = list.indexOf(ev);
+      if (i !== -1) list.splice(i, 1);
+      render(); scheduleSave();
+    });
+    card.appendChild(x);
+    // Full-width suggestion row (kept out of the field columns so they stay aligned).
+    if (ev.date_hint) {
+      card.appendChild(el('span', {
+        class: 'ev-card__hint', title: 'As stated in the paper — pick the actual date',
+      }, 'suggestion from paper: ' + ev.date_hint));
+    }
+    return card;
+  }
+
+  function makeBucket(section, list, opts) {
+    const bucket = el('div');
+    const cards = el('div', { class: 'tl-bucket' });
+    if (!list.length) cards.appendChild(el('p', { class: 'tl-empty' }, 'No events yet.'));
+    list.forEach(ev => cards.appendChild(makeCard(section, list, ev)));
+    bucket.appendChild(cards);
+
+    const foot = el('div', { class: 'tl-bucket__foot' });
+    const add = el('button', { type: 'button', class: 'link-btn' }, '+ Add ' + section.label.toLowerCase() + ' event');
+    add.addEventListener('click', () => {
+      list.push({ fields: {}, source: 'user' });
+      render(); scheduleSave();
+    });
+    foot.appendChild(add);
+    // Reseed only makes sense for the global bucket (paper events aren't per-treatment).
+    if (opts.reseed && paperCount(section.id)) {
+      const rs = el('button', { type: 'button', class: 'link-btn' }, '↻ from paper');
+      rs.title = 'Replace these events with the ' + paperCount(section.id) + ' event(s) extracted from the paper';
+      rs.addEventListener('click', () => {
+        state.global[section.id] = clone(paper[section.id]);
+        render(); scheduleSave();
+      });
+      foot.appendChild(rs);
+    }
+    bucket.appendChild(foot);
+    return bucket;
+  }
+
+  function eventTotal() {
+    let n = 0;
+    sections.forEach(s => {
+      const nonEmpty = e => Object.keys(e.fields || {}).length || e.date_hint;
+      if (state.scopes[s.id] === 'per_treatment' && treatments.length) {
+        treatments.forEach(t => { n += (state.per[t][s.id] || []).filter(nonEmpty).length; });
+      } else {
+        n += state.global[s.id].filter(nonEmpty).length;
+      }
+    });
+    return n;
+  }
+
+  function render() {
+    sectionsEl.innerHTML = '';
+    sections.forEach(section => {
+      const sec = el('div', { class: 'tl-sec' });
+      const head = el('div', { class: 'tl-sec__head' });
+      const title = el('div', { class: 'tl-sec__title' });
+      title.appendChild(el('h2', { class: 'tl-sec__name' }, section.label));
+      const scope = state.scopes[section.id];
+      const n = (scope === 'per_treatment' && treatments.length)
+        ? treatments.reduce((a, t) => a + (state.per[t][section.id] || []).length, 0)
+        : state.global[section.id].length;
+      title.appendChild(el('span', { class: 'tl-sec__n' }, n + ' event' + (n === 1 ? '' : 's')));
+      head.appendChild(title);
+
+      const seg = el('div', { class: 'seg' });
+      const gBtn = el('button', { type: 'button' }, 'Global');
+      const pBtn = el('button', { type: 'button' }, 'Per-treatment');
+      if (scope === 'global') gBtn.classList.add('on'); else pBtn.classList.add('on');
+      if (!treatments.length) { pBtn.disabled = true; pBtn.title = 'Add treatments on the Soil & Management step first'; }
+      gBtn.addEventListener('click', () => setScope(section.id, 'global'));
+      pBtn.addEventListener('click', () => { if (treatments.length) setScope(section.id, 'per_treatment'); });
+      seg.appendChild(gBtn); seg.appendChild(pBtn);
+      head.appendChild(seg);
+      sec.appendChild(head);
+
+      if (scope === 'per_treatment' && treatments.length) {
+        sec.appendChild(el('p', { class: 'tl-hint' }, 'A separate schedule for each treatment.'));
+        treatments.forEach(t => {
+          const box = el('div', { class: 'tl-trt' });
+          box.appendChild(el('p', { class: 'tl-trt__name' }, t));
+          box.appendChild(makeBucket(section, state.per[t][section.id], { reseed: false }));
+          sec.appendChild(box);
+        });
+      } else {
+        sec.appendChild(el('p', { class: 'tl-hint' }, 'One schedule for the whole study.'));
+        sec.appendChild(makeBucket(section, state.global[section.id], { reseed: true }));
+      }
+      sectionsEl.appendChild(sec);
+    });
+    renderStatus();
+  }
+
+  // The current best guess for a section: prefer the (possibly edited) global list,
+  // then any populated treatment bucket, then the original paper prefill.
+  function bestGuess(sid) {
+    if (state.global[sid] && state.global[sid].length) return state.global[sid];
+    for (const t of treatments) {
+      if (state.per[t][sid] && state.per[t][sid].length) return state.per[t][sid];
+    }
+    return paper[sid] || [];
+  }
+
+  function setScope(sid, mode) {
+    if (state.scopes[sid] === mode) return;
+    state.scopes[sid] = mode;
+    // Carry the best guess across the switch so pre-fills aren't lost. Per-treatment
+    // differences are often minor, so seeding every treatment with the same guess is
+    // a useful starting point; only empty buckets are seeded (never overwrite edits).
+    const src = bestGuess(sid);
+    if (mode === 'per_treatment') {
+      treatments.forEach(t => {
+        if (!state.per[t][sid] || !state.per[t][sid].length) state.per[t][sid] = clone(src);
+      });
+    } else if (!state.global[sid] || !state.global[sid].length) {
+      state.global[sid] = clone(src);
+    }
+    render(); scheduleSave();
+  }
+
+  function renderStatus() {
+    const n = eventTotal();
+    countEl.textContent = n + ' event' + (n === 1 ? '' : 's') + ' in the timeline';
+  }
+
+  // --- save ----------------------------------------------------------------
+  let saveTimer = null;
+  function scheduleSave() { savedEl.textContent = 'Saving…'; clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); }
+
+  function cleanList(list) {
+    return (list || []).filter(e => (e.fields && Object.keys(e.fields).length) || e.date_hint)
+      .map(e => {
+        const o = { fields: e.fields || {}, source: e.source || 'user' };
+        if (e.source_quote) o.source_quote = e.source_quote;
+        if (e.date_hint) o.date_hint = e.date_hint;
+        return o;
+      });
+  }
+  function buildPayload() {
+    const payload = { scopes: state.scopes, global: {}, per_treatment: {} };
+    sections.forEach(s => { const l = cleanList(state.global[s.id]); if (l.length) payload.global[s.id] = l; });
+    treatments.forEach(t => {
+      const row = {};
+      sections.forEach(s => { const l = cleanList(state.per[t][s.id]); if (l.length) row[s.id] = l; });
+      if (Object.keys(row).length) payload.per_treatment[t] = row;
+    });
+    return payload;
+  }
+  async function save() {
+    try {
+      const resp = await fetch(saveUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify(buildPayload()),
+      });
+      savedEl.textContent = resp.ok ? 'Saved' : 'Save failed';
+    } catch (e) { savedEl.textContent = 'Save failed'; }
+  }
+
+  document.getElementById('tl-continue').addEventListener('click', async () => {
+    await save();
+    window.location.href = "{% url 'workbench-review' public_token %}";
+  });
+
+  render();
+})();
+</script>
+{% endblock %}

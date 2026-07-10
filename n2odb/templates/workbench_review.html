@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Review | GRAND Explorer{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/highcharts@11/highcharts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@11/modules/accessibility.js"></script>
+{% endblock %}
+
+{% block content %}
+{% include '_wizard_head.html' %}
+<style>
+    /* Full-bleed: the two-pane review needs more room than the 900px form stages. */
+    .workbench-container.review-container { max-width:1400px; }
+</style>
+
+<section class="workbench-section">
+    <div class="workbench-container review-container">
+        {% include '_wizard_progress.html' %}
+
+        <h1>Review your submission</h1>
+        <p class="step-lead">A last look before you submit. Global study details are on the
+            left; step through each treatment to check its time-series data and events.</p>
+
+        {% include '_review_panel.html' %}
+
+        <div class="wb-actions">
+            <a href="{% url 'workbench-timeline' public_token %}" class="wb-btn wb-btn--outline">&larr;&nbsp;Back</a>
+            <span class="hint">Review is read-only — go back to any step from the progress rail above to make changes.</span>
+            <button type="button" class="wb-btn wb-btn--primary" id="rv-continue">Continue&nbsp;&rarr;</button>
+        </div>
+    </div>
+</section>
+
+<script>
+    // Wizard-only: advance to the Submit stage. (The panel's own script handles the
+    // graph/table; it has no knowledge of wizard navigation.)
+    document.getElementById('rv-continue').addEventListener('click', () => {
+        window.location.href = "{% url 'workbench-submit' public_token %}";
+    });
+</script>
+{% endblock %}

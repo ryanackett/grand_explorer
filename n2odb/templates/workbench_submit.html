@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Submit | GRAND Explorer{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% include '_wizard_head.html' %}
+<style>
+    .workbench-container.submit-container { max-width:820px; }
+
+    .sub-summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(9rem,1fr));
+        gap:1rem; margin:1.5rem 0 2rem; }
+    .sub-stat { background:#f7f9f8; border:1px solid #e6ece9; border-radius:12px;
+        padding:1rem 1.15rem; text-align:center; }
+    .sub-stat__n { font-family:'Georgia', serif; font-size:2.1rem; font-weight:700; color:#2c3e50; }
+    .sub-stat__l { font-size:1.2rem; color:#7a8b82; margin-top:.2rem; }
+    .sub-stat__sub { display:block; font-size:1.05rem; color:#9aa8a0; margin-top:.15rem; }
+
+    .sub-checks { list-style:none; padding:0; margin:0 0 2rem; }
+    .sub-check { display:flex; align-items:flex-start; gap:.7rem; padding:.55rem 0;
+        border-bottom:1px dotted #e2e8e5; font-size:1.35rem; color:#3c4d45; }
+    .sub-check:last-child { border-bottom:none; }
+    .sub-check__mark { flex:0 0 auto; width:26px; height:26px; border-radius:50%;
+        display:flex; align-items:center; justify-content:center; font-size:1.2rem;
+        color:#fff; font-weight:700; }
+    .sub-check--ok .sub-check__mark { background:#4a7c62; }
+    .sub-check--no .sub-check__mark { background:#c0704a; }
+    .sub-check__detail { display:block; font-size:1.1rem; color:#b9832f; margin-top:.15rem; }
+
+    .sub-form { margin-top:.5rem; }
+    .sub-field { margin-bottom:1.25rem; }
+    .sub-field label { display:block; font-size:1.3rem; color:#3c4d45; font-weight:600;
+        margin-bottom:.35rem; }
+    .sub-field input, .sub-field textarea { width:100%; padding:11px 14px; border:1px solid #ced4da;
+        border-radius:8px; font-size:1.35rem; font-family:inherit; color:#2c3e50; background:#fff; }
+    .sub-field input:focus, .sub-field textarea:focus { outline:none; border-color:#82968c;
+        box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+    .sub-field textarea { min-height:5.5rem; resize:vertical; }
+    .sub-field__req { color:#c0704a; }
+    .sub-field__err { display:none; color:#c0704a; font-size:1.15rem; margin-top:.3rem; }
+    .sub-field.has-err input, .sub-field.has-err textarea { border-color:#c0704a; }
+    .sub-field.has-err .sub-field__err { display:block; }
+
+    .sub-blocked { background:#fdf3ea; border:1px solid #f0d9c3; border-radius:10px;
+        padding:.9rem 1.15rem; font-size:1.25rem; color:#9a5b34; margin-bottom:1.5rem; }
+
+    /* Confirmation state */
+    .sub-done { text-align:center; padding:2rem 1rem 1rem; }
+    .sub-done__tick { width:80px; height:80px; border-radius:50%; background:#4a7c62; color:#fff;
+        font-size:3.4rem; display:flex; align-items:center; justify-content:center; margin:0 auto 1.5rem; }
+    .sub-done h1 { margin:0 0 .5rem; }
+    .sub-done p { font-size:1.45rem; color:#5a6b63; max-width:34em; margin:.4rem auto; }
+    .sub-done__ref { display:inline-block; margin-top:1.25rem; font-size:1.15rem; color:#9aa8a0; }
+    .sub-done__ref code { background:#f2f6f4; border-radius:5px; padding:2px 8px; color:#4a5d54; }
+    .sub-next { text-align:left; max-width:34em; margin:2rem auto 0; font-size:1.3rem;
+        color:#5a6b63; background:#f7f9f8; border:1px solid #e6ece9; border-radius:12px; padding:1.1rem 1.35rem; }
+    .sub-next ol { margin:.5rem 0 0; padding-left:1.4rem; }
+    .sub-next li { margin:.35rem 0; }
+</style>
+
+<section class="workbench-section">
+    <div class="workbench-container submit-container">
+        {% include '_wizard_progress.html' %}
+
+        {% if submitted %}
+        <div class="sub-done">
+            <div class="sub-done__tick">&#10003;</div>
+            <h1>Submission received</h1>
+            <p>Thank you{% if submission.contributor_name %}, {{ submission.contributor_name }}{% endif %}.
+               Your dataset has been sent to the GRAND curators for review.</p>
+            <p>We'll email <strong>{{ submission.contributor_email }}</strong> if we have questions
+               or once it's published.</p>
+            <span class="sub-done__ref">Reference: <code>{{ submission.public_token }}</code></span>
+
+            <div class="sub-next">
+                <strong>What happens next</strong>
+                <ol>
+                    <li>A curator reviews the data and provenance.</li>
+                    <li>They may reach out for clarification, or request changes.</li>
+                    <li>Once approved, the study is promoted into the GRAND database.</li>
+                </ol>
+            </div>
+            <div class="wb-actions" style="justify-content:center;">
+                <a href="{% url 'submit-data' %}" class="wb-btn wb-btn--primary">Start another submission</a>
+            </div>
+        </div>
+
+        {% else %}
+        <h1>Submit for review</h1>
+        <p class="step-lead">One last check, then send your dataset to the GRAND curators.
+            Nothing is published automatically — a curator reviews every contribution first.</p>
+
+        {% if doi_duplicates %}
+        <div class="sub-blocked" style="background:#fff6e0; border-color:#f0d9c3; color:#8a6d3b;">
+            <strong>Heads up:</strong> this paper's DOI is already in the database
+            ({% for d in doi_duplicates %}{% if not forloop.first %}; {% endif %}{{ d.title }}{% endfor %}).
+            Please check the Explorer page for existing entries. If you're adding a <em>new</em> dataset from the same paper, that's fine — go ahead and submit.
+        </div>
+        {% endif %}
+
+        <div class="sub-summary">
+            <div class="sub-stat"><div class="sub-stat__n">{{ summary.treatments }}</div>
+                <div class="sub-stat__l">Treatments</div></div>
+            <div class="sub-stat"><div class="sub-stat__n">{{ summary.rows }}</div>
+                <div class="sub-stat__l">Daily rows</div></div>
+            <div class="sub-stat"><div class="sub-stat__n">{{ summary.columns }}</div>
+                <div class="sub-stat__l">Measurement columns</div></div>
+            <div class="sub-stat"><div class="sub-stat__n">{{ summary.events }}</div>
+                <div class="sub-stat__l">Timeline events</div></div>
+            <div class="sub-stat"><div class="sub-stat__n">{{ summary.global_filled }}</div>
+                <div class="sub-stat__l">Study fields</div></div>
+            {% if summary.date_from %}
+            <div class="sub-stat"><div class="sub-stat__n" style="font-size:1.35rem;">{{ summary.date_from }}</div>
+                <div class="sub-stat__l">to</div>
+                <span class="sub-stat__sub"><strong>{{ summary.date_to }}</strong></span></div>
+            {% endif %}
+        </div>
+
+        <ul class="sub-checks">
+            {% for c in checks %}
+            <li class="sub-check {% if c.ok %}sub-check--ok{% else %}sub-check--no{% endif %}">
+                <span class="sub-check__mark">{% if c.ok %}&#10003;{% else %}!{% endif %}</span>
+                <span>{{ c.label }}{% if c.detail %}<span class="sub-check__detail">{{ c.detail }}</span>{% endif %}</span>
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% if not ready %}
+        <div class="sub-blocked">Please finish the steps above before submitting — use the progress
+            rail to jump back to any stage.</div>
+        {% endif %}
+
+        <form class="sub-form" id="sub-form" onsubmit="return false;">
+            <div class="sub-field" id="f-name">
+                <label for="sub-name">Your name <span class="sub-field__req">*</span></label>
+                <input type="text" id="sub-name" value="{{ contributor_name }}" autocomplete="name">
+                <span class="sub-field__err" data-for="name"></span>
+            </div>
+            <div class="sub-field" id="f-email">
+                <label for="sub-email">Email <span class="sub-field__req">*</span></label>
+                <input type="email" id="sub-email" value="{{ contributor_email }}" autocomplete="email">
+                <span class="sub-field__err" data-for="email"></span>
+            </div>
+            <div class="sub-field">
+                <label for="sub-message">Message to the curators <small style="color:#9aa8a0;">(optional)</small></label>
+                <textarea id="sub-message" placeholder="Anything the reviewers should know?"></textarea>
+            </div>
+        </form>
+
+        <div class="wb-actions">
+            <a href="{% url 'workbench-review' public_token %}" class="wb-btn wb-btn--outline">&larr;&nbsp;Back</a>
+            <span class="hint" id="sub-hint"></span>
+            <button type="button" class="wb-btn wb-btn--primary" id="sub-send"
+                    {% if not ready %}disabled{% endif %}>Submit&nbsp;&rarr;</button>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+{% if not submitted %}
+<script>
+(function () {
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const url = "{% url 'workbench-submit-finalize' public_token %}";
+    const btn = document.getElementById('sub-send');
+    const hint = document.getElementById('sub-hint');
+
+    function clearErrors() {
+        document.querySelectorAll('.sub-field').forEach(f => f.classList.remove('has-err'));
+    }
+    function showFieldErrors(fields) {
+        Object.entries(fields || {}).forEach(([k, msg]) => {
+            const box = document.querySelector('.sub-field__err[data-for="' + k + '"]');
+            if (box) { box.textContent = msg; box.closest('.sub-field').classList.add('has-err'); }
+        });
+    }
+
+    btn && btn.addEventListener('click', async () => {
+        clearErrors();
+        hint.textContent = 'Submitting…';
+        btn.disabled = true;
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({
+                    name: document.getElementById('sub-name').value,
+                    email: document.getElementById('sub-email').value,
+                    message: document.getElementById('sub-message').value,
+                }),
+            });
+            const data = await resp.json();
+            if (resp.ok && data.redirect) { window.location.href = data.redirect; return; }
+            hint.textContent = data.error || 'Could not submit.';
+            showFieldErrors(data.fields);
+            btn.disabled = false;
+        } catch (e) {
+            hint.textContent = 'Network error — please try again.';
+            btn.disabled = false;
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

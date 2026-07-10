@@ -168,7 +168,7 @@
             Most national greenhouse-gas accounting still leans on simple <strong>Tier 1</strong> emission-factor methods, which miss the strong spatial and temporal variability of N<sub>2</sub>O and the nonlinear jump in emissions under excess fertilization. Process-based <strong>Tier 3</strong> models (DayCENT, DNDC, APSIM) and newer machine-learning approaches capture that complexity far better, but they're hungry for large, <strong>harmonized</strong>, covariate-rich datasets.
         </p>
         <p>
-            The bottleneck isn't a lack of measurements — it's that they're scattered across hundreds of publications, often trapped in figures, and recorded in incompatible units, naming conventions, and structures. The <strong>GRAND Explorer</strong> harmonizes that data into one clean, queryable database and gives you simple tools to explore it, inspect it, and export exactly the slice you need — no wrangling required.
+            The bottleneck isn't a lack of measurements — it's that they're scattered across hundreds of publications, often trapped in figures, and recorded in incompatible units, naming conventions, and structures. The <strong>GRAND Explorer</strong> harmonizes that data into one clean, queryable database and gives you simple tools to explore it, inspect it, and export exactly the slice you need.
         </p>
 
         <h2>What you can do</h2>
@@ -207,7 +207,7 @@
 
         <h2>Under the hood</h2>
         <p>
-            The GRAND Explorer is open-source top to bottom. Raw datasets pass through <strong>Python</strong> pipelines that convert units and map inconsistent terminology (say, "conventional till" vs. "moldboard plow") onto a single harmonized schema. The cleaned data lives in a <strong>MySQL</strong> relational database that mirrors the natural hierarchy of field experiments — measurements belong to treatments, treatments to experiments, experiments to sites — with foreign keys keeping every flux value linked to its soil, climate, and management context.
+            The GRAND Explorer is open-source top to bottom. Raw datasets pass through <strong>Python</strong> pipelines that convert units and map inconsistent terminology (say, "conventional till" vs. "moldboard plow") onto a single harmonized schema. The cleaned data lives in a <strong>MySQL</strong> relational database that mirrors the natural hierarchy of field experiments: measurements belong to treatments, treatments to experiments, experiments to sites, keeping every flux value linked to its soil, climate, and management context.
         </p>
         <p>
             A <strong>Django</strong> backend serves it through an ORM that builds fast, injection-safe queries and migrates the schema without downtime, while an AJAX-driven frontend keeps exploration smooth and interruption-free. We build in the open because shared infrastructure is what turns the <em>ideal</em> of open science into everyday <em>practice</em>.
@@ -215,7 +215,7 @@
 
         <h2>Where it's headed</h2>
         <p>
-            This is a starting point, not the finish line. We're exploring gap-filling for sparse measurements, ready-made train/test splits for fairer model comparisons, and even open modeling competitions. Built by, with, and for the research community — because good infrastructure is what makes open science actually happen.
+            This is a starting point, not the finish line. We're exploring gap-filling for sparse measurements, ready-made train/test splits for fairer model comparisons, and even open modeling competitions. Built by, with, and for the research community, because good infrastructure is what makes open science actually happen.
         </p>
 
         <h2>Using &amp; citing the data</h2>
@@ -224,7 +224,7 @@
         </p>
         <div class="citation-box">
             <strong>Suggested citation</strong>
-            <span class="cite">Ackett, R., Saha, D. (2026). GRAND: The Global Repository for Agricultural N<sub>2</sub>O Data. [DOI / link].</span>
+            <span class="cite">Ackett, R. & Saha, D. (2026). The Global Repository for Agricultural N<sub>2</sub>O Data (GRAND) Explorer. [DOI / link]. Available at grandexplorer.org.</span>
         </div>
 
         <div class="about-cta">

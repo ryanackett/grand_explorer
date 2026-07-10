@@ -408,11 +408,9 @@
                     <li class="nav-item mx-3">
                         <a class="nav-link grand-nav-link" href="/query-filters">Explore Data</a>
                     </li>
-                    <!-- Commenting out the "Submit Data" link for now, as the functionality is not yet implemented. 
                     <li class="nav-item mx-3">
-                        <a class="nav-link grand-nav-link" onclick="showToast('Submit Data functionality coming soon!', 'warning'); return false;">Submit Data</a>
+                        <a class="nav-link grand-nav-link" href="{% url 'submit-data' %}">Submit Data</a>
                     </li>
-                    -->
                     <li class="nav-item dropdown mx-3">
                         <a class="nav-link grand-nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             About
@@ -425,6 +423,28 @@
                             <li><a class="dropdown-item py-2" href="/contact">Contact Us</a></li>
                         </ul>
                     </li>
+
+                    {% if user.is_authenticated %}
+                    <li class="nav-item dropdown mx-3">
+                        <a class="nav-link grand-nav-link dropdown-toggle" href="#" id="accountDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Account
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px; overflow: hidden;" aria-labelledby="accountDropdown">
+                            <li><span class="dropdown-item-text py-2 text-muted" style="font-size:1.15rem;">{{ user.email|default:user.username }}</span></li>
+                            <li><hr class="dropdown-divider my-0"></li>
+                            <li><a class="dropdown-item py-2" href="{% url 'my-submissions' %}">My Submissions</a></li>
+                            {% if user.is_staff %}
+                            <li><a class="dropdown-item py-2" href="{% url 'workbench-curation' %}">Curation Queue</a></li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider my-0"></li>
+                            <li><a class="dropdown-item py-2" href="{% url 'account_logout' %}">Log Out</a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item mx-3">
+                        <a class="nav-link grand-nav-link" href="{% url 'account_login' %}">Log In</a>
+                    </li>
+                    {% endif %}
 
                 </ul>
             </div>
