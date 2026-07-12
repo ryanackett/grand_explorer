@@ -28,6 +28,12 @@
     .seg button.on { background:#82968c; color:#fff; }
     .seg button:disabled { opacity:.4; cursor:not-allowed; }
 
+    /* A section whose data came from a mapped column — shown as done, not prompted. */
+    .tl-provided { display:block; background:#eef5f0; border:1px solid #cfe3d6;
+        border-left:4px solid #6fae8b; border-radius:10px; padding:.85rem 1.1rem;
+        font-size:1.35rem; line-height:1.4; color:#3c5a49; }
+    .tl-provided strong { color:#2c7a4b; }
+
     /* Each treatment is a clearly separated block within a section. */
     .tl-trt { margin:1.6rem 0 0; padding-top:1.4rem; border-top:2px solid #e0e8e3; }
     .tl-trt:first-of-type { border-top:none; padding-top:.2rem; }
@@ -41,6 +47,16 @@
         border-radius:10px; padding:.95rem 1.15rem; }
     .ev-card[data-source="document"] { border-left-color:#7fae92; }
     .ev-card[data-source="user"]     { border-left-color:#b7c2ba; }
+    .ev-card[data-source="column"]   { border-left-color:#6fae8b; }
+    /* A field whose value came from a mapped column — read-only here. */
+    .ev-input--locked { background:#f1f4f2; color:#5a6b63; cursor:default; }
+    /* The field the contributor still has to supply to complete the pair. */
+    .ev-input--needed { border-color:#d8a657; background:#fffdf7; }
+    /* Note atop a partially-column-provided section (one of a pair is in the data). */
+    .tl-seed-note { background:#fdf6ec; border:1px solid #ecd9b6; border-left:4px solid #d8a657;
+        border-radius:10px; padding:.8rem 1.1rem; margin:.2rem 0 1rem; font-size:1.3rem;
+        line-height:1.4; color:#6b5323; }
+    .tl-seed-note strong { color:#8a5a1b; }
     .ev-field { display:flex; flex-direction:column; gap:.3rem; }
     /* Text / dropdown fields stretch to fill the row so the right side isn't wasted. */
     .ev-field--grow { flex:1 1 15rem; }
@@ -125,6 +141,13 @@
 
   const sectionById = {};
   sections.forEach(s => { sectionById[s.id] = s; });
+  // Sections whose data is already supplied by a mapped column — shown as done, never
+  // prompted (and never saved), so the column stays the single source of truth.
+  const providedSections = new Set(sections.filter(s => s.column_provided).map(s => s.id));
+  // Sections partially supplied by one of a paired column set (fertilisation: N applied
+  // XOR N form). We seed events from that column so the contributor completes the pair.
+  const seededSections = {};
+  sections.forEach(s => { if (s.column_seeded) seededSections[s.id] = s.column_seeded; });
 
   function getCookie(name) {
     const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
@@ -154,7 +177,22 @@
     Object.values(state.global).some(a => a.length) ||
     Object.values(state.per).some(sec => Object.values(sec).some(a => a.length));
   if (!hasSaved) {
-    sections.forEach(s => { state.global[s.id] = clone(paper[s.id]); });
+    sections.forEach(s => {
+      if (providedSections.has(s.id)) return;
+      if (seededSections[s.id]) {
+        // Seed the column's applications; per-treatment (the column's granularity) when
+        // there are treatments, else flattened into the global bucket.
+        const pt = seededSections[s.id].per_treatment || {};
+        if (treatments.length) {
+          state.scopes[s.id] = 'per_treatment';
+          treatments.forEach(t => { state.per[t][s.id] = clone(pt[t] || []); });
+        } else {
+          state.global[s.id] = Object.values(pt).reduce((a, l) => a.concat(clone(l)), []);
+        }
+      } else {
+        state.global[s.id] = clone(paper[s.id]);
+      }
+    });
   }
 
   // --- helpers -------------------------------------------------------------
@@ -203,6 +241,10 @@
   function makeCard(section, list, ev) {
     const card = el('div', { class: 'ev-card' });
     card.dataset.source = ev.source || 'user';
+    // For a column-seeded event, date + the mapped field are read-only (from the data);
+    // the paired field is the one the contributor must supply.
+    const seed = section.column_seeded;
+    const isSeeded = ev.source === 'column' && seed;
     section.fields.forEach(fd => {
       // Text and dropdown fields grow to fill the row; date/number stay compact.
       const grow = (fd.options && fd.options.length) || fd.dtype === 'string';
@@ -212,18 +254,28 @@
       if (fd.unit) lab.appendChild(el('span', { class: 'ev-field__unit' }, ' (' + fd.unit + ')'));
       const input = makeControl(fd);
       applyValue(input, (ev.fields || {})[fd.key]);
-      input.addEventListener('input', () => {
-        const v = (input.value || '').trim();
-        ev.fields = ev.fields || {};
-        if (v === '') delete ev.fields[fd.key];
-        else ev.fields[fd.key] = v;
-        // Pair a numeric N amount with its unit so the stored value is unambiguous.
-        if (fd.key === 'n_amount' && fd.unit) {
-          if (v === '') delete ev.fields.n_unit; else ev.fields.n_unit = fd.unit;
-        }
-        // Editing keeps the event's paper provenance (the "from paper" tag stays).
-        renderStatus(); scheduleSave();
-      });
+      const locked = isSeeded && (seed.locked || []).includes(fd.key);
+      const needed = isSeeded && seed.missing === fd.key;
+      if (locked) {
+        input.setAttribute('disabled', 'disabled');
+        input.classList.add('ev-input--locked');
+        input.title = 'From your column “' + seed.column + '”';
+      } else {
+        if (needed && !(input.value || '').trim()) input.classList.add('ev-input--needed');
+        input.addEventListener('input', () => {
+          const v = (input.value || '').trim();
+          ev.fields = ev.fields || {};
+          if (v === '') delete ev.fields[fd.key];
+          else ev.fields[fd.key] = v;
+          // Pair a numeric N amount with its unit so the stored value is unambiguous.
+          if (fd.key === 'n_amount' && fd.unit) {
+            if (v === '') delete ev.fields.n_unit; else ev.fields.n_unit = fd.unit;
+          }
+          if (needed) input.classList.toggle('ev-input--needed', v === '');
+          // Editing keeps the event's provenance tag.
+          renderStatus(); scheduleSave();
+        });
+      }
       wrap.appendChild(lab); wrap.appendChild(input);
       card.appendChild(wrap);
     });
@@ -296,6 +348,24 @@
       const head = el('div', { class: 'tl-sec__head' });
       const title = el('div', { class: 'tl-sec__title' });
       title.appendChild(el('h2', { class: 'tl-sec__name' }, section.label));
+
+      // Data-provided section: show as done, no scope toggle or add controls.
+      if (section.column_provided) {
+        title.appendChild(el('span', { class: 'tl-sec__n' }, 'from your data'));
+        head.appendChild(title);
+        sec.appendChild(head);
+        const cols = (section.column_sources || []).join(', ');
+        const note = el('div', { class: 'tl-provided' });
+        note.appendChild(el('strong', null, '✓ Provided by your uploaded data'));
+        note.appendChild(document.createTextNode(
+          cols ? ' — taken from column “' + cols + '”. No need to add these events here; '
+                 + 'the values in your file are used.'
+               : ' — taken from your uploaded columns. No need to add these events here.'));
+        sec.appendChild(note);
+        sectionsEl.appendChild(sec);
+        return;
+      }
+
       const scope = state.scopes[section.id];
       const n = (scope === 'per_treatment' && treatments.length)
         ? treatments.reduce((a, t) => a + (state.per[t][section.id] || []).length, 0)
@@ -313,6 +383,18 @@
       seg.appendChild(gBtn); seg.appendChild(pBtn);
       head.appendChild(seg);
       sec.appendChild(head);
+
+      // Partial column pairing: explain what's from the data and what to complete.
+      if (section.column_seeded) {
+        const L = { n_amount: 'N applied', form: 'the fertilizer form' };
+        const seed = section.column_seeded;
+        const note = el('div', { class: 'tl-seed-note' });
+        note.appendChild(el('strong', null, L[seed.field] + ' is from your column “' + seed.column + '”.'));
+        note.appendChild(document.createTextNode(
+          ' Each dated application below has it filled in — add ' + L[seed.missing]
+          + ' for every one. An application needs both.'));
+        sec.appendChild(note);
+      }
 
       if (scope === 'per_treatment' && treatments.length) {
         sec.appendChild(el('p', { class: 'tl-hint' }, 'A separate schedule for each treatment.'));
@@ -348,9 +430,14 @@
     // differences are often minor, so seeding every treatment with the same guess is
     // a useful starting point; only empty buckets are seeded (never overwrite edits).
     const src = bestGuess(sid);
+    const seed = seededSections[sid];
     if (mode === 'per_treatment') {
       treatments.forEach(t => {
-        if (!state.per[t][sid] || !state.per[t][sid].length) state.per[t][sid] = clone(src);
+        if (state.per[t][sid] && state.per[t][sid].length) return;  // keep existing edits
+        // When the column gives per-treatment evidence (fertilisation: some treatments
+        // have applications, controls have none), restore each treatment's OWN events —
+        // don't broadcast the global guess onto treatments the data says have none.
+        state.per[t][sid] = clone(seed ? ((seed.per_treatment || {})[t] || []) : src);
       });
     } else if (!state.global[sid] || !state.global[sid].length) {
       state.global[sid] = clone(src);
@@ -378,10 +465,16 @@
   }
   function buildPayload() {
     const payload = { scopes: state.scopes, global: {}, per_treatment: {} };
-    sections.forEach(s => { const l = cleanList(state.global[s.id]); if (l.length) payload.global[s.id] = l; });
+    sections.forEach(s => {
+      if (providedSections.has(s.id)) return;  // owned by a mapped column
+      const l = cleanList(state.global[s.id]); if (l.length) payload.global[s.id] = l;
+    });
     treatments.forEach(t => {
       const row = {};
-      sections.forEach(s => { const l = cleanList(state.per[t][s.id]); if (l.length) row[s.id] = l; });
+      sections.forEach(s => {
+        if (providedSections.has(s.id)) return;
+        const l = cleanList(state.per[t][s.id]); if (l.length) row[s.id] = l;
+      });
       if (Object.keys(row).length) payload.per_treatment[t] = row;
     });
     return payload;
@@ -396,7 +489,32 @@
     } catch (e) { savedEl.textContent = 'Save failed'; }
   }
 
+  // Column-seeded applications must have their paired field completed (both halves).
+  function incompletePairs() {
+    let n = 0;
+    Object.keys(seededSections).forEach(sid => {
+      const miss = seededSections[sid].missing;
+      const check = list => (list || []).forEach(e => {
+        if (e.source === 'column' && !String((e.fields || {})[miss] || '').trim()) n++;
+      });
+      if (state.scopes[sid] === 'per_treatment' && treatments.length) {
+        treatments.forEach(t => check(state.per[t][sid]));
+      } else {
+        check(state.global[sid]);
+      }
+    });
+    return n;
+  }
+
   document.getElementById('tl-continue').addEventListener('click', async () => {
+    const gaps = incompletePairs();
+    if (gaps) {
+      showToast(gaps + ' fertilizer application' + (gaps === 1 ? '' : 's')
+        + ' still need a value in the highlighted field — every application needs both '
+        + 'the amount and the form.', 'warning');
+      await save();
+      return;   // stay on the step until the pairs are complete
+    }
     await save();
     window.location.href = "{% url 'workbench-review' public_token %}";
   });

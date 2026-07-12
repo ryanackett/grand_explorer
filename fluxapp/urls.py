@@ -21,8 +21,8 @@ from n2odb import views_workbench
 from django.contrib.auth.decorators import login_required as _lr
 
 urlpatterns = [
-    # --- Assisted-upload workbench --- (contributor views are login-required; the
-    # per-view owner check lives in the view. Curation views carry @staff_member_required.)
+    # --- Assisted-upload workbench --- (contributor views are login-required (_lr) here; the
+    # per-view owner check lives in the view. Curation *views* carry @staff_member_required.)
     path('submit-data/', _lr(views_workbench.submit_data), name='submit-data'),
     path('my-submissions/', _lr(views_workbench.my_submissions), name='my-submissions'),
     path('workbench/<uuid:token>/resume/',
@@ -39,6 +39,8 @@ urlpatterns = [
          _lr(views_workbench.mapping), name='workbench-mapping'),
     path('workbench/<uuid:token>/mapping/save/',
          _lr(views_workbench.save_mapping), name='workbench-mapping-save'),
+    path('workbench/<uuid:token>/mapping/sheet/',
+         _lr(views_workbench.set_measurement_sheet), name='workbench-measurement-sheet'),
     path('workbench/<uuid:token>/site/',
          _lr(views_workbench.site_info), name='workbench-site'),
     path('workbench/<uuid:token>/site/save/',

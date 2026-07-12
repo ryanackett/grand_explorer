@@ -23,6 +23,61 @@
         <p class="step-lead">A last look before you submit. Global study details are on the
             left; step through each treatment to check its time-series data and events.</p>
 
+        {% if review_data.repsAveraged %}
+        <div style="background:#eef5f0; border-left:4px solid #6fae8b; border-radius:8px;
+                    padding:1rem 1.25rem; margin-bottom:1.25rem; font-size:1.3rem; color:#3c5a49;">
+            <strong>Replicates averaged.</strong> Your data was collected by replication, so
+            each value shown is the <strong>treatment average</strong> across replicates for
+            that date (missing reps are skipped). N₂O flux <strong>standard error</strong> was
+            computed across replicates. This is what will be stored.
+        </div>
+        {% endif %}
+
+        {% if review_data.dailyAveraged %}
+        <div style="background:#eef5f0; border-left:4px solid #6fae8b; border-radius:8px;
+                    padding:1rem 1.25rem; margin-bottom:1.25rem; font-size:1.3rem; color:#3c5a49;">
+            <strong>High-resolution data averaged to daily.</strong>
+            {{ review_data.dailyAveraged }} date(s) had multiple measurements per day (e.g.
+            eddy-covariance or automatic-chamber data); each was collapsed to a
+            {% if review_data.timeWeighted %}<strong>time-weighted daily average</strong> (using
+            your timestamps){% else %}<strong>daily average</strong>{% endif %}{% if review_data.repsAveraged %}
+            per replicate before the treatment average{% endif %}. The database stores one
+            value per day.
+        </div>
+        {% endif %}
+
+        {% if review_data.dateIssue %}
+        <div style="background:#fdf1ec; border-left:4px solid #c0704a; border-radius:8px;
+                    padding:1rem 1.25rem; margin-bottom:1.25rem; font-size:1.3rem; color:#8a4b34;">
+            <strong>Some dates don't match the selected format
+            ({{ review_data.dateIssue.format_label }}).</strong>
+            These values couldn't be read and were left out of the series:
+            {{ review_data.dateIssue.samples|join:", " }}.
+            Go back to the <a href="{% url 'workbench-mapping' public_token %}">Map step</a>
+            and choose the correct date format, or fix the values in your file.
+        </div>
+        {% endif %}
+
+        {% if review_data.blankTreatmentRows %}
+        <div style="background:#fdf1ec; border-left:4px solid #c0704a; border-radius:8px;
+                    padding:1rem 1.25rem; margin-bottom:1.25rem; font-size:1.3rem; color:#8a4b34;">
+            <strong>{{ review_data.blankTreatmentRows }} row(s) have a blank treatment cell.</strong>
+            A row with no treatment can't be attributed and will be dropped. Fill the
+            treatment column for those rows (or remove them) in your file and re-upload.
+        </div>
+        {% endif %}
+
+        {% if review_data.orphanKeys %}
+        <div style="background:#fdf1ec; border-left:4px solid #c0704a; border-radius:8px;
+                    padding:1rem 1.25rem; margin-bottom:1.25rem; font-size:1.3rem; color:#8a4b34;">
+            <strong>Some treatment details don't match the data.</strong>
+            You entered details for treatments not present in the current data (likely after
+            re-mapping the treatment column): {{ review_data.orphanKeys|join:", " }}.
+            Re-open the <a href="{% url 'workbench-soil' public_token %}">Soil &amp; Management step</a>
+            to reconcile — otherwise those entries are ignored.
+        </div>
+        {% endif %}
+
         {% include '_review_panel.html' %}
 
         <div class="wb-actions">

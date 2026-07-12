@@ -16,6 +16,9 @@
     .map-saved { color:#9aa8a0; font-size:1.15rem; }
 
     .map-grid { display:grid; grid-template-columns:1fr 1fr; gap:2rem; align-items:start; }
+    /* min-width:0 lets the 1fr tracks shrink; without it a long nowrap sample string
+       raises a track's min-content and squeezes the fields column. */
+    .map-columns, .map-fields { min-width:0; }
     @media (max-width:820px) {
         .map-grid { grid-template-columns:1fr; gap:1.25rem; }
         .map-fields { position:static !important; max-height:none !important; }
@@ -26,12 +29,27 @@
     }
     .map-columns .wb-subhead, .map-fields .wb-subhead { margin-top:.5rem; }
     .map-hint { font-size:1.2rem; color:#8a978f; margin:.1rem 0 .9rem; }
+    /* Shown once both treatment + replication are mapped (we'll average replicates). */
+    .rep-note { background:#eef5f0; border:1px solid #cfe3d6; border-left:4px solid #6fae8b;
+        border-radius:8px; padding:.8rem 1.1rem; margin:0 0 1.25rem; font-size:1.25rem;
+        line-height:1.45; color:#3c5a49; }
+    .sheet-note { background:#fdf6ec; border:1px solid #ecd9b6; border-left:4px solid #d8a657;
+        border-radius:8px; padding:.6rem .8rem; margin:.1rem 0 .9rem; line-height:1.4; color:#6b5323; }
+    .sheet-note__row { display:flex; align-items:center; gap:.6rem; }
+    .sheet-note__row label { font-size:1.3rem; font-weight:600; margin:0; color:#6b5323; line-height:1.3; }
+    /* Reset the site-wide tall select (height: var(--vspace-2)) to a compact control. */
+    .sheet-note select { height:auto; width:auto; margin:0; line-height:1.3; vertical-align:middle;
+        display:inline-block; font-size:1.25rem; padding:.3rem 1.6rem .3rem .6rem;
+        border:1px solid #d8a657; border-radius:6px; background:#fff; color:#3c3020; }
+    .sheet-note__hint { display:block; margin-top:.35rem; font-size:1.05rem; color:#8a7a55; }
 
     .cloud-search {
         width:100%; padding:8px 11px; margin-bottom:.6rem; border:1px solid #ced4da;
         border-radius:6px; font-size:1.2rem; font-family:inherit;
     }
-    .cloud-info { min-height:1.5rem; font-size:1.15rem; color:#8a978f; margin-bottom:.5rem; }
+    /* Fixed single line: hover sample-text must not wrap and shove the chips down. */
+    .cloud-info { height:1.5rem; line-height:1.5rem; font-size:1.15rem; color:#8a978f;
+        margin-bottom:.5rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
     /* Cloud box of unmatched / extra columns */
     .cloud {
@@ -43,8 +61,9 @@
     .cloud-empty { color:#9aa8a0; font-size:1.2rem; margin:auto; }
 
     .col-chip {
+        /* Amber left edge = no confident match (your call); green = a suggested match. */
         display:inline-flex; align-items:center; gap:.45rem; background:#fff;
-        border:1px solid #cdd6d1; border-left:4px solid #c3cec8; border-radius:50px;
+        border:1px solid #cdd6d1; border-left:4px solid #d8a657; border-radius:50px;
         padding:.4rem .85rem; font-size:1.25rem; color:#2c3e50; cursor:grab;
         transition:box-shadow .12s ease, border-color .12s ease, transform .05s ease;
         user-select:none;
@@ -53,7 +72,7 @@
     .col-chip:active { cursor:grabbing; }
     .col-chip.dragging { opacity:.4; }
     .col-chip.armed { border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.22); }
-    .col-chip.suggested { border-left-color:#d8a657; }
+    .col-chip.suggested { border-left-color:#6fae8b; }
     .col-chip__dtype {
         font-size:.95rem; text-transform:uppercase; letter-spacing:.04em;
         color:#82968c; background:#eef3f0; border-radius:4px; padding:1px 6px;
@@ -69,6 +88,22 @@
     .field-group__name {
         font-size:1.1rem; text-transform:uppercase; letter-spacing:.08em;
         color:#9aa8a0; margin:1.15rem 0 .55rem;
+    }
+    .field-group__name .optional-tag {
+        text-transform:none; letter-spacing:normal; font-size:1rem; font-weight:600;
+        color:#8a6d3b; background:#fff6e0; border:1px solid #f0d9c3;
+        border-radius:20px; padding:.05rem .55rem; margin-left:.5rem;
+    }
+    /* Note under the Events group: these fields are optional in the spreadsheet. */
+    .field-group__note {
+        font-size:1.15rem; line-height:1.45; color:#6b7c73;
+        background:#fbfaf4; border:1px solid #eee7d4; border-left:3px solid #e0c98a;
+        border-radius:8px; padding:.6rem .85rem; margin:0 0 .7rem;
+    }
+    /* Deferrable (Events) targets read as clearly optional vs the measurement fields. */
+    .field-group--optional .field-target { border-color:#e7ddc6; background:#fdfcf7; }
+    .field-target__note {
+        font-size:1.05rem; color:#9c8a5f; margin-top:.15rem;
     }
     .field-target {
         display:flex; flex-direction:column; align-items:stretch; gap:.25rem;
@@ -97,6 +132,8 @@
         padding:3px 8px; line-height:1.3; font-size:1.1rem; font-family:inherit;
         border:1px solid #cdd6d1; border-radius:6px; background:#fff; color:#2c3e50;
     }
+    /* Unit not yet chosen — must be selected before Continue. */
+    .unit-select--missing { border-color:#c0704a; background:#fdf3ee; color:#8a4b34; }
     .assigned-chip {
         display:inline-flex; align-items:center; gap:.35rem; background:#82968c;
         color:#fff; border-radius:50px; padding:4px 6px 4px 12px; font-size:1.15rem;
@@ -121,14 +158,37 @@
 
     <h1>Map your time-series columns</h1>
 
+    <div id="rep-note" class="rep-note" hidden>
+      <strong>Replicates detected.</strong> You've mapped both a treatment and a
+      replication column, so we'll <strong>average your replicates per treatment × date</strong>
+      for every measurement and compute the <strong>N₂O flux standard error</strong> — the
+      database stores treatment-averaged values.
+    </div>
+
     <div class="map-grid">
       <div class="map-columns">
         <h2 class="wb-subhead">Unmatched Columns <span id="col-count" style="color:#8a978f;font-size:1.4rem;"></span></h2>
+        {% if sheet_choices|length > 1 %}
+        <div class="sheet-note" data-sheet-url="{% url 'workbench-measurement-sheet' public_token %}">
+          <div class="sheet-note__row">
+            <label for="meas-sheet">Measurement sheet:</label>
+            <select id="meas-sheet">
+              {% for c in sheet_choices %}
+              <option value="{{ c.index }}"{% if c.index == measurement_index %} selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <span class="sheet-note__hint">Select only one sheet to pull timeseries
+            data from. To maintain temporal alignment and ensure data integrity,
+            all temporally variable data must be located in a single sheet.
+          </span>
+        </div>
+        {% endif %}
         <p class="map-hint">
           Drag a column onto its matching field on the right (or click a column, then
-          click a field). Site details and static variables — site details like
-          pH or coordinates, plus IDs and notes — will be handled on the
-          next step. 
+          click a field). Site details and static variables (like texture,
+          pH, or coordinates) will be handled on the
+          next step.
         </p>
         <input id="cloud-search" class="cloud-search" type="search" placeholder="Filter columns…">
         <div id="cloud-info" class="cloud-info"></div>
@@ -142,18 +202,33 @@
       <div class="map-fields">
         <h2 class="wb-subhead">GRAND Fields</h2>
         <p class="map-hint" style="margin-top:-.2rem;">
-          Per-date measurement fields only. Site-level fields (soil chemistry,
-          climate, location) are on the next step.
+          Per-date measurement fields only. We did our best to auto-match
+          your columns to GRAND's fields — if we made a mistake, just drag the 
+          column to the correct field.
         </p>
         {% for group in field_groups %}
-        <div class="field-group">
+        <div class="field-group{% if group.deferrable %} field-group--optional{% endif %}">
+          <h3 class="field-group__name">
+            {{ group.name }}
+          </h3>
+          {% if group.deferrable %}
+          <p class="field-group__note">
+            If your data doesn't have them as tabular
+            columns, leave them blank — we'll read them from your paper, or you can add them
+            on the <strong>Timeline</strong> step. Map a column to these fields only if 
+            this information is already a column in your spreadsheet.
+          </p>
+          {% endif %}
           {% for f in group.fields %}
           <div class="field-target" data-field="{{ f.id }}" tabindex="0"
-               aria-label="{{ f.label }} — drop or assign a column here">
+               aria-label="{{ f.label }}{% if group.deferrable %} (optional — or add on the Timeline step){% endif %} — drop or assign a column here">
             <div class="field-target__head">
               <span class="field-target__label">{{ f.label }}{% if f.required %} <span class="req">*</span>{% endif %}</span>
               <div class="field-target__slot"></div>
             </div>
+            {% if group.deferrable %}
+            <div class="field-target__note">Optional — or add it on the Timeline step</div>
+            {% endif %}
             <div class="field-target__units" data-units="{{ f.id }}"></div>
           </div>
           {% endfor %}
@@ -174,6 +249,7 @@
 {{ field_groups|json_script:"fields-data" }}
 {{ required_ids|json_script:"required-data" }}
 {{ unit_options|json_script:"units-data" }}
+{{ date_formats|json_script:"dateformats-data" }}
 
 <script>
 (function () {
@@ -184,6 +260,7 @@
   const fieldGroups= JSON.parse(document.getElementById('fields-data').textContent);
   const requiredIds= JSON.parse(document.getElementById('required-data').textContent);
   const unitOptions= JSON.parse(document.getElementById('units-data').textContent);
+  const dateFormats= JSON.parse(document.getElementById('dateformats-data').textContent);
 
   const fieldById = {};
   fieldGroups.forEach(g => g.fields.forEach(f => { fieldById[f.id] = f; }));
@@ -194,8 +271,46 @@
   const mapping = {};
   // Unit state: source header -> the unit its data is in (for fields with units).
   const unitState = {};
+  // Date-format state: source header -> declared day/month order for the date column.
+  const dateFormatState = {};
+  const DEFAULT_DATE_FORMAT = (dateFormats[0] && dateFormats[0].id) || 'iso';
   columns.forEach(c => { mapping[c.name] = c.assigned || null; });
   let armed = null;  // header currently "picked up" via click
+
+  // Best-guess the day/month order from the actual values, so the dropdown starts on
+  // the most likely interpretation instead of a blanket default. Evidence beats
+  // assumption: a component >12 in a slot rules that slot out as a month.
+  function guessDateFormat(samples) {
+    const ids = new Set(dateFormats.map(f => f.id));
+    let sawSlashish = false, dayFirst = false, monthFirst = false;
+    for (const s of (samples || [])) {
+      // Drop any trailing time-of-day so timestamped values ("07/04/2018 13:45") still
+      // resolve their day/month order from the date part.
+      const v = String(s).trim().split(/[ T]/)[0];
+      if (/^\d{4}-\d{1,2}-\d{1,2}\b/.test(v)) return ids.has('iso') ? 'iso' : DEFAULT_DATE_FORMAT;
+      if (/^\d{4}[/.]\d{1,2}[/.]\d{1,2}\b/.test(v)) return ids.has('ymd') ? 'ymd' : DEFAULT_DATE_FORMAT;
+      const m = v.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/);
+      if (m) {
+        sawSlashish = true;
+        const a = +m[1], b = +m[2];
+        if (a > 12) dayFirst = true;      // first slot can't be a month → DD/MM
+        if (b > 12) monthFirst = true;    // second slot can't be a month → MM/DD
+      }
+    }
+    if (sawSlashish) {
+      if (dayFirst && !monthFirst) return 'dmy';
+      if (monthFirst && !dayFirst) return 'mdy';
+      return 'mdy';  // ambiguous (e.g. 03/04/2020) → common default; the review flags mistakes
+    }
+    return DEFAULT_DATE_FORMAT;
+  }
+  function initDateFormat(header) {
+    const col = colByName[header];
+    dateFormatState[header] = (col && col.saved_date_format)
+      || guessDateFormat(col ? col.samples : []);
+  }
+  // Seed the date format for an initially-assigned date column.
+  columns.forEach(c => { if (mapping[c.name] === 'date') initDateFormat(c.name); });
 
   // Guess a field's input unit from the column header ("(mg/kg)", "_mm", "°C").
   function normUnit(s) {
@@ -217,7 +332,9 @@
     const opts = unitOptions[fid];
     if (!opts) { delete unitState[header]; return; }
     const col = colByName[header];
-    unitState[header] = (col && col.saved_unit) || inferUnit(col ? col.unit_hint : '', opts);
+    // No default: a saved unit is kept, otherwise the contributor must pick one
+    // explicitly (empty = the "Select units…" placeholder, which blocks Continue).
+    unitState[header] = (col && col.saved_unit) || '';
   }
   // Seed units for the initially-assigned columns.
   columns.forEach(c => { if (mapping[c.name]) initUnit(c.name, mapping[c.name]); });
@@ -248,7 +365,10 @@
   function labelFor(fid) { return fieldById[fid] ? fieldById[fid].label : fid; }
   function samplesText(name) {
     const c = colByName[name];
-    return (c && c.samples && c.samples.length) ? (name + ' — e.g. ' + c.samples.join(', ')) : name;
+    if (!(c && c.samples && c.samples.length)) return name;
+    let s = name + ' — e.g. ' + c.samples.join(', ');
+    if (s.length > 90) s = s.slice(0, 89) + '…';   // long datetimes shouldn't blow out the bar
+    return s;
   }
 
   function setArmed(header) {
@@ -265,6 +385,7 @@
     }
     mapping[header] = fid || null;
     if (fid) initUnit(header, fid); else delete unitState[header];
+    if (fid === 'date') initDateFormat(header); else delete dateFormatState[header];
     if (armed === header) setArmed(null);
     render();
     scheduleSave();
@@ -307,11 +428,18 @@
     return chip;
   }
 
+  // Sort key: a real suggestion's confidence, else -1 so unmatched chips sink.
+  function confOf(c) {
+    return (c.suggestion && c.suggestion.canonical_field) ? c.suggestion.confidence : -1;
+  }
+
   function renderCloud() {
     const q = (search.value || '').trim().toLowerCase();
     cloud.innerHTML = '';
     const unmapped = columns.filter(c => !mapping[c.name] &&
       (!q || c.name.toLowerCase().includes(q)));
+    // Highest-confidence suggestions first (no suggestion sinks to the bottom).
+    unmapped.sort((a, b) => confOf(b) - confOf(a));
     if (!unmapped.length) {
       cloud.appendChild(el('div', { class: 'cloud-empty' },
         q ? 'No columns match “' + q + '”.' : 'All columns are mapped or set aside. 🎉'));
@@ -344,19 +472,42 @@
         });
         slot.appendChild(chip);
 
-        // Unit-of-your-data selector, for numeric fields that have units.
+        // Unit-of-your-data selector, for numeric fields that have units. Mandatory:
+        // it starts on a "Select units…" placeholder and must be chosen before Continue.
         const opts = unitOptions[fid];
         if (opts && opts.length) {
           unitsRow.classList.add('show');
           unitsRow.appendChild(el('label', { for: 'unit-' + fid }, 'in units of'));
           const sel = el('select', { class: 'unit-select', id: 'unit-' + fid });
+          const ph = el('option', { value: '' }, 'Select units…');
+          if (!unitState[header]) ph.setAttribute('selected', 'selected');
+          sel.appendChild(ph);
           opts.forEach(o => {
             const opt = el('option', { value: o }, o);
             if (unitState[header] === o) opt.setAttribute('selected', 'selected');
             sel.appendChild(opt);
           });
-          sel.addEventListener('change', () => { unitState[header] = sel.value; scheduleSave(); });
+          if (!unitState[header]) sel.classList.add('unit-select--missing');
+          sel.addEventListener('change', () => {
+            unitState[header] = sel.value;
+            sel.classList.toggle('unit-select--missing', !sel.value);
+            scheduleSave();
+          });
           unitsRow.appendChild(sel);
+        }
+
+        // Date-format selector for the date column — removes MM/DD vs DD/MM ambiguity.
+        if (fid === 'date') {
+          unitsRow.classList.add('show');
+          unitsRow.appendChild(el('label', { for: 'datefmt' }, 'date format'));
+          const dsel = el('select', { class: 'unit-select', id: 'datefmt' });
+          dateFormats.forEach(f => {
+            const opt = el('option', { value: f.id }, f.label);
+            if ((dateFormatState[header] || DEFAULT_DATE_FORMAT) === f.id) opt.setAttribute('selected', 'selected');
+            dsel.appendChild(opt);
+          });
+          dsel.addEventListener('change', () => { dateFormatState[header] = dsel.value; scheduleSave(); });
+          unitsRow.appendChild(dsel);
         }
       } else {
         t.classList.remove('filled');
@@ -369,6 +520,9 @@
     const mapped = requiredIds.filter(id => headerForField(id)).length;
     mapRequired.textContent = mapped + ' of ' + requiredIds.length + ' required fields mapped';
     mapRequired.className = (mapped === requiredIds.length) ? 'map-required--ok' : 'map-required--warn';
+    // Averaging note appears once both a treatment and a replication column are mapped.
+    const repNote = document.getElementById('rep-note');
+    if (repNote) repNote.hidden = !(headerForField('treatment') && headerForField('replication'));
   }
 
   function render() { renderCloud(); renderTargets(); renderStatus(); }
@@ -410,7 +564,10 @@
   async function save() {
     const payload = { mapping: {} };
     Object.keys(mapping).forEach(h => {
-      if (mapping[h]) payload.mapping[h] = { field: mapping[h], unit: unitState[h] || null };
+      if (!mapping[h]) return;
+      const entry = { field: mapping[h], unit: unitState[h] || null };
+      if (mapping[h] === 'date') entry.date_format = dateFormatState[h] || DEFAULT_DATE_FORMAT;
+      payload.mapping[h] = entry;
     });
     try {
       const resp = await fetch(saveUrl, {
@@ -422,15 +579,62 @@
     } catch (e) { mapSaved.textContent = 'Save failed'; }
   }
 
-  document.getElementById('map-continue').addEventListener('click', async () => {
-    const missing = requiredIds.filter(id => !headerForField(id));
-    if (missing.length) {
-      showToast('Please map the required field(s): ' + missing.map(labelFor).join(', '), 'warning');
-      return;
+  // Mapped columns whose field carries units but no unit is chosen yet.
+  function missingUnits() {
+    return Object.keys(mapping).filter(h => {
+      const fid = mapping[h];
+      return fid && unitOptions[fid] && unitOptions[fid].length && !unitState[h];
+    });
+  }
+  // True (and warns) if the step isn't complete enough to move forward.
+  function blockIfIncomplete() {
+    const missReq = requiredIds.filter(id => !headerForField(id));
+    if (missReq.length) {
+      showToast('Please map the required field(s): ' + missReq.map(labelFor).join(', '), 'warning');
+      return true;
     }
+    const missU = missingUnits();
+    if (missU.length) {
+      showToast('Please choose the units for: ' + missU.join(', ')
+        + ' — each mapped column needs its unit set.', 'warning');
+      render();  // repaint so the unselected unit dropdowns show their red state
+      return true;
+    }
+    return false;
+  }
+
+  document.getElementById('map-continue').addEventListener('click', async () => {
+    if (blockIfIncomplete()) return;
     await save();  // make sure the mapping is persisted before we move on
     window.location.href = root.dataset.nextUrl;
   });
+
+  // Also guard forward navigation via the progress rail (back-links stay free).
+  const curStep = parseInt(document.querySelector('.wizard-step.active')?.dataset.step || '0', 10);
+  document.querySelectorAll('.wizard-step__link').forEach(a => {
+    const target = parseInt(a.closest('.wizard-step')?.dataset.step || '0', 10);
+    if (target > curStep) {
+      a.addEventListener('click', (e) => { if (blockIfIncomplete()) e.preventDefault(); });
+    }
+  });
+
+  // Measurement-sheet switcher: change which sheet feeds the time-series, then reload
+  // (columns change entirely). The server clears the old mapping on switch.
+  const sheetNote = document.querySelector('.sheet-note[data-sheet-url]');
+  const sheetSel = document.getElementById('meas-sheet');
+  if (sheetNote && sheetSel) {
+    sheetSel.addEventListener('change', async () => {
+      sheetSel.disabled = true;
+      try {
+        await fetch(sheetNote.dataset.sheetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+          body: JSON.stringify({ index: parseInt(sheetSel.value, 10) }),
+        });
+        location.reload();
+      } catch (e) { sheetSel.disabled = false; }
+    });
+  }
 
   render();
   save();  // persist auto-applied suggestions so a refresh is stable

@@ -31,7 +31,7 @@ def _submission(**overrides):
         },
         mapping={
             "date": {"canonical_field": "date", "source": "user"},
-            "n2o_flux": {"canonical_field": "n2oflux", "source": "user"},
+            "n2o_flux": {"canonical_field": "n2oflux", "unit": "g N/ha/d", "source": "user"},
             "PlotID": {"canonical_field": "treatment", "source": "user"},
         },
     )
@@ -49,6 +49,25 @@ class TreatmentDetectionTests(TestCase):
         sub = _submission(mapping={"date": {"canonical_field": "date", "source": "user"}})
         self.assertIsNone(_treatment_column(sub))
         self.assertEqual(_detected_treatments(sub, None), [])
+
+    def test_soil_leftover_per_treatment_from_static_sheet(self):
+        # A separate soil sheet's columns are offered, with per-treatment values keyed by
+        # that sheet's own treatment column (first plot value per treatment).
+        from n2odb.views_workbench import _soil_leftover_columns
+        sub = _submission()
+        sub.parsed_content["sheets"].append({
+            "name": "Soil",
+            "headers": ["PlotID", "Sand_pct"],
+            "rows": [["NT", "40"], ["NT", "41"], ["CT", "55"], ["CT", "56"]],
+            "dtypes": ["string", "float"],
+            "n_rows": 4, "n_rows_stored": 4, "header_row": 0, "truncated": False,
+        })
+        sub.save(update_fields=["parsed_content"])
+        cols = {c["key"]: c for c in _soil_leftover_columns(sub)}
+        sand = cols["1::Sand_pct"]
+        self.assertEqual(sand["sheet"], "Soil")
+        self.assertEqual(sand["value"], "40")                       # global first value
+        self.assertEqual(sand["treatment_values"], {"NT": "40", "CT": "55"})
 
 
 class SoilViewTests(AuthedWorkbenchTestCase):
@@ -108,3 +127,39 @@ class SoilViewTests(AuthedWorkbenchTestCase):
         self.assertNotIn("Ghost", td["per_treatment"])
         # descriptions: kept for known treatments, empty/unknown dropped.
         self.assertEqual(td["descriptions"], {"NT": "no-till continuous corn"})
+
+    def test_readable_names_saved_and_keyed_by_identifier(self):
+        # A readable name can be attached to each identifier; orphan names are dropped.
+        self.client.post(
+            reverse("workbench-soil-save", args=[self.token]),
+            data={
+                "names": {"NT": "No-till + urea", "CT": "", "Ghost": "ignored"},
+                "descriptions": {},
+            },
+            content_type="application/json",
+        )
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.treatment_details["names"], {"NT": "No-till + urea"})
+
+    def test_treatments_locked_to_detected(self):
+        # The client cannot rename/add treatments — identity is owned by the data column,
+        # or annotations would orphan from the raw rows. Submitted names are ignored.
+        resp = self.client.post(
+            reverse("workbench-soil-save", args=[self.token]),
+            data={
+                "treatments": ["Renamed-NT", "CT", "Invented"],   # all ignored
+                "descriptions": {"Renamed-NT": "x"},              # orphan → dropped
+                "per_treatment": {
+                    "NT": {"tillage": {"value": "no-till", "source": "user"}},   # kept (detected)
+                    "Invented": {"tillage": {"value": "x", "source": "user"}},   # dropped
+                },
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.sub.refresh_from_db()
+        td = self.sub.treatment_details
+        self.assertEqual(td["treatments"], ["NT", "CT"])       # detected, not the submitted names
+        self.assertNotIn("Renamed-NT", td["descriptions"])
+        self.assertIn("NT", td["per_treatment"])
+        self.assertNotIn("Invented", td["per_treatment"])

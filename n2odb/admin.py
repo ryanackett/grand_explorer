@@ -3,7 +3,9 @@ from import_export.admin import ImportExportModelAdmin
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 from .models import Publication, Site, Experiment, Treatment, RawMeasurementTreatment
-from .models_upload import UploadSubmission, ManuscriptSource, UploadedDataFile
+from .models_upload import (
+    UploadSubmission, ManuscriptSource, UploadedDataFile, LlmExtractionCall,
+)
 
 
 class ManuscriptSourceInline(admin.TabularInline):
@@ -54,6 +56,21 @@ class UploadedDataFileAdmin(admin.ModelAdmin):
     exclude = ("file_bytes",)
     readonly_fields = ("sha256", "size_bytes", "sheet_count", "row_count",
                        "parse_status", "parse_error", "created_at")
+
+@admin.register(LlmExtractionCall)
+class LlmExtractionCallAdmin(admin.ModelAdmin):
+    """Read-only audit log of billable manuscript-extraction calls (cost monitoring)."""
+    list_display = ("id", "user", "submission", "status", "created_at")
+    list_filter = ("status", "created_at")
+    date_hierarchy = "created_at"
+    readonly_fields = ("user", "submission", "status", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
 
 class PublicationResource(resources.ModelResource):
     

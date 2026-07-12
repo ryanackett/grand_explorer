@@ -205,4 +205,5 @@ from n2odb.models_upload import (  # noqa: E402,F401
     UploadSubmission,
     ManuscriptSource,
     UploadedDataFile,
+    LlmExtractionCall,
 )

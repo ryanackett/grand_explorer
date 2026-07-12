@@ -20,6 +20,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import Http404, JsonResponse, HttpResponse
@@ -28,10 +29,16 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import Treatment, RawMeasurementTreatment
-from .models_upload import UploadSubmission, ManuscriptSource, UploadedDataFile
+from .models_upload import (
+    UploadSubmission,
+    ManuscriptSource,
+    UploadedDataFile,
+    LlmExtractionCall,
+)
 from .services import (
     canonical,
     event_fields,
+    llm_assist,
     manuscript_extract,
     manuscript_regex,
     site_fields,
@@ -150,11 +157,63 @@ def _owned_submission(request, token) -> UploadSubmission:
     raise Http404()
 
 
+def _upload_rejection(upload, existing_count: int) -> JsonResponse | None:
+    """Reject an upload that's too large or over the per-submission file cap, else None.
+
+    Files are read fully into memory and stored as a DB blob, so both bounds matter:
+    size (OOM / MySQL ``max_allowed_packet``) and count (unbounded blob accumulation).
+    ``upload`` is None for pasted text — size is skipped, but it still counts.
+    """
+    cap_mb = getattr(settings, "WORKBENCH_MAX_UPLOAD_MB", 25)
+    if upload is not None and (upload.size or 0) > cap_mb * 1024 * 1024:
+        return JsonResponse(
+            {"error": f"That file is too large — the limit is {cap_mb} MB."}, status=400
+        )
+    max_files = getattr(settings, "WORKBENCH_MAX_FILES_PER_SUBMISSION", 15)
+    if existing_count >= max_files:
+        return JsonResponse(
+            {"error": f"This submission already has {max_files} files of this kind. "
+                      f"Start a new submission to add more."},
+            status=400,
+        )
+    return None
+
+
+def _verified_email(user) -> str:
+    """The user's verified (login) email — the address a submission is attributed to.
+
+    Contributors can't be attributed to, or notified at, a hand-typed address (that
+    would let a fake ``.edu`` inflate the curator's trust signal, or send our decision
+    mail to an arbitrary third party). Login already requires a verified email, so we
+    bind the submission to it. Prefers the allauth primary/verified record; falls back
+    to ``user.email``.
+    """
+    if user is None:
+        return ""
+    try:
+        from allauth.account.models import EmailAddress
+        ea = (EmailAddress.objects
+              .filter(user=user, verified=True)
+              .order_by("-primary")
+              .first())
+        if ea:
+            return ea.email
+    except Exception:  # noqa: BLE001 — never break submit on a lookup hiccup
+        pass
+    return getattr(user, "email", "") or ""
+
+
 def submit_data(request):
     """Render the wizard's Stage-0 page for the session's draft submission."""
     submission = _get_or_create_draft(request)
     document = submission.documents.order_by("-created_at").first()
     has_data = bool((submission.parsed_content or {}).get("sheets"))
+    # Was the *current* document already analysed successfully? Drives the "re-run"
+    # confirm so a contributor knows a re-run is a fresh (billable) AI request.
+    already_extracted = bool(
+        document and document.sha256
+        and document.sha256 == submission.manuscript_source_sha256
+    )
     return render(
         request,
         "submit_data.html",
@@ -163,6 +222,7 @@ def submit_data(request):
             "public_token": submission.public_token,
             "document": document,
             "has_data": has_data,
+            "already_extracted": already_extracted,
             **_wizard_context(current_step=1, token=submission.public_token),
         },
     )
@@ -220,6 +280,10 @@ def create_document(request, token):
 
     upload = request.FILES.get("document")
     pasted = request.POST.get("text", "")
+
+    rejection = _upload_rejection(upload, submission.documents.count())
+    if rejection is not None:
+        return rejection
 
     if upload is not None:
         data = upload.read()
@@ -306,6 +370,29 @@ def _already_have(submission: UploadSubmission) -> list[str]:
     return sorted(have)
 
 
+def _llm_calls_today(user) -> int:
+    """Actual (billable) extraction calls this user has made today."""
+    return LlmExtractionCall.objects.filter(
+        user=user, created_at__date=timezone.localdate()
+    ).count()
+
+
+def _extract_payload(facts: dict, document, regex_count: int, *, deduped: bool = False) -> dict:
+    """Shape the JSON the Stage-0 page expects from an extraction (or a deduped no-op)."""
+    text = document.extracted_text or ""
+    return {
+        "status": facts.get("status", "skipped"),
+        "deduped": deduped,
+        "manuscript_facts": facts,
+        "metadata_count": len(facts.get("metadata", {})),
+        "events_count": len(facts.get("events", [])),
+        "regex_suggestions": regex_count,
+        "page_count": document.page_count,
+        "char_count": document.char_count,
+        "word_count": len(text.split()),
+    }
+
+
 @require_POST
 def extract_document(request, token):
     """Re-run extraction on the attached document and merge into the draft's facts.
@@ -313,11 +400,27 @@ def extract_document(request, token):
     This re-runs *text* extraction from the stored bytes first (so a document
     captured before an extractor improvement picks it up without re-uploading),
     then the deterministic parsers and the model module.
+
+    Two cost guards wrap the model call (accidental-spam protection):
+      * dedupe — an unchanged, already-successfully-analysed paper returns the stored
+        facts with no new call unless ``force=1`` is sent (the "re-run anyway" path);
+      * a per-account daily cap (``WORKBENCH_LLM_DAILY_CAP``), staff exempt.
     """
     submission = _owned_submission(request, token)
     document = submission.documents.order_by("-created_at").first()
     if document is None:
         return JsonResponse({"error": "No document attached yet."}, status=400)
+
+    force = request.POST.get("force") == "1"
+
+    # Dedupe: this exact document was already analysed successfully. Re-running it
+    # would burn a model call for (almost always) the identical result, so unless the
+    # contributor explicitly forces it, just hand back what we already have.
+    if (not force and document.sha256
+            and document.sha256 == submission.manuscript_source_sha256):
+        return JsonResponse(
+            _extract_payload(submission.manuscript_facts or {}, document, 0, deduped=True)
+        )
 
     # Refresh the plain text from the original bytes. Pasted text has no bytes
     # stored, so its extracted_text stands as-is.
@@ -342,40 +445,56 @@ def extract_document(request, token):
             {"error": "No extracted document text to analyse yet."}, status=400
         )
 
+    # Daily cap — only when a real model call is imminent (assist on). Staff exempt;
+    # cap of 0 disables it. Deduped no-ops above never reach here, so they don't count.
+    cap = getattr(settings, "WORKBENCH_LLM_DAILY_CAP", 0)
+    if llm_assist.is_enabled() and cap and not request.user.is_staff:
+        if _llm_calls_today(request.user) >= cap:
+            return JsonResponse(
+                {"error": f"You’ve reached today’s limit of {cap} AI extractions. "
+                          f"It resets tomorrow — you can still fill in the forms "
+                          f"manually. Contact us if you need a higher limit."},
+                status=429,
+            )
+
     module_result = manuscript_extract.extract_facts(
         document.extracted_text, _already_have(submission), _option_choices()
     )
+    status = module_result.get("status", "skipped")
+
+    # Record only real, billable calls (ok/failed). "skipped" means the assist was off
+    # or there was no text — no cost, so it neither logs nor counts against the cap.
+    if status in ("ok", "failed"):
+        LlmExtractionCall.objects.create(
+            user=request.user, submission=submission, status=status
+        )
 
     # Re-run the deterministic parsers and merge, preferring their numbers (§4).
     regex_meta = manuscript_regex.parse_all(document.extracted_text)
     metadata = merge_metadata(regex_meta, module_result.get("metadata", {}))
 
     facts = dict(submission.manuscript_facts or {})
-    facts["status"] = module_result.get("status", "skipped")
+    facts["status"] = status
     facts["metadata"] = metadata
     facts["events"] = module_result.get("events", [])
     for key in ("model", "generated_at", "usage"):
         if key in module_result:
             facts[key] = module_result[key]
 
+    # Remember which document produced a *successful* extraction so a later re-run on
+    # the unchanged paper is deduped away.
+    if status == "ok":
+        submission.manuscript_source_sha256 = document.sha256 or ""
     submission.manuscript_facts = facts
     submission.manuscript_extracted_at = timezone.now()
     submission.save(
-        update_fields=["manuscript_facts", "manuscript_extracted_at", "updated_at"]
+        update_fields=[
+            "manuscript_facts", "manuscript_extracted_at",
+            "manuscript_source_sha256", "updated_at",
+        ]
     )
 
-    return JsonResponse(
-        {
-            "status": facts["status"],
-            "manuscript_facts": facts,
-            "metadata_count": len(metadata),
-            "events_count": len(facts["events"]),
-            "regex_suggestions": len(regex_meta),
-            "page_count": document.page_count,
-            "char_count": document.char_count,
-            "word_count": len(document.extracted_text.split()),
-        }
-    )
+    return JsonResponse(_extract_payload(facts, document, len(regex_meta)))
 
 
 @require_GET
@@ -419,6 +538,10 @@ def upload_data(request, token):
     upload = request.FILES.get("data")
     if upload is None:
         return JsonResponse({"error": "No data file provided."}, status=400)
+
+    rejection = _upload_rejection(upload, submission.data_files.count())
+    if rejection is not None:
+        return rejection
 
     data = upload.read()
     kind = tabular.sniff_kind(upload.name or "", data[:8])
@@ -471,11 +594,42 @@ def upload_data(request, token):
 
 # --- Stage 2: column mapping -------------------------------------------------
 
-def _primary_sheet(submission: UploadSubmission) -> dict | None:
-    """The sheet whose columns we map. For now the first parsed sheet; sheet
-    classification (structure detection) is a later stage."""
+def _detect_measurement_sheet(sheets: list[dict]) -> int:
+    """Best guess at which sheet holds the time-series measurements: the one whose
+    columns most look like a date + N2O flux series, tie-broken by row count. Static
+    sheets (soil/site, one row per plot) score lower and won't be picked."""
+    best_i, best_score = 0, None
+    for i, s in enumerate(sheets):
+        sug = suggest.suggest_columns(
+            s.get("headers", []), s.get("dtypes", []), fields=canonical.mappable_fields()
+        )
+        fields = {x["canonical_field"] for x in sug
+                  if x["canonical_field"] and x["confidence"] >= _AUTO_APPLY_CONFIDENCE}
+        score = ("date" in fields, "n2oflux" in fields, s.get("n_rows", 0))
+        if best_score is None or score > best_score:
+            best_i, best_score = i, score
+    return best_i
+
+
+def _measurement_sheet_index(submission: UploadSubmission) -> int | None:
+    """Index of the sheet mapped as the measurement series — the contributor's saved
+    choice if valid, else the auto-detected best guess."""
     sheets = (submission.parsed_content or {}).get("sheets", [])
-    return sheets[0] if sheets else None
+    if not sheets:
+        return None
+    saved = (submission.structure or {}).get("measurement_sheet")
+    if isinstance(saved, int) and 0 <= saved < len(sheets):
+        return saved
+    return _detect_measurement_sheet(sheets)
+
+
+def _primary_sheet(submission: UploadSubmission) -> dict | None:
+    """The measurement sheet whose columns are mapped to per-date canonical fields.
+    Only one sheet feeds the time-series so every row shares a date axis; other sheets
+    hold static (soil/site) data consumed on the Site & Soil steps."""
+    sheets = (submission.parsed_content or {}).get("sheets", [])
+    idx = _measurement_sheet_index(submission)
+    return sheets[idx] if idx is not None else None
 
 
 def _column_samples(sheet: dict, col_index: int, limit: int = _MAP_SAMPLES) -> list[str]:
@@ -500,18 +654,47 @@ def mapping(request, token):
 
     headers = sheet["headers"]
     dtypes = sheet.get("dtypes", [])
-    suggestions = suggest.suggest_columns(headers, dtypes)
+    # One sheet feeds the time-series (so every dated row shares an axis). If the
+    # workbook has more, offer a switcher to pick which is the measurement sheet;
+    # the others' columns are used on the Site & Soil steps, not dropped.
+    all_sheets = (submission.parsed_content or {}).get("sheets", [])
+    meas_index = _measurement_sheet_index(submission)
+    sheet_choices = [{"index": i, "name": s.get("name") or f"Sheet {i + 1}"}
+                     for i, s in enumerate(all_sheets)]
+    other_sheets = [c["name"] for c in sheet_choices if c["index"] != meas_index]
+    # Only suggest/allow mappable targets — derived fields (DOY, nitrogen type, …) are
+    # computed by us, never hand-mapped, so they don't appear on this page.
+    mappable = canonical.mappable_fields()
+    mappable_ids = {f.id for f in mappable}
+    suggestions = suggest.suggest_columns(headers, dtypes, fields=mappable)
     saved = submission.mapping or {}
 
     columns = []
+    claimed: dict[str, str] = {}  # canonical_field -> header (one column per field)
     for i, name in enumerate(headers):
         sug = suggestions[i]
-        if name in saved:
-            assigned = (saved[name] or {}).get("canonical_field")
+        saved_field = (saved.get(name) or {}).get("canonical_field")
+        # Only honor a saved field if it's still a mappable target. A stale value
+        # (e.g. from before a registry change) would otherwise mark the column
+        # "mapped" with no field to render on, making it vanish from the page.
+        if saved_field in mappable_ids:
+            assigned = saved_field
         elif sug["canonical_field"] and sug["confidence"] >= _AUTO_APPLY_CONFIDENCE:
             assigned = sug["canonical_field"]
         else:
             assigned = None
+        # One column per field. If this field is already taken (e.g. a stale save
+        # mapped two columns to the same target), fall back to this column's own
+        # suggestion if that's free, else leave it unmapped so it stays visible in
+        # the pool rather than hiding behind the other column.
+        if assigned and assigned in claimed:
+            alt = sug["canonical_field"]
+            if alt and alt not in claimed and sug["confidence"] >= _AUTO_APPLY_CONFIDENCE:
+                assigned = alt
+            else:
+                assigned = None
+        if assigned:
+            claimed[assigned] = name
         columns.append(
             {
                 "name": name,
@@ -521,12 +704,17 @@ def mapping(request, token):
                 "assigned": assigned,
                 "unit_hint": units.extract_unit_hint(name),
                 "saved_unit": (saved.get(name) or {}).get("unit"),
+                "saved_date_format": (saved.get(name) or {}).get("date_format"),
             }
         )
 
     field_groups = [
         {
             "name": group,
+            # Event fields (fertilisation, planting, tillage, harvest) needn't be columns
+            # in the spreadsheet — they can be read from the paper or added on the Timeline
+            # step — so the mapping UI marks this group optional/deferrable.
+            "deferrable": group == "Events",
             "fields": [
                 {
                     "id": f.id,
@@ -535,13 +723,14 @@ def mapping(request, token):
                     "dtype": f.dtype,
                     "required": f.required,
                 }
-                for f in canonical.CANONICAL_FIELDS
+                for f in mappable
                 if f.group == group
             ],
         }
         for group in canonical.groups()
     ]
-    required_ids = [f.id for f in canonical.CANONICAL_FIELDS if f.required]
+    field_groups = [g for g in field_groups if g["fields"]]  # drop now-empty groups
+    required_ids = [f.id for f in mappable if f.required]
 
     return render(
         request,
@@ -551,10 +740,14 @@ def mapping(request, token):
             "public_token": submission.public_token,
             "sheet_name": sheet["name"],
             "n_rows": sheet["n_rows"],
+            "sheet_choices": sheet_choices,
+            "measurement_index": meas_index,
+            "other_sheets": other_sheets,
             "columns": columns,
             "field_groups": field_groups,
             "required_ids": required_ids,
             "unit_options": units.UNIT_OPTIONS,
+            "date_formats": DATE_FORMATS,
             **_wizard_context(current_step=2, token=submission.public_token),
         },
     )
@@ -574,7 +767,9 @@ def save_mapping(request, token):
         return JsonResponse({"error": "Invalid JSON."}, status=400)
 
     incoming = payload.get("mapping", {})
-    valid_fields = {f.id for f in canonical.CANONICAL_FIELDS}
+    # Only mappable targets are accepted — derived fields (DOY, nitrogen type, management)
+    # are never hand-mapped, even via a crafted request.
+    valid_fields = {f.id for f in canonical.mappable_fields()}
     mapping_out: dict = {}
     for header, entry in incoming.items():
         if isinstance(entry, dict):
@@ -587,6 +782,11 @@ def save_mapping(request, token):
         row = {"canonical_field": field_id, "source": "user"}
         if unit and unit in units.options_for(field_id):
             row["unit"] = unit
+        # The date column carries the contributor's declared day/month order.
+        if field_id == "date" and isinstance(entry, dict):
+            fmt = entry.get("date_format")
+            if fmt in _DATE_FORMAT_IDS:
+                row["date_format"] = fmt
         mapping_out[header] = row
 
     submission.mapping = mapping_out
@@ -594,48 +794,81 @@ def save_mapping(request, token):
     return JsonResponse({"status": "saved", "mapped_count": len(mapping_out)})
 
 
+@require_POST
+def set_measurement_sheet(request, token):
+    """Choose which parsed sheet is the time-series measurement sheet. Clears the
+    column mapping (headers differ between sheets, so old assignments don't carry)."""
+    submission = _owned_submission(request, token)
+    try:
+        idx = int(json.loads(request.body or "{}").get("index"))
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid sheet index."}, status=400)
+    sheets = (submission.parsed_content or {}).get("sheets", [])
+    if not (0 <= idx < len(sheets)):
+        return JsonResponse({"error": "Sheet index out of range."}, status=400)
+
+    structure = submission.structure or {}
+    if structure.get("measurement_sheet") != idx:
+        structure["measurement_sheet"] = idx
+        submission.structure = structure
+        submission.mapping = {}  # a different sheet's columns can't reuse the old mapping
+        submission.save(update_fields=["structure", "mapping", "updated_at"])
+    return JsonResponse({"status": "saved", "measurement_sheet": idx})
+
+
 # --- Stage 3: site & study details (Plane B) ---------------------------------
 
 def _leftover_columns(submission: UploadSubmission, fields=None) -> list[dict]:
-    """Parsed columns not claimed on the mapping step, matched against ``fields``.
-
-    These are candidate sources for study variables that happen to live in the CSV
-    (pH, bulk density, coordinates…). Each carries a representative value (the
-    first non-null) plus a distinct-count so the UI can warn when it varies by row.
-    ``fields`` defaults to the global site fields; the Soil & Management stage
-    passes the treatment-level registry instead.
+    """Candidate CSV columns for study variables (pH, bulk density, coordinates…),
+    drawn from *every* sheet — static data commonly lives on a separate tab from the
+    time-series. The measurement sheet contributes only columns not already mapped to
+    a canonical field; other sheets contribute all their columns. Each entry carries a
+    representative value (first non-null), a distinct-count (so the UI can warn when it
+    varies by row), the source ``sheet`` name, and a unique ``key`` (sheet + header) so
+    same-named columns on different sheets stay distinct.
+    ``fields`` defaults to the global site fields; the Soil stage passes the
+    treatment-level registry instead.
     """
     if fields is None:
         fields = site_fields.global_fields()
-    sheet = _primary_sheet(submission)
-    if sheet is None:
+    sheets = (submission.parsed_content or {}).get("sheets", [])
+    if not sheets:
         return []
+    meas_idx = _measurement_sheet_index(submission)
     mapped = set(submission.mapping or {})
-    headers = sheet["headers"]
-    dtypes = sheet.get("dtypes", [])
-    leftover_idx = [i for i, h in enumerate(headers) if h not in mapped]
-    leftover_headers = [headers[i] for i in leftover_idx]
-    leftover_dtypes = [dtypes[i] if i < len(dtypes) else None for i in leftover_idx]
-    suggestions = suggest.suggest_columns(
-        leftover_headers, leftover_dtypes, fields=fields
-    )
 
     out = []
-    for pos, i in enumerate(leftover_idx):
-        values = [row[i] for row in sheet.get("rows", []) if i < len(row)
-                  and row[i] is not None and str(row[i]).strip()]
-        rep = values[0] if values else None
-        distinct = len(set(str(v) for v in values))
-        out.append(
-            {
-                "name": headers[i],
-                "dtype": leftover_dtypes[pos] or "string",
-                "samples": _column_samples(sheet, i),
-                "value": rep,
-                "distinct": distinct,
-                "suggestion": suggestions[pos],
-            }
+    for si, sheet in enumerate(sheets):
+        headers = sheet.get("headers", [])
+        dtypes = sheet.get("dtypes", [])
+        # On the measurement sheet, hide columns already claimed by the mapping step;
+        # other sheets are purely static so all their columns are offered.
+        idxs = [i for i, h in enumerate(headers)
+                if not (si == meas_idx and h in mapped)]
+        if not idxs:
+            continue
+        sug = suggest.suggest_columns(
+            [headers[i] for i in idxs],
+            [dtypes[i] if i < len(dtypes) else None for i in idxs],
+            fields=fields,
         )
+        sheet_name = sheet.get("name") or f"Sheet {si + 1}"
+        for pos, i in enumerate(idxs):
+            values = [row[i] for row in sheet.get("rows", []) if i < len(row)
+                      and row[i] is not None and str(row[i]).strip()]
+            out.append(
+                {
+                    "key": f"{si}::{headers[i]}",
+                    "name": headers[i],
+                    "sheet": sheet_name,
+                    "sheet_index": si,
+                    "dtype": (dtypes[i] if i < len(dtypes) else None) or "string",
+                    "samples": _column_samples(sheet, i),
+                    "value": values[0] if values else None,
+                    "distinct": len(set(str(v) for v in values)),
+                    "suggestion": sug[pos],
+                }
+            )
     return out
 
 
@@ -722,7 +955,7 @@ def save_site(request, token):
         if value in (None, ""):
             continue
         clean = {"value": value, "source": entry.get("source", "user")}
-        for key in ("column", "source_quote"):
+        for key in ("column", "columnKey", "sheet", "source_quote"):
             if entry.get(key):
                 clean[key] = entry[key]
         out[field_id] = clean
@@ -844,6 +1077,62 @@ def _paper_facts(submission: UploadSubmission, fields) -> dict:
     return out
 
 
+def _sheet_treatment_column_idx(sheet: dict, detected: list[str]) -> int | None:
+    """Index of the column in ``sheet`` that best identifies treatments — the one whose
+    distinct values overlap the detected treatment set most. Lets a static soil sheet be
+    keyed by its own treatment column, which may differ from the measurement sheet's."""
+    dset = {str(t).strip() for t in detected}
+    if not dset:
+        return None
+    best_idx, best_overlap = None, 0
+    for i, _ in enumerate(sheet.get("headers", [])):
+        vals = {str(r[i]).strip() for r in sheet.get("rows", [])
+                if i < len(r) and r[i] is not None and str(r[i]).strip()}
+        overlap = len(vals & dset)
+        if overlap > best_overlap:
+            best_idx, best_overlap = i, overlap
+    return best_idx
+
+
+def _column_treatment_values(sheet: dict, col_idx: int, trt_idx: int,
+                             detected: list[str]) -> dict:
+    """{treatment: first non-null value of ``col_idx``} keyed by the sheet's own
+    treatment column — so per-treatment soil fields fill from the matching plot rows."""
+    out: dict = {}
+    want = {str(t).strip() for t in detected}
+    for row in sheet.get("rows", []):
+        if trt_idx >= len(row) or col_idx >= len(row):
+            continue
+        t = str(row[trt_idx]).strip()
+        if t in want and t not in out:
+            v = row[col_idx]
+            if v is not None and str(v).strip():
+                out[t] = v
+    return out
+
+
+def _soil_leftover_columns(submission: UploadSubmission) -> list[dict]:
+    """Leftover columns for the Soil step: all sheets' candidate columns matched to the
+    treatment-level soil fields, each augmented with per-treatment values (first value
+    per treatment, keyed by that column's own sheet's treatment column)."""
+    cols = _leftover_columns(submission, fields=site_fields.treatment_fields())
+    sheets = (submission.parsed_content or {}).get("sheets", [])
+    detected = _detected_treatments(submission, _treatment_column(submission))
+    trt_idx_cache: dict = {}
+    for c in cols:
+        si = c["sheet_index"]
+        sheet = sheets[si]
+        if si not in trt_idx_cache:
+            trt_idx_cache[si] = _sheet_treatment_column_idx(sheet, detected)
+        trt_idx = trt_idx_cache[si]
+        col_idx = sheet["headers"].index(c["name"])
+        c["treatment_values"] = (
+            _column_treatment_values(sheet, col_idx, trt_idx, detected)
+            if trt_idx is not None and trt_idx != col_idx else {}
+        )
+    return cols
+
+
 def soil_mgmt(request, token):
     """Render the Soil & Management stage (per-group global vs per-treatment)."""
     submission = _owned_submission(request, token)
@@ -868,6 +1157,7 @@ def soil_mgmt(request, token):
             "treatment_column": trt_col,
             "detected_treatments": detected,
             "saved_details": saved,
+            "leftover_columns": _soil_leftover_columns(submission),
             "paper_facts": _paper_facts(submission, fields),
             "required_ids": [f.id for f in fields if f.required],
             **_wizard_context(current_step=4, token=submission.public_token),
@@ -887,11 +1177,19 @@ def save_soil_mgmt(request, token):
     valid = {f.id for f in site_fields.treatment_fields()}
     valid_groups = set(site_fields.treatment_groups())
 
-    treatments: list[str] = []
-    for t in payload.get("treatments", []):
-        s = str(t).strip()
-        if s and s not in treatments:
-            treatments.append(s)
+    # Treatment identity is owned by the mapped data column — those distinct values key
+    # the RawMeasurementTreatment rows and the promoted Treatment FKs. The client cannot
+    # rename/add/remove treatments here; doing so would orphan the annotations from the
+    # data. We always take the detected set and ignore any submitted names.
+    treatments = _detected_treatments(submission, _treatment_column(submission))
+
+    # Optional human-readable name per treatment (keyed by the identifier). The identifier
+    # stays the join key; this label is what gets written to Treatment.TreatmentName, so
+    # e.g. "CST-U" → "Conservation tillage + urea". Falls back to the identifier if unset.
+    names: dict = {}
+    for key, label in (payload.get("names") or {}).items():
+        if key in treatments and str(label).strip():
+            names[key] = str(label).strip()
 
     # Short free-text description per treatment (rotation, tillage, N rate…).
     descriptions: dict = {}
@@ -911,7 +1209,7 @@ def save_soil_mgmt(request, token):
         if value in (None, ""):
             return None
         clean = {"value": value, "source": entry.get("source", "user")}
-        for key in ("column", "source_quote"):
+        for key in ("column", "columnKey", "sheet", "source_quote"):
             if entry.get(key):
                 clean[key] = entry[key]
         return clean
@@ -938,6 +1236,7 @@ def save_soil_mgmt(request, token):
 
     submission.treatment_details = {
         "treatments": treatments,
+        "names": names,
         "descriptions": descriptions,
         "treatment_column": _treatment_column(submission),
         "scopes": scopes,
@@ -1066,13 +1365,22 @@ def timeline(request, token):
 
     options = _event_option_choices()
     saved = submission.events if isinstance(submission.events, dict) else {}
+    # Event sections already supplied as mapped columns are shown as done (no prompt).
+    provided = _column_provided_event_sections(submission)
+    seeded = _column_seeded_fertilisation(submission)
+    event_types = event_fields.for_template(options)
+    for et in event_types:
+        et["column_provided"] = et["id"] in provided
+        et["column_sources"] = provided.get(et["id"], [])
+        # Partial fertilisation: one paired column mapped, the other to be completed here.
+        et["column_seeded"] = seeded if (seeded and et["id"] == "fertilisation") else None
     return render(
         request,
         "workbench_timeline.html",
         {
             "submission": submission,
             "public_token": submission.public_token,
-            "event_types": event_fields.for_template(options),
+            "event_types": event_types,
             "treatments": _timeline_treatments(submission),
             "paper_events": _paper_events(submission, options),
             "saved_events": saved,
@@ -1097,7 +1405,10 @@ def save_timeline(request, token):
     except ValueError:
         return JsonResponse({"error": "Invalid JSON."}, status=400)
 
-    section_ids = [et.id for et in event_fields.types()]
+    # Sections whose data comes from a mapped column are owned by the data, not the
+    # Timeline — never persist manual events for them (prevents contradiction).
+    provided = set(_column_provided_event_sections(submission))
+    section_ids = [et.id for et in event_fields.types() if et.id not in provided]
     treatments = set(_timeline_treatments(submission))
 
     def _clean_event(ev) -> dict | None:
@@ -1177,29 +1488,90 @@ _REVIEW_SERIES_FIELDS = (
     "soilnh4", "soilno3",
 )
 
-# Fallback date spellings for the plotting timestamp, tried after ISO parsing.
-_REVIEW_DATE_FORMATS = (
-    "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S",
-    "%m/%d/%Y %H:%M", "%d-%b-%Y", "%d %b %Y", "%b %d %Y", "%m/%d/%y",
+# Explicit, contributor-selectable interpretations for the mapped date column. Picking
+# one removes the MM/DD vs DD/MM ambiguity: we then parse *strictly* to that order and
+# flag any value that doesn't fit, rather than silently guessing a wrong day.
+DATE_FORMATS = [
+    {"id": "iso", "label": "YYYY-MM-DD (ISO 8601)"},
+    {"id": "mdy", "label": "MM/DD/YYYY (US)"},
+    {"id": "dmy", "label": "DD/MM/YYYY (day first)"},
+    {"id": "ymd", "label": "YYYY/MM/DD"},
+]
+_DATE_FORMAT_IDS = {f["id"] for f in DATE_FORMATS}
+
+# Date part per declared format. A time-of-day suffix (below) is appended to each, so a
+# value like "07/04/2018 13:45:00" parses too — used for time-weighted daily averaging of
+# high-resolution data, and simply stripped to the date when the data is daily.
+_DATE_FORMAT_BASES = {
+    "iso": ("%Y-%m-%d",),
+    "mdy": ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y", "%m/%d/%y"),
+    "dmy": ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%y"),
+    "ymd": ("%Y/%m/%d", "%Y.%m.%d", "%Y-%m-%d"),
+}
+# Tolerant guess when no explicit format is declared ("auto"). Date-only; time added below.
+_AUTO_DATE_BASES = (
+    "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y",
+    "%d-%b-%Y", "%d %b %Y", "%b %d %Y", "%m/%d/%y",
 )
+# Time-of-day variants tried after each date base (datetime first, bare date last).
+_TIME_SUFFIXES = ("T%H:%M:%S", " %H:%M:%S", "T%H:%M", " %H:%M", "")
 
 
-def _parse_date(value):
-    """A ``datetime.date`` for a date-ish value (ISO or a few common spellings), or
-    None if unparseable."""
+def _parse_datetime(value, fmt=None):
+    """A ``datetime`` for a date/datetime value (time defaults to midnight), or None.
+
+    Honours an explicit day/month order when ``fmt`` is given (strict — a non-conforming
+    value returns None, surfaced as an error), else a tolerant guess. A time-of-day part
+    is parsed when present so high-resolution data can be time-weighted.
+    """
     import datetime as _dt
 
     if value in (None, ""):
         return None
     s = str(value).strip()
-    try:
-        return _dt.datetime.fromisoformat(s).date()
-    except ValueError:
-        for fmt in _REVIEW_DATE_FORMATS:
+    # ISO 8601 fast path (covers "…T12:30:00", fractional seconds, offsets, etc.).
+    if fmt in (None, "iso"):
+        try:
+            return _dt.datetime.fromisoformat(s)
+        except ValueError:
+            pass
+    bases = _DATE_FORMAT_BASES.get(fmt) or _AUTO_DATE_BASES
+    for base in bases:
+        for suf in _TIME_SUFFIXES:
             try:
-                return _dt.datetime.strptime(s, fmt).date()
+                return _dt.datetime.strptime(s, base + suf)
             except ValueError:
                 continue
+    return None
+
+
+def _parse_date(value, fmt=None):
+    """The calendar date of a date/datetime value (time stripped), or None."""
+    dt = _parse_datetime(value, fmt)
+    return dt.date() if dt else None
+
+
+def _time_weighted_mean(pairs: list) -> float:
+    """Trapezoidal (linear-interpolation) time-weighted mean of ``[(datetime, value), …]``.
+    Falls back to a plain mean when the points don't span any time (e.g. date-only data)."""
+    pts = sorted(pairs, key=lambda p: p[0])
+    if len(pts) == 1:
+        return pts[0][1]
+    span = (pts[-1][0] - pts[0][0]).total_seconds()
+    if span <= 0:
+        return sum(v for _, v in pts) / len(pts)
+    area = 0.0
+    for a, b in zip(pts, pts[1:]):
+        area += (a[1] + b[1]) / 2 * (b[0] - a[0]).total_seconds()
+    return area / span
+
+
+def _submission_date_format(submission: UploadSubmission) -> str | None:
+    """The contributor-declared date format on the mapped date column (or None = auto)."""
+    for entry in (submission.mapping or {}).values():
+        if isinstance(entry, dict) and entry.get("canonical_field") == "date":
+            fmt = entry.get("date_format")
+            return fmt if fmt in _DATE_FORMAT_IDS else None
     return None
 
 
@@ -1281,8 +1653,11 @@ def _review_events(submission: UploadSubmission, treatment: str) -> list[dict]:
     scopes = ev.get("scopes", {})
     glob = ev.get("global", {})
     per = (ev.get("per_treatment", {}) or {}).get(treatment, {})
+    provided = set(_column_provided_event_sections(submission))
     out: list[dict] = []
     for section in (et.id for et in event_fields.types()):
+        if section in provided:
+            continue  # the mapped column is the single source for this section
         mode = scopes.get(section, "global")
         lst = per.get(section, []) if mode == "per_treatment" else glob.get(section, [])
         for e in lst or []:
@@ -1385,6 +1760,108 @@ _EVENT_TO_ROW = {
     "tillage": {"tillage": None},
 }
 
+
+# Fertilisation's two paired columns: an application needs BOTH a rate and a form.
+_FERT_FIELD_COLS = {"nitrogenapplied": "n_amount", "nitrogenform": "form"}
+
+
+def _mapping_fid_to_header(submission: UploadSubmission) -> dict:
+    out: dict = {}
+    for header, entry in (submission.mapping or {}).items():
+        if isinstance(entry, dict):
+            fid = entry.get("canonical_field")
+            if fid:
+                out.setdefault(fid, header)
+    return out
+
+
+def _column_provided_event_sections(submission: UploadSubmission) -> dict:
+    """timeline_section_id -> [source column headers] for event types *fully* supplied by
+    mapped columns — shown as done, never prompted (the column is the single source).
+
+    Fertilisation is special: an application needs both an N rate and an N form, so it's
+    only fully provided when BOTH columns are mapped. With just one, it's *partially*
+    provided — the Timeline seeds events from that column for the contributor to complete
+    the missing field (see ``_column_seeded_fertilisation``)."""
+    fid_to_header = _mapping_fid_to_header(submission)
+    provided: dict = {}
+    for section, rowmap in _EVENT_TO_ROW.items():
+        headers = [fid_to_header[fid] for fid in rowmap if fid in fid_to_header]
+        if not headers:
+            continue
+        if section == "fertilisation" and not all(
+            fid in fid_to_header for fid in _FERT_FIELD_COLS
+        ):
+            continue  # only one of the pair → partial, handled by seeded events
+        provided[section] = headers
+    return provided
+
+
+def _column_seeded_fertilisation(submission: UploadSubmission) -> dict | None:
+    """When exactly one of fertilisation's paired columns (N applied / N form) is mapped,
+    build per-treatment seed events from that column's non-zero/non-null dates, with the
+    mapped field filled and the other blank — so the contributor supplies the missing half
+    of every application. Returns None when neither or both columns are mapped."""
+    fid_to_header = _mapping_fid_to_header(submission)
+    mapped = {fid: ev_key for fid, ev_key in _FERT_FIELD_COLS.items() if fid in fid_to_header}
+    if len(mapped) != 1:
+        return None  # neither → normal manual entry; both → fully provided
+
+    fid, ev_key = next(iter(mapped.items()))
+    header = fid_to_header[fid]
+    sheet = _primary_sheet(submission)
+    if sheet is None or header not in sheet["headers"]:
+        return None
+    ci = sheet["headers"].index(header)
+    colmap = _mapped_field_columns(submission)
+    date_idx = colmap.get("date")
+    trt_col = _treatment_column(submission)
+    trt_idx = sheet["headers"].index(trt_col) if trt_col in sheet["headers"] else None
+    date_fmt = _submission_date_format(submission)
+    treatments = _detected_treatments(submission, trt_col) or ["All data"]
+    unit = _column_units(submission).get("nitrogenapplied") if ev_key == "n_amount" else None
+
+    per: dict = {t: {} for t in treatments}   # treatment -> {date_iso: value} (first per date)
+    for row in sheet.get("rows", []):
+        raw = row[ci] if ci < len(row) else None
+        if raw in (None, ""):
+            continue
+        if ev_key == "n_amount":
+            num = _to_float(raw)
+            if num is None or num == 0:
+                continue          # only real applications, not the 0 / blank days
+            value = raw
+        else:
+            value = str(raw).strip()
+            if not value:
+                continue
+        dt = _parse_datetime(
+            row[date_idx] if date_idx is not None and date_idx < len(row) else None, date_fmt
+        )
+        if dt is None:
+            continue
+        tname = (str(row[trt_idx]).strip()
+                 if trt_idx is not None and trt_idx < len(row) else treatments[0])
+        if tname in per:
+            per[tname].setdefault(dt.date().isoformat(), value)
+
+    per_events: dict = {}
+    for t, dvals in per.items():
+        evs = []
+        for diso in sorted(dvals):
+            fields = {"date": diso, ev_key: dvals[diso]}
+            if ev_key == "n_amount" and unit:
+                fields["n_unit"] = unit
+            evs.append({"fields": fields, "source": "column"})
+        if evs:
+            per_events[t] = evs
+    if not per_events:
+        return None
+    # date + the mapped field come from the column (read-only); the paired field is blank.
+    missing = "form" if ev_key == "n_amount" else "n_amount"
+    return {"field": ev_key, "missing": missing, "locked": ["date", ev_key],
+            "column": header, "per_treatment": per_events}
+
 # Guardrail: never daily-fill a pathological span (a bad/outlier date) into millions of
 # rows — beyond this, fall back to the observed dates only.
 _MAX_FILL_DAYS = 20000
@@ -1411,8 +1888,11 @@ def _event_row_values(submission: UploadSubmission, treatment: str) -> dict:
     scopes = ev.get("scopes", {})
     glob = ev.get("global", {})
     per = (ev.get("per_treatment", {}) or {}).get(treatment, {})
+    provided = set(_column_provided_event_sections(submission))
     out: dict = {}
     for section, rowmap in _EVENT_TO_ROW.items():
+        if section in provided:
+            continue  # the mapped column supplies this section's values
         mode = scopes.get(section, "global")
         lst = per.get(section, []) if mode == "per_treatment" else glob.get(section, [])
         for e in lst or []:
@@ -1456,37 +1936,111 @@ def _normalized_treatments(submission: UploadSubmission) -> dict:
     trt_col = _treatment_column(submission)
     trt_idx = headers.index(trt_col) if trt_col in headers else None
     date_idx = colmap.get("date")
+    date_fmt = _submission_date_format(submission)
     treatments = _detected_treatments(submission, trt_col) or ["All data"]
 
+    # 'replication' is the identifier we average over: Treatment/RawMeasurementTreatment
+    # hold treatment-*averaged* data, so it isn't a measurement column itself.
     meas_fields = [
         f.id for f in canonical.CANONICAL_FIELDS
-        if f.id in colmap and f.id not in ("treatment", "date")
+        if f.id in colmap and f.id not in ("treatment", "date", "replication")
     ]
+    # Collapse to one treatment-averaged value per calendar day, in two levels:
+    #   (a) sub-daily → daily *per replicate* (e.g. 15-min eddy-covariance data → a daily
+    #       mean for each rep), then
+    #   (b) replicate daily values → the treatment daily mean, with the N2O flux standard
+    #       error taken across the replicate daily means (between-rep variance, not within-day).
+    # A missing replication column ⇒ a single pseudo-replicate, so high-resolution data still
+    # collapses to a daily mean (just with no SE — SE needs ≥2 reps).
+    rep_idx = colmap.get("replication")
+    rep_mapped = rep_idx is not None
+    numeric_fields = {fid for fid in meas_fields
+                      if canonical.get(fid) and canonical.get(fid).dtype in ("float", "int")}
 
-    # date_iso -> {field: canonical value}, per treatment (measurements first).
-    per_dates: dict = {t: {} for t in treatments}
+    # Phase 1 — accumulate each source row as (timestamp, {field: value}) keyed by
+    # (treatment, date, replicate). The timestamp lets a rep's sub-daily points be
+    # time-weighted; date-only data just carries midnight.
+    bad_dates: list[str] = []
+    blank_treatment_rows = 0
+    accum: dict = {t: {} for t in treatments}   # accum[t][diso][rep_key] = [(dt, {fid: val})]
     for row in rows:
         tname = (str(row[trt_idx]).strip()
                  if trt_idx is not None and trt_idx < len(row) else treatments[0])
-        if tname not in per_dates:
+        if tname not in accum:
+            # With a treatment column mapped, an unmatched name means a blank/whitespace
+            # cell (every real value is in `detected`) — the row can't be attributed, so
+            # it's dropped; count it so Review/Submit can flag the loss.
+            if trt_idx is not None:
+                blank_treatment_rows += 1
             continue
-        d = _parse_date(row[date_idx]) if date_idx is not None and date_idx < len(row) else None
-        if d is None:
+        raw_date = row[date_idx] if date_idx is not None and date_idx < len(row) else None
+        dt = _parse_datetime(raw_date, date_fmt)
+        if dt is None:
+            if raw_date not in (None, "") and len(bad_dates) < 10:
+                sv = str(raw_date).strip()
+                if sv not in bad_dates:
+                    bad_dates.append(sv)
             continue  # a daily series needs a real date to place the row on
-        bucket = per_dates[tname].setdefault(d.isoformat(), {})
+        diso = dt.date().isoformat()
+        rep_key = (str(row[rep_idx]).strip() if rep_mapped and rep_idx < len(row) else "")
+        fieldvals: dict = {}
         for fid in meas_fields:
             ci = colmap[fid]
             raw = row[ci] if ci < len(row) else None
             if raw in (None, ""):
                 continue
-            cf = canonical.get(fid)
-            if cf and cf.dtype in ("float", "int"):
+            if fid in numeric_fields:
                 num = _to_float(raw)
                 if num is None:
                     continue
-                bucket.setdefault(fid, units.convert(fid, num, col_units.get(fid)))
+                fieldvals[fid] = units.convert(fid, num, col_units.get(fid))
             else:
-                bucket.setdefault(fid, raw)
+                fieldvals[fid] = raw
+        accum[tname].setdefault(diso, {}).setdefault(rep_key, []).append((dt, fieldvals))
+
+    # Phase 2 — the two-level collapse (a) then (b).
+    import statistics as _stats
+    daily_averaged = 0   # treatment-dates that had >1 sub-daily point per replicate
+    time_weighted = False  # at least one daily mean used timestamps (not a bare mean)
+    per_dates: dict = {t: {} for t in treatments}
+    for t in treatments:
+        for diso, reps in accum[t].items():
+            # (a) each replicate's sub-daily points → a daily value (time-weighted when the
+            # points carry distinct timestamps, else a plain mean).
+            rep_daily: dict = {}
+            multi_point = False
+            for rep_key, entries in reps.items():
+                if len(entries) > 1:
+                    multi_point = True
+                dd: dict = {}
+                fids_here = set().union(*(fv.keys() for _, fv in entries)) if entries else set()
+                for fid in fids_here:
+                    if fid in numeric_fields:
+                        pairs = [(ts, fv[fid]) for ts, fv in entries if fid in fv]
+                        dd[fid] = _time_weighted_mean(pairs)
+                        if len(pairs) > 1 and (max(p[0] for p in pairs)
+                                               - min(p[0] for p in pairs)).total_seconds() > 0:
+                            time_weighted = True
+                    else:
+                        dd[fid] = next(fv[fid] for _, fv in entries if fid in fv)
+                rep_daily[rep_key] = dd
+            if multi_point:
+                daily_averaged += 1
+            # (b) replicate daily values → treatment daily mean (+ flux SE across reps).
+            bucket = per_dates[t].setdefault(diso, {})
+            fids = set().union(*(dd.keys() for dd in rep_daily.values())) if rep_daily else set()
+            for fid in fids:
+                if fid in numeric_fields:
+                    vals = [dd[fid] for dd in rep_daily.values() if fid in dd]
+                    bucket[fid] = sum(vals) / len(vals)
+                else:
+                    bucket[fid] = next(dd[fid] for dd in rep_daily.values() if fid in dd)
+            if rep_mapped:
+                flux = [dd["n2oflux"] for dd in rep_daily.values() if "n2oflux" in dd]
+                if len(flux) >= 2:  # computed SE is authoritative when reps are present
+                    bucket["fluxstandarderror"] = _stats.stdev(flux) / (len(flux) ** 0.5)
+    reps_averaged = rep_mapped and any(
+        len(reps) > 1 for dd in accum.values() for reps in dd.values())
 
     # Overlay events (never overwriting a real measurement); note which event columns appear.
     event_cols: set = set()
@@ -1498,8 +2052,11 @@ def _normalized_treatments(submission: UploadSubmission) -> dict:
                 event_cols.add(k)
 
     # DOY is always derived from the date; NitrogenApplied is dense (0 on non-application
-    # days), so both belong to the canonical column set even when not mapped.
+    # days); a computed flux SE appears whenever replicates gave us one.
+    has_se = any("fluxstandarderror" in b for dd in per_dates.values() for b in dd.values())
     present = set(meas_fields) | event_cols | {"doy"}
+    if has_se:
+        present.add("fluxstandarderror")
     ordered = [f.id for f in canonical.CANONICAL_FIELDS if f.id in present and f.id != "treatment"]
     columns = [{"id": "date", "label": canonical.get("date").label, "unit": None}] + [
         {"id": fid, "label": canonical.get(fid).label, "unit": canonical.get(fid).unit}
@@ -1546,7 +2103,61 @@ def _normalized_treatments(submission: UploadSubmission) -> dict:
         "columns": columns,
         "series_fields": series_fields,
         "perTreatment": per_treatment,
+        "date_format": date_fmt,
+        "bad_dates": bad_dates,
+        "blank_treatment_rows": blank_treatment_rows,
+        "reps_averaged": reps_averaged,
+        "daily_averaged": daily_averaged,
+        "time_weighted": time_weighted,
     }
+
+
+def _date_issue(submission: UploadSubmission) -> dict | None:
+    """A user-facing complaint if some date values don't fit the declared format, else
+    None. Used by the submit-readiness gate and the review banner."""
+    norm = _normalized_treatments(submission)
+    bad = norm.get("bad_dates") or []
+    if not bad:
+        return None
+    label = next((f["label"] for f in DATE_FORMATS if f["id"] == norm.get("date_format")),
+                 "auto-detect")
+    return {"format": norm.get("date_format"), "format_label": label, "samples": bad}
+
+
+def _orphaned_treatment_keys(submission: UploadSubmission) -> list[str]:
+    """Annotation keys (names/descriptions/per-treatment soil-mgmt/events) that no longer
+    match any detected treatment — stranded, e.g. after the treatment column was remapped.
+    Their data would be silently dropped at promotion, so Review/Submit surfaces them."""
+    detected = set(_detected_treatments(submission, _treatment_column(submission)))
+    td = submission.treatment_details or {}
+    ev = submission.events if isinstance(submission.events, dict) else {}
+    keys: set = set()
+    keys |= set((td.get("per_treatment") or {}).keys())
+    keys |= set((td.get("names") or {}).keys())
+    keys |= set((td.get("descriptions") or {}).keys())
+    keys |= set((ev.get("per_treatment") or {}).keys())
+    return sorted(k for k in keys if k not in detected)
+
+
+def _coords_ok(lat, lon) -> bool:
+    """Both present and within valid geographic range."""
+    la, lo = _to_float(lat), _to_float(lon)
+    return (la is not None and lo is not None
+            and -90 <= la <= 90 and -180 <= lo <= 180)
+
+
+def _columns_missing_units(submission: UploadSubmission) -> list[str]:
+    """Mapped columns whose canonical field carries units but has no unit chosen — their
+    values would be assumed canonical (a magnitude error). Backstop for the mapping-page
+    requirement, so a crafted save can't slip an unconverted column through."""
+    out: list[str] = []
+    for header, entry in (submission.mapping or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        fid = entry.get("canonical_field")
+        if fid and units.options_for(fid) and not entry.get("unit"):
+            out.append(header)
+    return out
 
 
 def _build_review(submission: UploadSubmission) -> dict:
@@ -1577,12 +2188,26 @@ def _build_review(submission: UploadSubmission) -> dict:
     # group set to global scope (one value across all treatments) so it isn't repeated
     # under every treatment.
     study_wide = _global_info(submission) + _global_treatment_groups(submission)
+    bad = norm.get("bad_dates") or []
+    date_issue = None
+    if bad:
+        label = next((f["label"] for f in DATE_FORMATS if f["id"] == norm.get("date_format")),
+                     "auto-detect")
+        date_issue = {"format_label": label, "samples": bad}
     return {
         "treatments": norm["treatments"],
+        # identifier -> optional readable name (shown in the switcher; identifier stays key).
+        "names": (submission.treatment_details or {}).get("names", {}) or {},
         "columns": norm["columns"],
         "perTreatment": per_treatment,
         "global": study_wide,
         "fieldMeta": field_meta,
+        "dateIssue": date_issue,
+        "blankTreatmentRows": norm.get("blank_treatment_rows", 0),
+        "orphanKeys": _orphaned_treatment_keys(submission),
+        "repsAveraged": norm.get("reps_averaged", False),
+        "dailyAveraged": norm.get("daily_averaged", 0),
+        "timeWeighted": norm.get("time_weighted", False),
     }
 
 
@@ -1637,12 +2262,15 @@ def _resolved_treatment_value(submission: UploadSubmission, treatment: str, fiel
     e = src.get(field_id)
     if isinstance(e, dict) and e.get("value") not in (None, ""):
         return e["value"]
-    # Fall back to the document-extracted value. Like every prefill, a paper-sourced
-    # treatment field is shown on the Soil stage but only written to treatment_details
-    # if the contributor edits it — so an accepted-as-is value lives only in the facts.
-    m = (submission.manuscript_facts or {}).get("metadata", {}).get(field_id)
-    if isinstance(m, dict) and m.get("value") not in (None, ""):
-        return m["value"]
+    # Fall back to the document-extracted value only for GLOBAL-scope fields. The
+    # manuscript extractor yields one value per field, so applying it to a *per-treatment*
+    # field would silently give every treatment the same value (e.g. the paper's single
+    # crop stamped on a fallow control) — a contamination we won't allow. A per-treatment
+    # field must be filled explicitly per treatment.
+    if mode == "global":
+        m = (submission.manuscript_facts or {}).get("metadata", {}).get(field_id)
+        if isinstance(m, dict) and m.get("value") not in (None, ""):
+            return m["value"]
     return None
 
 
@@ -1653,21 +2281,42 @@ def _submit_readiness(submission: UploadSubmission) -> list[dict]:
     required = [f for f in canonical.CANONICAL_FIELDS if f.required]
     missing = [f.label for f in required if f.id not in have]
     treatments = _timeline_treatments(submission)
-    latlon_ok = bool(
-        _resolved_global_value(submission, "site_latitude")
-        and _resolved_global_value(submission, "site_longitude")
+    coords_ok = _coords_ok(
+        _resolved_global_value(submission, "site_latitude"),
+        _resolved_global_value(submission, "site_longitude"),
     )
     crop_ok = bool(treatments) and all(
         _resolved_treatment_value(submission, t, "primary_crop") for t in treatments
     )
+    date_issue = _date_issue(submission)
+    norm = _normalized_treatments(submission)
+    blank_rows = norm.get("blank_treatment_rows", 0)
+    orphans = _orphaned_treatment_keys(submission)
     return [
         {"label": "Data file uploaded and parsed",
          "ok": bool((submission.parsed_content or {}).get("sheets"))},
-        {"label": "Required columns mapped (date, N₂O flux)",
+        {"label": "Required columns mapped (date, N₂O flux, treatment)",
          "ok": not missing,
          "detail": ("Still needed: " + ", ".join(missing)) if missing else None},
+        {"label": "Every mapped measurement column has a unit",
+         "ok": not _columns_missing_units(submission),
+         "detail": ("No unit chosen for: " + ", ".join(_columns_missing_units(submission))
+                    + ". Set it on the Map step.") if _columns_missing_units(submission) else None},
+        {"label": "All dates match the selected date format",
+         "ok": date_issue is None,
+         "detail": (f"These values don't fit {date_issue['format_label']}: "
+                    + ", ".join(date_issue["samples"])
+                    + ". Fix the date format on the Map step or correct the data.")
+                   if date_issue else None},
+        {"label": "Every row has a treatment", "ok": not blank_rows,
+         "detail": (f"{blank_rows} row(s) have a blank treatment cell and would be dropped. "
+                    "Fill the treatment column or remove those rows.") if blank_rows else None},
+        {"label": "Treatment details all match the data", "ok": not orphans,
+         "detail": ("Details entered for treatments no longer in the data (likely after "
+                    "re-mapping): " + ", ".join(orphans)
+                    + ". Re-open the Soil & Management step to reconcile.") if orphans else None},
         {"label": "At least one treatment identified", "ok": bool(treatments)},
-        {"label": "Site coordinates (latitude & longitude)", "ok": latlon_ok},
+        {"label": "Site coordinates valid (lat −90..90, lon −180..180)", "ok": coords_ok},
         {"label": "Primary crop set for every treatment", "ok": crop_ok},
     ]
 
@@ -1719,8 +2368,8 @@ def submit(request, token):
             "summary": _submit_summary(submission),
             "contributor_name": submission.contributor_name
             or (owner.get_full_name() if owner else ""),
-            "contributor_email": submission.contributor_email
-            or (getattr(owner, "email", "") if owner else ""),
+            # Bound to the verified account and shown read-only (not editable/spoofable).
+            "contributor_email": _verified_email(owner),
             # Soft, non-blocking: alert the submitter if this paper's DOI is already in
             # the database — a second dataset for the same paper is allowed to proceed.
             "doi_duplicates": promote.find_duplicate_publications(
@@ -1735,8 +2384,6 @@ def finalize_submit(request, token):
     """Finalize a draft: validate readiness + contributor identity, then move it to
     ``submitted`` for curator review. Does not touch the live database — promotion into
     RawMeasurementTreatment is a separate, curator-driven step."""
-    from django.core.exceptions import ValidationError
-    from django.core.validators import validate_email
     from django.urls import reverse
 
     submission = _owned_submission(request, token)
@@ -1755,17 +2402,20 @@ def finalize_submit(request, token):
         )
 
     name = str(payload.get("name", "")).strip()
-    email = str(payload.get("email", "")).strip()
+    # The email is bound to the verified account, never taken from the request body —
+    # so it can't be spoofed for the trust signal or to redirect our notifications.
+    email = _verified_email(submission.owner)
     fields: dict = {}
     if not name:
         fields["name"] = "Please enter your name."
     if not email:
-        fields["email"] = "Please enter your email."
-    else:
-        try:
-            validate_email(email)
-        except ValidationError:
-            fields["email"] = "Please enter a valid email address."
+        # Login requires a verified email, so this is effectively unreachable — but
+        # fail loudly rather than record an unattributed submission.
+        return JsonResponse(
+            {"error": "Your account has no verified email address. Please verify your "
+                      "email before submitting."},
+            status=400,
+        )
     if fields:
         return JsonResponse({"error": "Please fix the highlighted fields.", "fields": fields}, status=400)
 

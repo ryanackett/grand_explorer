@@ -26,11 +26,35 @@ class CanonicalField:
     aliases: tuple[str, ...] = ()
     # For form rendering of Plane B fields: a fixed choice list makes it a <select>.
     options: tuple[str, ...] = ()
+    # Whether this field is a column-mapping *target* in the UI. Some fields stay in the
+    # registry (so the pipeline can emit them) but are never mapped by hand because we
+    # derive them ourselves — e.g. DOY from the date, nitrogen type from the fertiliser
+    # event. Hiding them prevents a contradictory hand-mapped value.
+    mappable: bool = True
 
 
 # Ordered so the mapping UI lists the important fields first.
 CANONICAL_FIELDS: list[CanonicalField] = [
     # --- Core (Plane A, the point of the dataset) ---
+    CanonicalField(
+        # Identifier column, listed first: which treatment each row belongs to. It isn't
+        # a measurement, but it lives in the time-series table and its distinct values
+        # seed the per-treatment soil/management step (Plane B). Mandatory: every dataset
+        # must say which treatment a row belongs to.
+        "treatment", "Treatment identifier", "Core", dtype="string", required=True,
+        aliases=("treatment", "treatment id", "treatment name", "treatment code",
+                 "trt", "trt id", "trt code", "treatmentname"),
+    ),
+    CanonicalField(
+        # Replication / plot within a treatment (a spatial replicate or plot id). Optional.
+        # When mapped alongside `treatment`, `_normalized_treatments` averages replicates per
+        # treatment×date (and computes N2O flux SE) — Treatment/RawMeasurementTreatment hold
+        # treatment-averaged data. It isn't a measurement column itself (the values are the
+        # grouping key, not stored per-row).
+        "replication", "Replication / plot identifier", "Core", dtype="string",
+        aliases=("replication", "replicate", "rep", "rep id", "block", "block id",
+                 "plot", "plot id", "plotid", "subplot", "field replicate"),
+    ),
     CanonicalField(
         "date", "Measurement date", "Core", dtype="date", required=True,
         aliases=("date", "sampling date", "measurement date", "sample date",
@@ -47,15 +71,6 @@ CANONICAL_FIELDS: list[CanonicalField] = [
         "fluxstandarderror", "Flux standard error", "Core", unit="g N ha⁻¹ d⁻¹",
         aliases=("flux se", "n2o se", "flux standard error", "se flux",
                  "flux std error"),
-    ),
-    CanonicalField(
-        # Identifier column: which treatment/plot each row belongs to. It isn't a
-        # measurement, but it lives in the time-series table and its distinct values
-        # seed the per-treatment soil/management step (Plane B). No "block" alias —
-        # a block is a spatial replicate, not a treatment.
-        "treatment", "Treatment / plot", "Core", dtype="string",
-        aliases=("treatment", "treatment id", "treatment name", "treatment code",
-                 "trt", "trt id", "trt code", "plot", "plot id", "plotid"),
     ),
 
     # --- Soil & climate covariates (Plane A) ---
@@ -75,7 +90,7 @@ CANONICAL_FIELDS: list[CanonicalField] = [
                  "soil t"),
     ),
     CanonicalField(
-        "airt", "Air temperature", "Soil & climate", unit="°C",
+        "airt", "Air temperature (average)", "Soil & climate", unit="°C",
         aliases=("airt", "air temp", "air temperature", "tair", "t air", "air t"),
     ),
     CanonicalField(
@@ -91,6 +106,11 @@ CANONICAL_FIELDS: list[CanonicalField] = [
         aliases=("precip", "precipitation", "rain", "rainfall", "ppt", "rain mm"),
     ),
     CanonicalField(
+        "irrigationapplied", "Irrigation applied", "Soil & climate", unit="mm",
+        aliases=("irrigation applied", "irrigation", "irrig", "water applied",
+                 "irrigation amount"),
+    ),
+    CanonicalField(
         "soilnh4", "Soil ammonium (NH₄⁺)", "Soil & climate", unit="mg N kg⁻¹",
         aliases=("soilnh4", "nh4", "ammonium", "nh4 n", "soil nh4", "nh4+",
                  "soil ammonium"),
@@ -101,28 +121,30 @@ CANONICAL_FIELDS: list[CanonicalField] = [
                  "soil nitrate"),
     ),
     CanonicalField(
-        "doy", "Day of year", "Soil & climate", dtype="int",
+        # Derived from the measurement date, never hand-mapped.
+        "doy", "Day of year", "Soil & climate", dtype="int", mappable=False,
         aliases=("doy", "day of year", "julian day", "jday", "julian date"),
     ),
 
     # --- Events (Plane C, sparse per-date interventions) ---
     CanonicalField(
-        "nitrogenapplied", "Nitrogen applied", "Events", unit="kg N ha⁻¹",
+        "nitrogenapplied", "Nitrogen application event (quantity)", "Events", unit="kg N ha⁻¹",
         aliases=("nitrogen applied", "n applied", "n rate", "n_rate", "napplied",
                  "fertilizer n", "fertiliser n", "n fertilizer", "n fertiliser",
                  "n input", "nitrogen rate"),
     ),
     CanonicalField(
-        "nitrogenform", "Nitrogen form", "Events", dtype="string",
+        "nitrogenform", "Nitrogen application event (N form)", "Events", dtype="string",
         aliases=("nitrogen form", "n form", "fertilizer type", "fertiliser type",
                  "n source", "fertilizer form"),
     ),
     CanonicalField(
-        "nitrogentype", "Nitrogen type", "Events", dtype="string",
+        # Derived from the fertilisation event (Timeline stage), never hand-mapped.
+        "nitrogentype", "Nitrogen type", "Events", dtype="string", mappable=False,
         aliases=("nitrogen type", "n type"),
     ),
     CanonicalField(
-        "plantedcrop", "Crop", "Events", dtype="string",
+        "plantedcrop", "Planting event (crop)", "Events", dtype="string",
         aliases=("crop", "planted crop", "cropping", "crop species", "plant"),
     ),
     CanonicalField(
@@ -134,12 +156,9 @@ CANONICAL_FIELDS: list[CanonicalField] = [
         aliases=("harvest", "harvested", "harvest event"),
     ),
     CanonicalField(
-        "irrigationapplied", "Irrigation applied", "Events", unit="mm",
-        aliases=("irrigation applied", "irrigation", "irrig", "water applied",
-                 "irrigation amount"),
-    ),
-    CanonicalField(
-        "management", "Management", "Events", dtype="string",
+        # Treatment-level attribute captured in the Soil & Management stage, not a
+        # per-date measurement column — never hand-mapped here.
+        "management", "Management", "Events", dtype="string", mappable=False,
         aliases=("management", "mgmt", "management practice"),
     ),
 ]
@@ -149,6 +168,11 @@ _BY_ID = {f.id: f for f in CANONICAL_FIELDS}
 
 def get(field_id: str) -> CanonicalField | None:
     return _BY_ID.get(field_id)
+
+
+def mappable_fields() -> list[CanonicalField]:
+    """Fields offered as column-mapping targets (excludes derived ones like DOY)."""
+    return [f for f in CANONICAL_FIELDS if f.mappable]
 
 
 def groups() -> list[str]:

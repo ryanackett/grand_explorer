@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from n2odb.tests_common import AuthedWorkbenchTestCase
 from django.urls import reverse
@@ -330,6 +331,25 @@ class UploadEndpointTests(AuthedWorkbenchTestCase):
         resp = self.client.post(url, {"document": bad})
         self.assertEqual(resp.status_code, 400)
 
+    @override_settings(WORKBENCH_MAX_UPLOAD_MB=0)  # 0 MB → any non-empty file is too large
+    def test_reject_oversize_file(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        url = reverse("workbench-document", args=[self.token])
+        big = SimpleUploadedFile("p.pdf", b"%PDF-1.4\n" + b"x" * 200,
+                                 content_type="application/pdf")
+        resp = self.client.post(url, {"document": big})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("too large", resp.json()["error"].lower())
+
+    @override_settings(WORKBENCH_MAX_FILES_PER_SUBMISSION=1)
+    def test_reject_over_file_cap(self):
+        url = reverse("workbench-document", args=[self.token])
+        self.assertEqual(self.client.post(url, {"text": "first"}).status_code, 200)
+        resp = self.client.post(url, {"text": "second"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("files", resp.json()["error"].lower())
+
     @override_settings(WORKBENCH_LLM_ENABLED=False)
     def test_extract_endpoint_skipped_when_llm_disabled(self):
         # Capture text first.
@@ -384,3 +404,98 @@ class UploadEndpointTests(AuthedWorkbenchTestCase):
         resp = self.client.get(reverse("workbench-document-text", args=[self.token]))
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Readable body text", resp.content)
+
+
+class ExtractionCostGuardTests(AuthedWorkbenchTestCase):
+    """Dedupe + per-account daily cap on the (billable) extract endpoint."""
+
+    def setUp(self):
+        super().setUp()
+        self.submission = UploadSubmission.objects.create(owner=self.user)
+        self.token = self.submission.public_token
+        # Attach a document (pasted text gets a sha256 like any source).
+        self.client.post(
+            reverse("workbench-document", args=[self.token]),
+            {"text": "Methods paragraph mentioning maize. DOI 10.1234/abc."},
+        )
+        self.extract_url = reverse("workbench-document-extract", args=[self.token])
+
+    def _extract(self, **post):
+        with mock.patch.object(
+            manuscript_extract, "extract_facts", side_effect=fake_extract_facts
+        ) as spy:
+            resp = self.client.post(self.extract_url, post)
+        return resp, spy
+
+    def test_first_extract_records_one_call_and_stores_sha(self):
+        resp, spy = self._extract()
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["deduped"])
+        self.assertEqual(spy.call_count, 1)
+        from n2odb.models_upload import LlmExtractionCall
+        self.assertEqual(LlmExtractionCall.objects.filter(user=self.user).count(), 1)
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.manuscript_source_sha256)
+
+    def test_rerun_unchanged_is_deduped_no_new_call(self):
+        self._extract()  # first, successful
+        resp, spy = self._extract()  # second, unchanged, no force
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["deduped"])
+        self.assertEqual(spy.call_count, 0)  # model was never called
+        from n2odb.models_upload import LlmExtractionCall
+        self.assertEqual(LlmExtractionCall.objects.filter(user=self.user).count(), 1)
+
+    def test_force_reruns_even_when_unchanged(self):
+        self._extract()
+        resp, spy = self._extract(force="1")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["deduped"])
+        self.assertEqual(spy.call_count, 1)
+        from n2odb.models_upload import LlmExtractionCall
+        self.assertEqual(LlmExtractionCall.objects.filter(user=self.user).count(), 2)
+
+
+class ExtractionDailyCapTests(TestCase):
+    """The cap only bites real (assist-enabled) calls and exempts staff."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = get_user_model().objects.create_user(
+            username="contrib", email="c@university.edu", password="pw",  # non-staff
+        )
+        self.client.force_login(self.user)
+        self.submission = UploadSubmission.objects.create(owner=self.user)
+        self.token = self.submission.public_token
+        self.client.post(
+            reverse("workbench-document", args=[self.token]),
+            {"text": "Methods paragraph mentioning maize. DOI 10.1234/abc."},
+        )
+        self.extract_url = reverse("workbench-document-extract", args=[self.token])
+
+    def _force_extract(self):
+        # force=1 bypasses dedupe so each call is a real, counted extraction.
+        with mock.patch("n2odb.views_workbench.llm_assist.is_enabled", return_value=True), \
+             mock.patch.object(manuscript_extract, "extract_facts",
+                               side_effect=fake_extract_facts):
+            return self.client.post(self.extract_url, {"force": "1"})
+
+    @override_settings(WORKBENCH_LLM_DAILY_CAP=2)
+    def test_cap_blocks_after_limit(self):
+        self.assertEqual(self._force_extract().status_code, 200)
+        self.assertEqual(self._force_extract().status_code, 200)
+        blocked = self._force_extract()
+        self.assertEqual(blocked.status_code, 429)
+        self.assertIn("limit", blocked.json()["error"].lower())
+
+    @override_settings(WORKBENCH_LLM_DAILY_CAP=1)
+    def test_staff_are_exempt(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        self.assertEqual(self._force_extract().status_code, 200)
+        self.assertEqual(self._force_extract().status_code, 200)  # over cap, still ok
+
+    @override_settings(WORKBENCH_LLM_DAILY_CAP=0)
+    def test_cap_of_zero_disables_the_ceiling(self):
+        for _ in range(3):
+            self.assertEqual(self._force_extract().status_code, 200)

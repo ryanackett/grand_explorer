@@ -147,6 +147,11 @@ def build_plan(submission) -> dict:
     lat, lon = _num(gv("site_latitude")), _num(gv("site_longitude"))
     if lat is None or lon is None:
         blocking.append("Site latitude and longitude are required.")
+    elif not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        blocking.append(
+            f"Site coordinates are out of range (lat {lat}, lon {lon}); "
+            "latitude must be −90..90 and longitude −180..180."
+        )
     site_kwargs = {
         "Latitude": lat, "Longitude": lon,
         "MAP": _num(gv("map")), "MAT": _num(gv("mat")),
@@ -159,7 +164,9 @@ def build_plan(submission) -> dict:
     norm = _normalized_treatments(submission)
     if not norm["treatments"]:
         blocking.append("No treatments to promote.")
-    descriptions = (submission.treatment_details or {}).get("descriptions", {}) or {}
+    td = submission.treatment_details or {}
+    descriptions = td.get("descriptions", {}) or {}
+    names = td.get("names", {}) or {}  # identifier -> optional readable TreatmentName
 
     plan_treatments: list = []
     raw_total = 0
@@ -170,7 +177,8 @@ def build_plan(submission) -> dict:
         if not tv("primary_crop"):
             blocking.append(f"Treatment '{t}' has no primary crop.")
         tkwargs = {
-            "TreatmentName": _fit(Treatment, "TreatmentName", t, warnings),
+            # Identifier `t` keys the rows; the readable name (if any) is the label written.
+            "TreatmentName": _fit(Treatment, "TreatmentName", names.get(t) or t, warnings),
             "PrimaryCrop": _fit(Treatment, "PrimaryCrop", tv("primary_crop"), warnings),
             "SecondaryCrop": _fit(Treatment, "SecondaryCrop", tv("secondary_crop"), warnings),
             "CoverCrop": _fit(Treatment, "CoverCrop", tv("cover_crop"), warnings),
@@ -224,17 +232,29 @@ def promote(submission) -> dict:
     data issue. All inserts share one transaction — any error rolls the whole thing back.
     """
     from django.utils import timezone
+    from ..models_upload import UploadSubmission
 
+    # Cheap pre-check outside the transaction for a fast, friendly failure; the
+    # authoritative check happens under the row lock below.
     if submission.promotion:
         raise PromotionError("This submission has already been promoted.")
     if submission.status not in _PROMOTABLE:
         raise PromotionError(f"Cannot promote a submission with status '{submission.status}'.")
 
-    plan = build_plan(submission)
-    if plan["blocking"]:
-        raise PromotionError("Cannot promote — " + "; ".join(plan["blocking"]))
-
     with transaction.atomic():
+        # Row-lock the submission so two concurrent promotes (double-click, two tabs)
+        # can't both pass the already-promoted guard and write duplicate trees. The
+        # second waits here, then sees promotion set and bails.
+        locked = UploadSubmission.objects.select_for_update().get(pk=submission.pk)
+        if locked.promotion:
+            raise PromotionError("This submission has already been promoted.")
+        if locked.status not in _PROMOTABLE:
+            raise PromotionError(f"Cannot promote a submission with status '{locked.status}'.")
+
+        plan = build_plan(locked)
+        if plan["blocking"]:
+            raise PromotionError("Cannot promote — " + "; ".join(plan["blocking"]))
+
         pub = Publication.objects.create(**plan["publication_kwargs"])
         site = Site.objects.create(**plan["site_kwargs"])
         exp = Experiment.objects.create(
@@ -258,8 +278,13 @@ def promote(submission) -> dict:
             "pubid": pub.pk, "siteid": site.pk, "experimentid": exp.pk,
             "treatmentids": treatment_ids, "raw_count": raw_count,
         }
-        submission.promotion = result
-        submission.status = "promoted"
-        submission.submitted_at = submission.submitted_at or timezone.now()
-        submission.save(update_fields=["promotion", "status", "submitted_at", "updated_at"])
+        locked.promotion = result
+        locked.status = "promoted"
+        locked.submitted_at = locked.submitted_at or timezone.now()
+        locked.save(update_fields=["promotion", "status", "submitted_at", "updated_at"])
+
+    # Reflect the committed result on the caller's instance.
+    submission.promotion = result
+    submission.status = "promoted"
+    submission.submitted_at = locked.submitted_at
     return result

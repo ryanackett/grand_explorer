@@ -58,7 +58,7 @@ class SiteViewTests(AuthedWorkbenchTestCase):
             # date & flux mapped in Stage 2; pH/lat/long left over for Stage 3.
             mapping={
                 "date": {"canonical_field": "date", "source": "user"},
-                "n2o_flux": {"canonical_field": "n2oflux", "source": "user"},
+                "n2o_flux": {"canonical_field": "n2oflux", "unit": "g N/ha/d", "source": "user"},
             },
             # a deterministic fact from the manuscript step
             manuscript_facts={"metadata": {"pub_doi": {
@@ -82,6 +82,25 @@ class SiteViewTests(AuthedWorkbenchTestCase):
         self.assertIn("pH", names)
         self.assertNotIn("date", names)
         self.assertNotIn("n2o_flux", names)
+
+    def test_leftover_columns_span_all_sheets_with_unique_keys(self):
+        # A static second sheet's columns must be offered too, and same-named columns
+        # on different sheets stay distinct via their sheet-qualified key.
+        from n2odb.views_workbench import _leftover_columns
+        self.submission.parsed_content["sheets"].append({
+            "name": "Soil", "headers": ["pH", "Sand_pct"],
+            "rows": [["6.6", "40"], ["6.7", "41"]],
+            "dtypes": ["float", "float"],
+            "n_rows": 2, "n_rows_stored": 2, "header_row": 0, "truncated": False,
+        })
+        self.submission.save(update_fields=["parsed_content"])
+        cols = _leftover_columns(self.submission)
+        keys = {c["key"] for c in cols}
+        self.assertIn("0::pH", keys)          # leftover on the measurement sheet
+        self.assertIn("1::pH", keys)          # same name on the soil sheet, distinct key
+        self.assertIn("1::Sand_pct", keys)
+        sheets = {c["key"]: c["sheet"] for c in cols}
+        self.assertEqual(sheets["1::Sand_pct"], "Soil")
 
     def test_save_site_persists_values(self):
         resp = self.client.post(

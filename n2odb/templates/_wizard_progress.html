@@ -64,6 +64,7 @@ current_step so the contributor always sees where they are and how much remains.
     <ol>
         {% for step in wizard_steps %}
         <li class="wizard-step{% if step.state %} {{ step.state }}{% endif %}"
+            data-step="{{ step.num }}"
             {% if step.state == 'active' %}aria-current="step"{% endif %}>
             {% if step.url %}
             <a class="wizard-step__link" href="{{ step.url }}"

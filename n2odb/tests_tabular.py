@@ -106,6 +106,26 @@ class ParseXlsxTests(TestCase):
         self.assertEqual(sheet.headers, ["date", "n2o_flux"])
         self.assertEqual(sheet.n_rows, 2)
 
+    def test_native_datetime_cells_are_json_safe_iso_strings(self):
+        """Real Excel date cells arrive as datetime objects; they must become ISO
+        strings so parsed_content (a plain JSONField) can serialize on save."""
+        import json
+        from datetime import datetime
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["when", "flux"])
+        ws.append([datetime(2023, 4, 17, 10, 0), 21.5])
+        buf = io.BytesIO()
+        wb.save(buf)
+
+        ds = tabular.parse_tabular("xlsx", buf.getvalue(), filename="s.xlsx")
+        self.assertEqual(ds.error, "")
+        self.assertEqual(ds.sheets[0].rows[0], ["2023-04-17T10:00:00", "21.5"])
+        # The crux: content must be JSON-serializable (this is what 500'd before).
+        json.dumps(ds.as_content())
+
 
 class SniffKindTests(TestCase):
     def test_sniff(self):

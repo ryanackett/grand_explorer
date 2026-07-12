@@ -138,9 +138,11 @@
                 <span class="sub-field__err" data-for="name"></span>
             </div>
             <div class="sub-field" id="f-email">
-                <label for="sub-email">Email <span class="sub-field__req">*</span></label>
-                <input type="email" id="sub-email" value="{{ contributor_email }}" autocomplete="email">
-                <span class="sub-field__err" data-for="email"></span>
+                <label for="sub-email">Email</label>
+                <input type="email" id="sub-email" value="{{ contributor_email }}"
+                       readonly title="Your verified account email — this can't be changed here"
+                       style="background:#f4f7f5; color:#5a6b63; cursor:not-allowed;">
+                <span class="hint">Your verified account email — the submission is attributed to it.</span>
             </div>
             <div class="sub-field">
                 <label for="sub-message">Message to the curators <small style="color:#9aa8a0;">(optional)</small></label>

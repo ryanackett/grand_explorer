@@ -66,16 +66,17 @@
        data-mapping-url="{% url 'workbench-mapping' public_token %}"
        data-doc-url="{% url 'workbench-document' public_token %}"
        data-extract-url="{% url 'workbench-document-extract' public_token %}"
-       data-text-url="{% url 'workbench-document-text' public_token %}">
+       data-text-url="{% url 'workbench-document-text' public_token %}"
+       data-extracted="{% if already_extracted %}1{% endif %}">
 
     {% include '_wizard_progress.html' %}
 
     <h1>Contribute your data</h1>
     <p class="step-lead">
       Step 1 of the upload workbench. Start with your data file — a CSV or Excel
-      spreadsheet of measurements. You can also attach the paper it came from, and
-      we'll read it to pre-fill the study details. Nothing is saved to the database
-      until you confirm it.
+      spreadsheet of measurements. You can also attach the paper it came from below.
+      We'll read it to grab key study details and metadata, and fill in
+      as much of the submission forms as we can using our LLM assistant.
     </p>
 
     <h2 class="wb-subhead">Your data file</h2>
@@ -95,7 +96,7 @@
     <div id="data-preview" class="data-preview"></div>
 
     <h2 class="wb-subhead wb-subhead--optional">Add the source paper <span style="color:#8a978f;">(optional)</span></h2>
-    <p class="wb-subhead__note">Attach the paper and we'll pre-fill the study details — it saves a lot of typing.</p>
+    <p class="wb-subhead__note">Attach the paper and we'll pre-fill some study details — it saves you a lot of typing.</p>
 
     <div class="upload-grid">
       <div>
@@ -104,7 +105,7 @@
              aria-label="Upload a PDF or DOCX">
           <i class="fa-solid fa-file-arrow-up"></i>
           <div>Drop a <strong>PDF</strong> or <strong>DOCX</strong> here, or click to browse</div>
-          <div class="hint">Optional but recommended — we'll pre-fill the study details for you.</div>
+          <div class="hint">Optional but recommended</div>
         </div>
         <input type="file" id="doc-file" accept=".pdf,.docx" hidden>
       </div>
@@ -144,13 +145,13 @@
           Re-run extraction
         </button>
       </div>
+      <div id="doc-rerun-hint" class="hint" style="margin-top:.4rem;"></div>
       <div id="doc-text" class="doc-text"></div>
     </div>
 
     <div class="wb-actions">
       <span class="hint">
-        Attaching a paper is optional — you can continue either way. Your progress is
-        saved to this draft, so you can leave and come back.
+        Your progress is saved to this draft when you click Continue, so you can leave and come back.
       </span>
       <button type="button" class="wb-btn wb-btn--primary" id="continue-btn">
         Continue&nbsp;&rarr;
@@ -190,7 +191,18 @@
   const panelToggle = document.getElementById('doc-panel-toggle');
   const textBox   = document.getElementById('doc-text');
   const rerunBtn  = document.getElementById('doc-rerun');
+  const rerunHint = document.getElementById('doc-rerun-hint');
   const continueBtn = document.getElementById('continue-btn');
+
+  // Whether the current document has already been analysed successfully. Drives the
+  // "re-run is a fresh AI request" confirm + hint so re-runs aren't wasted by mistake.
+  let alreadyExtracted = root.dataset.extracted === '1';
+  function updateRerunHint() {
+    if (!rerunHint) return;
+    rerunHint.textContent = alreadyExtracted
+      ? 'Already analysed. Re-run only if the result was wrong or you replaced the paper — it sends a fresh AI request.'
+      : 'Runs the AI extraction on the attached paper.';
+  }
 
   function getCookie(name) {
     const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
@@ -364,19 +376,36 @@
     panelToggle.textContent = open ? 'Show extracted document text' : 'Hide extracted document text';
   });
 
-  async function runExtraction() {
+  async function runExtraction(force) {
     rerunBtn.disabled = true;
     rerunBtn.textContent = 'Analyzing…';
     showChip('pending', 'Reading study details from your paper…',
       'Scanning for location, soil, crop and management information — this can take a minute or two. Please stay on this page.');
     try {
+      const body = new URLSearchParams();
+      if (force) body.set('force', '1');
       const resp = await fetch(extractUrl, {
         method: 'POST',
-        headers: { 'X-CSRFToken': csrftoken },
+        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
       });
+      // Daily cap reached (or any error): surface the server message, don't retry.
+      if (resp.status === 429) {
+        const d = await resp.json().catch(() => ({}));
+        showChip('failed', d.error || 'Daily AI extraction limit reached.', '');
+        showToast(d.error || 'Daily AI extraction limit reached.', 'warning');
+        return;
+      }
       const data = await resp.json();
       if (!resp.ok || data.error) {
         showChip('failed', data.error || 'Extraction failed.', '');
+        return;
+      }
+      // A deduped no-op: unchanged paper, reused the earlier result — no AI request spent.
+      if (data.deduped) {
+        alreadyExtracted = true;
+        showChip('extracted', 'Already analysed — reused the earlier result.',
+          'No new AI request was used. Re-run only if you replaced the paper.');
         return;
       }
       // Text was re-extracted server-side; refresh the panel so the user sees
@@ -389,6 +418,7 @@
         showChip('extracted', 'Document read.',
           counts + '. AI study-detail extraction is off — you can still fill the forms yourself.');
       } else if (data.status === 'ok') {
+        alreadyExtracted = true;
         showChip('extracted',
           'Pre-filled ' + data.metadata_count + ' study details from your paper.',
           counts + ' · ' + data.events_count + ' event(s). These populate the Site & Soil steps. '
@@ -403,9 +433,27 @@
     } finally {
       rerunBtn.disabled = false;
       rerunBtn.textContent = 'Re-run extraction';
+      updateRerunHint();
     }
   }
-  rerunBtn.addEventListener('click', runExtraction);
+
+  // Re-running an already-successful paper is almost always a misunderstanding (it
+  // costs a fresh AI request and returns the same thing). Make that explicit; a failed
+  // or not-yet-analysed paper re-runs straight away (that's the intended retry).
+  rerunBtn.addEventListener('click', () => {
+    if (alreadyExtracted) {
+      const ok = confirm(
+        'This paper was already analysed successfully.\n\n'
+        + 'Re-running sends it to the AI again — it uses another request and usually '
+        + 'returns the same result. Only re-run if the earlier result was wrong or you '
+        + 'replaced the file.\n\nRe-run anyway?');
+      if (!ok) return;
+      runExtraction(true);
+    } else {
+      runExtraction(false);
+    }
+  });
+  updateRerunHint();
 
   // --- continue to the next wizard step (column mapping) ---
   continueBtn.addEventListener('click', () => {

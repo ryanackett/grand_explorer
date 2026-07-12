@@ -84,6 +84,10 @@ class UploadSubmission(models.Model):
     # interpret its contents — it renders them. Shape is the §5 contract.
     manuscript_facts = models.JSONField(default=dict, blank=True)
     manuscript_extracted_at = models.DateTimeField(null=True, blank=True)
+    # sha256 of the document that produced the *current* successful extraction. Used to
+    # skip a redundant model call when Extract is re-run on an unchanged, already-analysed
+    # paper (an accidental-cost guard). Empty until a run returns status "ok".
+    manuscript_source_sha256 = models.CharField(max_length=64, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -124,6 +128,40 @@ class ManuscriptSource(models.Model):
 
     def __str__(self):
         return f"{self.get_kind_display()} for {self.submission_id}: {self.original_name or '(pasted)'}"
+
+
+class LlmExtractionCall(models.Model):
+    """One record per *actual* manuscript-extraction model call (status ok/failed).
+
+    Durable, queryable audit trail of contributor LLM usage — the basis for the
+    per-account daily cap (``WORKBENCH_LLM_DAILY_CAP``) and future cost monitoring.
+    Deduped no-ops and disabled/skipped runs are never logged, so a count of rows
+    for a user on a given day equals the model calls that actually cost money.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="llm_extraction_calls",
+    )
+    submission = models.ForeignKey(
+        UploadSubmission,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="llm_calls",
+    )
+    status = models.CharField(max_length=10)  # "ok" | "failed"
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["user", "created_at"])]
+
+    def __str__(self):
+        return f"LLM call by {self.user_id} ({self.status}) at {self.created_at:%Y-%m-%d %H:%M}"
 
 
 class UploadedDataFile(models.Model):

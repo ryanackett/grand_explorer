@@ -41,8 +41,8 @@
         font-size:1.05rem; border-radius:50px; padding:2px 10px; white-space:nowrap;
         cursor:default;
     }
-    .prov--document { background:#eef3f0; color:#4a7c62; cursor:help; }
-    .prov--column   { background:#fbf1e5; color:#b9832f; }
+    .prov--document { background:#eef1fb; color:#4a5aa0; cursor:help; }
+    .prov--column   { background:#e9f4ee; color:#4a7c62; }
     .prov--user     { background:#eef1f4; color:#7a8894; }
     .prov--empty    { display:none; }
     .prov__clear { border:none; background:none; color:inherit; cursor:pointer; font-size:1.2rem;
@@ -57,16 +57,19 @@
     .cloud { display:flex; flex-wrap:wrap; gap:.6rem; align-content:flex-start; min-height:110px;
         border:2px dashed #dfe5e2; border-radius:10px; padding:1rem; background:#fafbfa; }
     .cloud-empty { color:#9aa8a0; font-size:1.2rem; margin:auto; }
+    /* Amber left edge = no confident match (your call); green = a suggested match. */
     .col-chip { display:inline-flex; align-items:center; gap:.45rem; background:#fff;
-        border:1px solid #cdd6d1; border-left:4px solid #c3cec8; border-radius:50px;
+        border:1px solid #cdd6d1; border-left:4px solid #d8a657; border-radius:50px;
         padding:.4rem .85rem; font-size:1.25rem; color:#2c3e50; cursor:grab; user-select:none;
         transition:box-shadow .12s ease, border-color .12s ease; }
     .col-chip:hover { box-shadow:0 2px 9px rgba(0,0,0,.08); }
     .col-chip.armed { border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.22); }
-    .col-chip.suggested { border-left-color:#d8a657; }
+    .col-chip.suggested { border-left-color:#6fae8b; }
     .col-chip.dragging { opacity:.4; }
     .col-chip__dtype { font-size:.95rem; text-transform:uppercase; letter-spacing:.04em;
         color:#82968c; background:#eef3f0; border-radius:4px; padding:1px 6px; }
+    .col-chip__sheet { font-size:.95rem; color:#b9832f; background:#fbf1e5;
+        border-radius:4px; padding:1px 6px; }
     .site-grid.arming .site-field { outline:1px dashed #d4dcd7; }
 </style>
 
@@ -191,9 +194,13 @@
     return n;
   }
 
-  // Which field (if any) currently pulls from a given column.
-  function fieldForColumn(name) {
-    return Object.keys(state).find(fid => state[fid].source === 'column' && state[fid].column === name) || null;
+  // Columns can come from several sheets; show the sheet badge only when there's
+  // more than one, to keep the single-sheet case uncluttered.
+  const multiSheet = new Set(columns.map(c => c.sheet)).size > 1;
+
+  // Which field (if any) currently pulls from a given column (by unique key).
+  function fieldForColumn(key) {
+    return Object.keys(state).find(fid => state[fid].source === 'column' && state[fid].columnKey === key) || null;
   }
 
   function renderProvenance(fid) {
@@ -209,7 +216,8 @@
       if (s.source_quote) badge.title = s.source_quote;
     } else if (s.source === 'column') {
       badge.classList.add('prov--column');
-      badge.appendChild(el('span', null, 'from column “' + s.column + '”'));
+      badge.appendChild(el('span', null, 'from column “' + s.column + '”'
+        + (multiSheet && s.sheet ? ' · ' + s.sheet : '')));
       const x = el('button', { type: 'button', class: 'prov__clear', 'aria-label': 'Clear' }, '×');
       x.addEventListener('click', () => setField(fid, null, null));
       badge.appendChild(x);
@@ -233,14 +241,14 @@
     scheduleSave();
   }
 
-  function assignColumn(colName, fid) {
-    const col = columns.find(c => c.name === colName);
+  function assignColumn(colKey, fid) {
+    const col = columns.find(c => c.key === colKey);
     if (!col) return;
     // a column feeds only one field at a time
-    const prev = fieldForColumn(colName);
+    const prev = fieldForColumn(colKey);
     if (prev && prev !== fid) setField(prev, null, null);
-    setField(fid, col.value, 'column', { column: colName });
-    if (armed === colName) setArmed(null);
+    setField(fid, col.value, 'column', { column: col.name, sheet: col.sheet, columnKey: col.key });
+    if (armed === colKey) setArmed(null);
   }
 
   function setArmed(colName) {
@@ -256,24 +264,25 @@
       title: (c.samples && c.samples.length ? c.name + ' — e.g. ' + c.samples.join(', ') : c.name)
         + (c.distinct > 1 ? ' (varies across rows)' : ''),
     });
-    chip.dataset.col = c.name;
-    if (armed === c.name) chip.classList.add('armed');
+    chip.dataset.col = c.key;
+    if (armed === c.key) chip.classList.add('armed');
     if (sug.canonical_field && sug.confidence >= 0.6) chip.classList.add('suggested');
     chip.appendChild(el('span', null, c.name));
+    if (multiSheet && c.sheet) chip.appendChild(el('span', { class: 'col-chip__sheet' }, c.sheet));
     chip.appendChild(el('span', { class: 'col-chip__dtype' }, c.dtype));
     if (sug.canonical_field && sug.confidence >= 0.6 && fieldById[sug.canonical_field]) {
       const accept = el('button', { type: 'button', class: 'col-chip__accept',
         style: 'border:none;background:none;color:#b9832f;cursor:pointer;font-size:1.1rem;padding:0 0 0 .15rem;text-transform:none;letter-spacing:normal;height:auto;margin:0;' },
         '→ ' + fieldById[sug.canonical_field].label);
-      accept.addEventListener('click', (e) => { e.stopPropagation(); assignColumn(c.name, sug.canonical_field); });
+      accept.addEventListener('click', (e) => { e.stopPropagation(); assignColumn(c.key, sug.canonical_field); });
       chip.appendChild(accept);
     }
-    chip.addEventListener('click', () => setArmed(armed === c.name ? null : c.name));
+    chip.addEventListener('click', () => setArmed(armed === c.key ? null : c.key));
     chip.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setArmed(armed === c.name ? null : c.name); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setArmed(armed === c.key ? null : c.key); }
     });
     chip.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', c.name);
+      e.dataTransfer.setData('text/plain', c.key);
       e.dataTransfer.effectAllowed = 'copy';
       chip.classList.add('dragging');
     });
@@ -281,18 +290,25 @@
     return chip;
   }
 
+  // Sort key: a real suggestion's confidence, else -1 so unmatched chips sink.
+  function confOf(c) {
+    return (c.suggestion && c.suggestion.canonical_field) ? c.suggestion.confidence : -1;
+  }
+
   function renderCloud() {
     const q = (search.value || '').trim().toLowerCase();
     cloud.innerHTML = '';
     // A column stays available even once used (it may map elsewhere); mark used ones.
     const shown = columns.filter(c => !q || c.name.toLowerCase().includes(q));
+    // Highest-confidence suggestions first (no suggestion sinks to the bottom).
+    shown.sort((a, b) => confOf(b) - confOf(a));
     if (!shown.length) {
       cloud.appendChild(el('div', { class: 'cloud-empty' },
         columns.length ? 'No columns match.' : 'No leftover columns — everything was mapped as time-series.'));
       return;
     }
     shown.forEach(c => {
-      const usedBy = fieldForColumn(c.name);
+      const usedBy = fieldForColumn(c.key);
       const chip = makeChip(c);
       if (usedBy) { chip.style.opacity = '.5'; chip.title = c.name + ' → ' + (fieldById[usedBy] ? fieldById[usedBy].label : usedBy); }
       cloud.appendChild(chip);

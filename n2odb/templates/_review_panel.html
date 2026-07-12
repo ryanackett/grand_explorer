@@ -340,10 +340,13 @@ Page-agnostic: no wizard URLs here — the Review stage adds its own Continue ha
     }
 
     function render() {
-        const t = TREATMENTS[idx];
-        document.getElementById('rv-tname').textContent = t;
-        document.getElementById('rv-tcount').textContent =
-            TREATMENTS.length > 1 ? ('Treatment ' + (idx + 1) + ' of ' + TREATMENTS.length) : '';
+        const t = TREATMENTS[idx];   // identifier — always the key for data/details
+        const label = (DATA.names && DATA.names[t]) || t;
+        document.getElementById('rv-tname').textContent = label;
+        let count = TREATMENTS.length > 1 ? ('Treatment ' + (idx + 1) + ' of ' + TREATMENTS.length) : '';
+        // When a readable name is set, surface the raw identifier too so it's traceable.
+        if (label !== t) count = 'id: ' + t + (count ? ' · ' + count : '');
+        document.getElementById('rv-tcount').textContent = count;
         document.getElementById('rv-prev').disabled = idx === 0;
         document.getElementById('rv-next').disabled = idx === TREATMENTS.length - 1;
         renderDetails(t);

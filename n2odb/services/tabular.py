@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import date, datetime, time
 from dataclasses import dataclass, field
 
 from django.conf import settings
@@ -266,6 +267,18 @@ def _parse_csv(data: bytes, name: str) -> list[Sheet]:
     return [sheet] if sheet else []
 
 
+def _cell_str(c) -> str:
+    """Coerce an openpyxl cell to a string so xlsx yields the same all-strings
+    grid the CSV path does. Native date/datetime/time cells become ISO strings
+    (the date parser auto-detects ISO); otherwise ``str``. Without this, real
+    Excel date cells reach the JSONField as datetime objects and 500 on save."""
+    if c is None:
+        return ""
+    if isinstance(c, (datetime, date, time)):
+        return c.isoformat()
+    return str(c)
+
+
 def _parse_xlsx(data: bytes) -> list[Sheet]:
     from openpyxl import load_workbook
 
@@ -273,7 +286,7 @@ def _parse_xlsx(data: bytes) -> list[Sheet]:
     sheets = []
     for ws in wb.worksheets:
         grid = [
-            [("" if c is None else c) for c in row]
+            [_cell_str(c) for c in row]
             for row in ws.iter_rows(values_only=True)
         ]
         sheet = _sheet_from_grid(ws.title, grid)
