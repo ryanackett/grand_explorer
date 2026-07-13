@@ -21,6 +21,8 @@ class AllauthFlowTests(TestCase):
             "email": "ada@university.edu",
             "password1": "Str0ngPass!23",
             "password2": "Str0ngPass!23",
+            "first_name": "Ada",
+            "last_name": "Lovelace",
         })
         # Account exists…
         User = get_user_model()
@@ -124,3 +126,80 @@ class WorkbenchAccessTests(TestCase):
         body = self.client.get(reverse("my-submissions")).content.decode()
         self.assertIn("Mine", body)
         self.assertNotIn("Theirs", body)
+
+
+class ResumeStepTests(TestCase):
+    """Resuming a submission lands on the furthest stage reached (capped at Review),
+    not always the blank Upload page — but never past a step that needs a data table."""
+
+    _SHEET = {"sheets": [{
+        "name": "s.csv", "headers": ["date", "n2o_flux"],
+        "rows": [["2018-05-01", "1.2"]],
+        "dtypes": ["date", "float"],
+        "n_rows": 1, "n_rows_stored": 1, "header_row": 0, "truncated": False,
+    }]}
+
+    def _step(self, **kw):
+        from n2odb.views_workbench import _resume_step
+        return _resume_step(UploadSubmission(**kw))
+
+    def test_no_data_table_resumes_at_upload(self):
+        # A saved answer but no parsed sheet: later stages redirect to Upload, so resume there.
+        self.assertEqual(self._step(metadata_values={"pub_title": {"value": "x"}}), 1)
+
+    def test_data_only_resumes_at_mapping(self):
+        self.assertEqual(self._step(parsed_content=self._SHEET), 2)
+
+    def test_mapping_done_resumes_at_site(self):
+        self.assertEqual(
+            self._step(parsed_content=self._SHEET,
+                       mapping={"date": {"canonical_field": "date"}}), 3)
+
+    def test_site_done_resumes_at_soil(self):
+        self.assertEqual(
+            self._step(parsed_content=self._SHEET,
+                       metadata_values={"pub_title": {"value": "x"}}), 4)
+
+    def test_timeline_done_caps_at_review(self):
+        self.assertEqual(
+            self._step(parsed_content=self._SHEET,
+                       treatment_details={"treatments": ["A"]},
+                       events={"global": {"planting": [{"fields": {}}]}}), 6)
+
+    def test_resume_redirects_to_computed_stage(self):
+        owner = get_user_model().objects.create_user(
+            "owner", email="owner@university.edu", password="pw")
+        sub = UploadSubmission.objects.create(
+            owner=owner, parsed_content=self._SHEET,
+            mapping={"date": {"canonical_field": "date"}})
+        self.client.force_login(owner)
+        resp = self.client.get(reverse("workbench-resume", args=[sub.public_token]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("workbench-site", args=[sub.public_token]))
+
+    def test_rail_links_forward_to_reached_pages(self):
+        # Fully progressed to Review, then viewing an *earlier* stage (Mapping): the rail
+        # must still link forward to pages already visited. Timeline/Review URLs appear
+        # only in the rail on the mapping page (the page's own nav only knows Site/next).
+        owner = get_user_model().objects.create_user(
+            "railfwd", email="railfwd@university.edu", password="pw")
+        sub = UploadSubmission.objects.create(
+            owner=owner, parsed_content=self._SHEET,
+            mapping={"date": {"canonical_field": "date"}},
+            metadata_values={"pub_title": {"value": "x"}},
+            treatment_details={"treatments": ["A"]},
+            events={"global": {"planting": [{"fields": {}}]}})
+        self.client.force_login(owner)
+        body = self.client.get(reverse("workbench-mapping", args=[sub.public_token])).content.decode()
+        self.assertIn(reverse("workbench-timeline", args=[sub.public_token]), body)
+        self.assertIn(reverse("workbench-review", args=[sub.public_token]), body)
+
+    def test_rail_hides_unreached_pages(self):
+        # Only data uploaded (furthest = Mapping): steps past it stay inert / unlinked.
+        owner = get_user_model().objects.create_user(
+            "railback", email="railback@university.edu", password="pw")
+        sub = UploadSubmission.objects.create(owner=owner, parsed_content=self._SHEET)
+        self.client.force_login(owner)
+        body = self.client.get(reverse("workbench-mapping", args=[sub.public_token])).content.decode()
+        self.assertNotIn(reverse("workbench-timeline", args=[sub.public_token]), body)
+        self.assertNotIn(reverse("workbench-review", args=[sub.public_token]), body)

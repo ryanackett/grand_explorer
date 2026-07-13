@@ -142,6 +142,9 @@ def build_plan(submission) -> dict:
         "PubYear": _int(gv("pub_year")),
         "Link": _fit(Publication, "Link", gv("pub_link") or doi_link(doi), warnings),
         "Abstract": gv("pub_abstract") or None,
+        # Stamp the submitter's persistent id so promoted data stays traceable to them
+        # (null if the submission has no owner — e.g. staff-created or a deleted account).
+        "Contributor": submission.owner.public_id if submission.owner_id else None,
     }
 
     lat, lon = _num(gv("site_latitude")), _num(gv("site_longitude"))
@@ -256,6 +259,11 @@ def promote(submission) -> dict:
             raise PromotionError("Cannot promote — " + "; ".join(plan["blocking"]))
 
         pub = Publication.objects.create(**plan["publication_kwargs"])
+        # ponytail: Site.Continent/Country are left blank here and filled later by the
+        # `backfill_geography` management command (must be re-run after promotions). TODO:
+        # derive them inline from lat/lon on promote so the leaderboard's continent count
+        # is correct immediately — reuse backfill_geography's reverse-geocode helpers
+        # rather than duplicating them.
         site = Site.objects.create(**plan["site_kwargs"])
         exp = Experiment.objects.create(
             ExperimentName=plan["experiment_name"], SiteID=site, PubID=pub

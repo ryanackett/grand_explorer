@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',        # intcomma formatting on the leaderboard
     'django.contrib.sites',           # required by allauth
     'allauth',
     'allauth.account',                # contributor registration + email verification
@@ -83,6 +84,9 @@ AUTHENTICATION_BACKENDS = [
 # is the core API-spam protection.
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+# First/last name captured at signup (editable later in My Account). allauth appends
+# these fields to the signup form and calls the form's signup() to persist them.
+ACCOUNT_SIGNUP_FORM_CLASS = 'n2odb.forms.SignupExtraForm'
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_UNIQUE_EMAIL = True
 # Don't reveal whether an email is registered (uniform responses on signup/login/reset).

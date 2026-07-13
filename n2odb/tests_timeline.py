@@ -686,6 +686,28 @@ class PromoteTests(AuthedWorkbenchTestCase):
         with self.assertRaises(promote.PromotionError):
             promote.promote(sub)  # second attempt refused
 
+    def test_promote_stamps_contributor_public_id(self):
+        # The submitter's persistent id lands on the Publication so all their promoted
+        # datasets are findable by that one handle.
+        from django.contrib.auth import get_user_model
+        from n2odb.services import promote
+        from n2odb.models import Publication
+        contributor = get_user_model().objects.create_user(
+            "contrib", email="contrib@university.edu", password="pw")
+        sub = self._mk(owner=contributor)
+        result = promote.promote(sub)
+
+        pub = Publication.objects.get(pk=result["pubid"])
+        self.assertEqual(pub.Contributor, contributor.public_id)
+        # The tracking query the field exists for:
+        self.assertIn(pub, Publication.objects.filter(Contributor=contributor.public_id))
+
+    def test_promote_without_owner_leaves_contributor_null(self):
+        from n2odb.services import promote
+        from n2odb.models import Publication
+        result = promote.promote(self._mk())  # _mk creates no owner
+        self.assertIsNone(Publication.objects.get(pk=result["pubid"]).Contributor)
+
     def test_promote_refuses_draft(self):
         from n2odb.services import promote
         sub = self._mk(status="draft")

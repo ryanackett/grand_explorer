@@ -34,6 +34,12 @@
     .doc-chip.failed { background:#fdf1ec; border-left-color:#c0704a; }
     .doc-chip .counts { color:#5a6b63; font-size:1.25rem; margin-top:.25rem; }
 
+    .reupload-warn {
+        margin-top:.75rem; padding:.75rem 1rem; border-radius:6px;
+        background:#fef7ec; border-left:4px solid #d6a24a; color:#6b5326;
+        font-size:1.25rem; line-height:1.45;
+    }
+
     .doc-panel { margin-top:1.5rem; }
     .doc-panel-controls { display:flex; flex-wrap:wrap; gap:.75rem; }
     .doc-text {
@@ -93,7 +99,14 @@
       <div id="data-chip-title"></div>
       <div id="data-chip-counts" class="counts"></div>
     </div>
+    {% if has_data %}
+    <div class="reupload-warn">
+      A data file is already attached to this submission. Uploading a new one
+      <strong>replaces it</strong> and may reset your column mapping and the steps after it.
+    </div>
+    {% endif %}
     <div id="data-preview" class="data-preview"></div>
+    {% if has_data %}{{ data_preview|json_script:"data-preview-json" }}{% endif %}
 
     <h2 class="wb-subhead wb-subhead--optional">Add the source paper <span style="color:#8a978f;">(optional)</span></h2>
     <p class="wb-subhead__note">Attach the paper and we'll pre-fill some study details — it saves you a lot of typing.</p>
@@ -121,6 +134,13 @@
         </button>
       </div>
     </div>
+
+    {% if document %}
+    <div class="reupload-warn">
+      A paper is already attached. Uploading or pasting another <strong>adds a new one</strong>
+      and re-runs extraction over it.
+    </div>
+    {% endif %}
 
     <style>
       .doc-chip__title-row { display:flex; align-items:center; gap:.55rem; }
@@ -273,6 +293,15 @@
   let dataReady = {{ has_data|yesno:"true,false" }};
 
   async function uploadData(file) {
+    // Replacing an existing data file may invalidate the column mapping and later steps,
+    // so make the reset explicit before overwriting it.
+    if (dataReady && !confirm(
+        'A data file is already attached to this submission.\n\n'
+        + 'Uploading a new one replaces it and may reset your column mapping and the '
+        + 'steps after it.\n\nReplace the current data file?')) {
+      dataInput.value = '';
+      return;
+    }
     showDataChip('pending', 'Reading your data file…', '');
     dataPreview.innerHTML = '';
     const fd = new FormData();
@@ -463,6 +492,18 @@
     }
     window.location.href = mappingUrl;
   });
+
+  {% if has_data %}
+  // A data file is already attached — re-show the chip + preview so a returning
+  // contributor sees it without re-uploading.
+  (function () {
+    const pv = JSON.parse(document.getElementById('data-preview-json').textContent);
+    const rows = pv.reduce((a, s) => a + (s.n_rows || 0), 0);
+    const sheets = pv.length === 1 ? '1 sheet' : pv.length + ' sheets';
+    showDataChip('parsed', 'Data file already uploaded.', rows + ' rows across ' + sheets + '.');
+    renderPreview(pv);
+  })();
+  {% endif %}
 
   {% if document %}
   showChip(

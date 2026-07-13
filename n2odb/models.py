@@ -1,8 +1,14 @@
+import uuid
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
 class User(AbstractUser):
-    pass
+    # Stable, non-enumerable account handle. The DB pk already survives an email change,
+    # but it's sequential (leaks user counts) and not safe to expose; this UUID is the
+    # identifier we surface/track a contributor by, unchanged across email edits.
+    # first_name / last_name come from AbstractUser (captured at signup, editable in My Account).
+    public_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
 
 class Publication(models.Model):
@@ -12,7 +18,12 @@ class Publication(models.Model):
     Citation = models.CharField(db_column='Citation', max_length=500, blank=True, null=True)  # Field name made lowercase.
     PubYear = models.IntegerField(db_column='PubYear', blank=True, null=True)  # Field name made lowercase.
     Link = models.CharField(db_column='Link', max_length=255, blank=True, null=True)  # Field name made lowercase.
-    Abstract = models.TextField(db_column='Abstract', blank=True, null=True) 
+    Abstract = models.TextField(db_column='Abstract', blank=True, null=True)
+    # Persistent handle (User.public_id) of the workbench contributor who submitted this
+    # dataset, stamped at promotion. Null for scraped/legacy publications and for
+    # promotions with no owner. Stored as the UUID value (not a FK) so provenance
+    # survives account deletion; indexed to list everything a given user contributed.
+    Contributor = models.UUIDField(db_column='Contributor', null=True, blank=True, db_index=True)
     class Meta:
         db_table = 'Publication'
 

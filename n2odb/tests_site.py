@@ -122,3 +122,18 @@ class SiteViewTests(AuthedWorkbenchTestCase):
         self.assertEqual(self.submission.metadata_values["country"]["value"], "USA")
         # primary_crop belongs to the Soil & Management stage now.
         self.assertNotIn("primary_crop", self.submission.metadata_values)
+
+    def test_save_site_coerces_spoofed_source_to_user(self):
+        # A crafted request can't claim provenance we didn't assign (curator trust signal).
+        resp = self.client.post(
+            reverse("workbench-site-save", args=[self.token]),
+            data={"values": {
+                "country": {"value": "USA", "source": "document"},   # legitimate
+                "site_name": {"value": "Farm", "source": "paper"},   # spoofed
+            }},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.metadata_values["country"]["source"], "document")
+        self.assertEqual(self.submission.metadata_values["site_name"]["source"], "user")

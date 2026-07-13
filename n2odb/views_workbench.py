@@ -56,6 +56,11 @@ _MAP_SAMPLES = 4
 # A suggestion at/above this confidence is auto-applied on first visit.
 _AUTO_APPLY_CONFIDENCE = 0.85
 
+# Provenance labels a save payload may claim for a value. Anything else (a crafted
+# request inventing e.g. "paper") is coerced to "user" so the curator's trust
+# signals can't be spoofed.
+_VALUE_SOURCES = frozenset({"user", "column", "document"})
+
 logger = logging.getLogger(__name__)
 
 # Magic bytes for the two binary document types we accept.
@@ -88,16 +93,25 @@ _STEP_URLS = {
 }
 
 
-def _wizard_context(current_step: int, token=None) -> dict:
-    """Progress-rail context. Each step carries a link, but only to a page the
-    contributor has already reached (step number ≤ the current step); later steps
-    stay inert so you can't skip ahead past unfinished work."""
+def _wizard_context(current_step: int, submission=None) -> dict:
+    """Progress-rail context. A step links to its page once the contributor has reached
+    it in this submission — every step up to the furthest they've progressed to (see
+    ``_resume_step``), not merely the steps behind the one they're viewing. So after
+    stepping *back* via the rail they can step *forward* again to any page already
+    visited; steps past that furthest point stay inert so you can't skip ahead over
+    unfinished work."""
     from django.urls import reverse
+
+    token = submission.public_token if submission is not None else None
+    # Furthest page reached in this submission, but never behind the one being viewed.
+    furthest = current_step
+    if submission is not None:
+        furthest = max(current_step, _resume_step(submission))
 
     steps = []
     for i, label in enumerate(WIZARD_STEPS, start=1):
         url = None
-        if i <= current_step:
+        if i <= furthest:
             if i == 1:
                 url = reverse("submit-data")  # resumes the session's draft
             elif i in _STEP_URLS and token is not None:
@@ -105,8 +119,10 @@ def _wizard_context(current_step: int, token=None) -> dict:
         steps.append({
             "num": i,
             "label": label,
+            # Reached-but-not-current steps (behind or ahead) render as "done"; the
+            # active one as "active"; anything past the furthest reached stays inert.
+            "state": "active" if i == current_step else ("done" if i <= furthest else ""),
             "url": url,
-            "state": "done" if i < current_step else ("active" if i == current_step else ""),
         })
     return {
         "wizard_steps": steps,
@@ -222,8 +238,11 @@ def submit_data(request):
             "public_token": submission.public_token,
             "document": document,
             "has_data": has_data,
+            # Re-render the parsed preview on a return visit so a contributor sees their
+            # data file is already attached (kept in sync with the fresh-upload preview).
+            "data_preview": _preview_of(submission.parsed_content) if has_data else [],
             "already_extracted": already_extracted,
-            **_wizard_context(current_step=1, token=submission.public_token),
+            **_wizard_context(current_step=1, submission=submission),
         },
     )
 
@@ -248,16 +267,38 @@ def my_submissions(request):
     return render(request, "workbench_my_submissions.html", {"rows": rows})
 
 
+def _resume_step(sub: UploadSubmission) -> int:
+    """The wizard step to reopen a submission at: the first stage past the furthest one
+    the contributor completed, capped at Review (6) so a finished draft lands on Review
+    rather than the (dead-end) Submit page. Stages 2–6 all require a parsed data table
+    (they redirect to Upload without one), so a submission without one resumes at Upload."""
+    if _primary_sheet(sub) is None:
+        return 1
+    if sub.events:
+        return 6  # Timeline done → Review
+    if sub.treatment_details:
+        return 5  # Soil done → Timeline
+    if sub.metadata_values:
+        return 4  # Site done → Soil
+    if sub.mapping:
+        return 3  # Mapping done → Site
+    return 2      # data uploaded, nothing mapped yet → Mapping
+
+
 def resume_submission(request, token):
-    """Reopen one of the contributor's own submissions in the wizard. A submission a
-    curator sent back (``changes_requested``) flips back to ``draft`` so it's editable
-    again and can be re-submitted; a live draft just reopens."""
+    """Reopen one of the contributor's own submissions in the wizard, landing on the
+    furthest step they'd reached (see ``_resume_step``) rather than always the Upload
+    page. A submission a curator sent back (``changes_requested``) flips back to ``draft``
+    so it's editable again and can be re-submitted; a live draft just reopens."""
     sub = _owned_submission(request, token)
     if sub.status == "changes_requested":
         sub.status = "draft"
         sub.save(update_fields=["status", "updated_at"])
     request.session["workbench_token"] = str(sub.public_token)
-    return redirect("submit-data")
+    step = _resume_step(sub)
+    if step == 1:
+        return redirect("submit-data")
+    return redirect(_STEP_URLS[step], token=sub.public_token)
 
 
 def _sniff_kind(filename: str, head: bytes) -> str | None:
@@ -748,7 +789,7 @@ def mapping(request, token):
             "required_ids": required_ids,
             "unit_options": units.UNIT_OPTIONS,
             "date_formats": DATE_FORMATS,
-            **_wizard_context(current_step=2, token=submission.public_token),
+            **_wizard_context(current_step=2, submission=submission),
         },
     )
 
@@ -930,7 +971,7 @@ def site_info(request, token):
             "initial_values": _initial_site_values(submission, fields),
             "leftover_columns": _leftover_columns(submission),
             "required_ids": required_ids,
-            **_wizard_context(current_step=3, token=submission.public_token),
+            **_wizard_context(current_step=3, submission=submission),
         },
     )
 
@@ -954,7 +995,8 @@ def save_site(request, token):
         value = entry.get("value")
         if value in (None, ""):
             continue
-        clean = {"value": value, "source": entry.get("source", "user")}
+        src = entry.get("source")
+        clean = {"value": value, "source": src if src in _VALUE_SOURCES else "user"}
         for key in ("column", "columnKey", "sheet", "source_quote"):
             if entry.get(key):
                 clean[key] = entry[key]
@@ -1160,7 +1202,7 @@ def soil_mgmt(request, token):
             "leftover_columns": _soil_leftover_columns(submission),
             "paper_facts": _paper_facts(submission, fields),
             "required_ids": [f.id for f in fields if f.required],
-            **_wizard_context(current_step=4, token=submission.public_token),
+            **_wizard_context(current_step=4, submission=submission),
         },
     )
 
@@ -1208,7 +1250,8 @@ def save_soil_mgmt(request, token):
         value = entry.get("value")
         if value in (None, ""):
             return None
-        clean = {"value": value, "source": entry.get("source", "user")}
+        src = entry.get("source")
+        clean = {"value": value, "source": src if src in _VALUE_SOURCES else "user"}
         for key in ("column", "columnKey", "sheet", "source_quote"):
             if entry.get(key):
                 clean[key] = entry[key]
@@ -1384,7 +1427,7 @@ def timeline(request, token):
             "treatments": _timeline_treatments(submission),
             "paper_events": _paper_events(submission, options),
             "saved_events": saved,
-            **_wizard_context(current_step=5, token=submission.public_token),
+            **_wizard_context(current_step=5, submission=submission),
         },
     )
 
@@ -1431,7 +1474,8 @@ def save_timeline(request, token):
         hint = str(ev.get("date_hint") or "").strip()
         if not fields and not hint:
             return None
-        out = {"fields": fields, "source": ev.get("source", "user")}
+        src = ev.get("source")
+        out = {"fields": fields, "source": src if src in _VALUE_SOURCES else "user"}
         if ev.get("source_quote"):
             out["source_quote"] = ev["source_quote"]
         if ev.get("confidence") is not None:
@@ -2226,7 +2270,7 @@ def review(request, token):
             "submission": submission,
             "public_token": submission.public_token,
             "review_data": data,
-            **_wizard_context(current_step=6, token=submission.public_token),
+            **_wizard_context(current_step=6, submission=submission),
         },
     )
 
@@ -2356,7 +2400,7 @@ def submit(request, token):
         "submission": submission,
         "public_token": submission.public_token,
         "submitted": submission.status != "draft",
-        **_wizard_context(current_step=7, token=submission.public_token),
+        **_wizard_context(current_step=7, submission=submission),
     }
     if not ctx["submitted"]:
         from .services import promote
