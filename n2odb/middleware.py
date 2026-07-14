@@ -27,6 +27,12 @@ class SoftLaunchGateMiddleware:
         if not password:
             return self.get_response(request)
 
+        # Exempt allauth flows: verification/reset links are opened in a fresh
+        # browser that has never seen the shared gate, so gating them blocks new
+        # contributors from completing signup. These pages have their own auth.
+        if request.path.startswith('/accounts/'):
+            return self.get_response(request)
+
         username = getattr(settings, 'SITE_USERNAME', 'sahalab') or 'sahalab'
         header = request.META.get('HTTP_AUTHORIZATION', '')
         if header.startswith('Basic '):

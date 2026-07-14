@@ -5,10 +5,24 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from n2odb.models_upload import UploadSubmission
+
+
+@override_settings(SITE_PASSWORD="secret", SITE_USERNAME="lab")
+class SoftLaunchGateTests(TestCase):
+    """The soft-launch HTTP Basic gate must block the general site but let
+    allauth verification/reset links through — those open in a fresh browser
+    that has never seen the gate credential."""
+
+    def test_gate_blocks_normal_page(self):
+        self.assertEqual(self.client.get("/about/").status_code, 401)
+
+    def test_gate_exempts_accounts(self):
+        # allauth pages have their own auth; the gate must not 401 them.
+        self.assertNotEqual(self.client.get(reverse("account_login")).status_code, 401)
 
 
 class AllauthFlowTests(TestCase):

@@ -52,9 +52,10 @@
         .about-card p { font-size: 1.65rem; margin: 0 0 1.1rem; }
         .about-card strong { color: var(--grand-green); }
 
-        /* Feature grid */
+        /* Feature grid — fixed 2 columns so the four cards form a balanced 2×2
+           block rather than an off-kilter 3 + 1 row. */
         .feature-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            display: grid; grid-template-columns: repeat(2, 1fr);
             gap: 1.4rem; margin-top: 1.6rem;
         }
         .feature {
@@ -95,6 +96,7 @@
         @media (max-width: 600px) {
             .about-hero h1 { font-size: 3rem; }
             .about-card { padding: 2rem 1.5rem; margin-top: -3rem; }
+            .feature-grid { grid-template-columns: 1fr; }  /* single column on phones */
         }
     </style>
 {% endblock %}
@@ -104,45 +106,48 @@
 
     <header class="about-hero">
         <h1>Why <em>contribute?</em></h1>
-        <p class="tagline">Your measurements are hard-won. Sharing them multiplies their impact — and it takes a guided upload, not a spreadsheet battle.</p>
+        <p class="tagline">Join the community and multiply the impact of your work.</p>
     </header>
 
     <div class="about-card">
 
-        <h2>Why it matters</h2>
         <p>
             GRAND Explorer is an open, harmonized repository for agricultural <strong>N<sub>2</sub>O</strong>
-            flux data. The measurements the field needs already exist — they're just scattered across
-            hundreds of papers in incompatible units and structures. Every dataset you add is one more
-            piece pulled into a single, clean, queryable whole that the <strong>whole community</strong> can build on.
-        </p>
-        <p>
-            Pooled, covariate-rich data is exactly what modern emission models and meta-analyses are
-            starving for. Your contribution doesn't just sit in a table — it strengthens the science
-            everyone downstream depends on.
+            flux data. At launch, our dataset already contained ~100 published datasets, but the field is constantly growing
+            with new research, from new locations, investigating novel angles of soil N<sub>2</sub>O production to fill in the
+            gaps that remain. Our community helps us stay current with the latest research, and growing to meet 
+            the needs for novel synthesis. Every dataset you add is one more
+            piece pulled into a single, clean, searchable hub that the <strong>whole community</strong> can benefit from.
         </p>
 
         <h2>What you get</h2>
         <div class="feature-grid">
             <div class="feature">
                 <i class="fas fa-magnifying-glass-chart"></i>
-                <h3>Amplified reach</h3>
-                <p>Your data becomes discoverable and reusable alongside work from labs worldwide, extending the life of the effort you already invested.</p>
+                <h3>Amplified Reach</h3>
+                <p>Your data becomes discoverable and reusable alongside work from labs worldwide, extending the life of the effort you already invested.
+                    Every datapoint downloaded from GRAND Explorer is tagged with its source publication, and requires citation for use under CC-BY Licensing.
+                </p>
             </div>
             <div class="feature">
                 <i class="fas fa-diagram-project"></i>
-                <h3>Better models</h3>
-                <p>Harmonized flux data powers the process-based and machine-learning models that individual studies can't support alone.</p>
+                <h3>Better Models</h3>
+                <p>Improved flux models, and particularly cutting-edge machine learning models that hold the potential to detangle the complex web of covariate
+                    interactions governing nitrogen processes, require large-scale, high quality datasets. GRAND Explorer does the boring part for you by 
+                    cleaning and harmonizing datasets from around the world. More community contributions means we all benefit.</p>
             </div>
             <div class="feature">
                 <i class="fas fa-wand-magic-sparkles"></i>
-                <h3>An assisted upload</h3>
-                <p>Attach your paper and our workbench pre-fills site, soil, and management details for you — you review and confirm, not retype.</p>
+                <h3>An Assisted Upload</h3>
+                <p>Our smart contributor workbench is designed to make the tedious work of harmonizing your unique data into our schema easy. You dont have to 
+                    have a perfectly formatted dataset to contribute — just bring what you have, and let the assistant do the rest. We'll even pull key information
+                    from your manuscript PDF to pre-fill site, soil, and management details for you. </p>
             </div>
             <div class="feature">
                 <i class="fas fa-award"></i>
-                <h3>Real recognition</h3>
-                <p>Contributors are credited and ranked on our <a href="{% url 'leaderboard' %}">leaderboard</a>, so your generosity is visible to the community.</p>
+                <h3>Climb the Leaderboard</h3>
+                <p>Contributors are credited and ranked on our <a href="{% url 'leaderboard' %}">leaderboard</a>, so your generosity is visible to the community.
+                Climb the ranks to take the lead in one of multiple categories and be recognized for your contributions!</p>
             </div>
         </div>
 

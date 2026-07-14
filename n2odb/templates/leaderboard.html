@@ -15,7 +15,8 @@
             --section-bg:   #ffffff;
         }
 
-        .about-wrap { color: var(--text-color); line-height: 1.6; }
+        /* Whole leaderboard in Georgia serif for a cohesive, display feel. */
+        .about-wrap { color: var(--text-color); line-height: 1.6; font-family: "Georgia", serif; }
 
         /* Header band — shared look with the About pages for site continuity. */
         .about-hero {
@@ -73,6 +74,7 @@
         .impact-stats .stat .stat-num {
             display: block; font-family: "Georgia", serif; color: #fff; font-weight: 700;
             font-size: 3.2rem; line-height: 1; text-shadow: 0 1px 8px rgba(0,0,0,0.15);
+            font-variant-numeric: tabular-nums;
         }
         .impact-stats .stat .stat-lbl {
             display: block; margin-top: 0.4rem; color: rgba(255,255,255,0.82);
@@ -80,7 +82,10 @@
         }
 
         /* Leaderboard table */
-        .lb-table { width: 100%; border-collapse: collapse; }
+        /* Override the global `table { font-family: var(--font-1) }` (styles.css) so the
+           cells stay Georgia like the rest of the board — otherwise the table digits
+           render in Inter and clash with the serif stat numbers. */
+        .lb-table { width: 100%; border-collapse: collapse; font-family: "Georgia", serif; }
         .lb-table thead th {
             color: var(--grand-green); font-family: "Georgia", serif; font-size: 1.4rem;
             text-align: left; padding: 0 1rem 0.9rem; border-bottom: 2px solid #eef1ee; white-space: nowrap;
@@ -159,17 +164,17 @@
                 <div class="stat">
                     <i class="fas fa-file-lines"></i>
                     <span class="stat-num" data-count="{{ totals.papers }}">{{ totals.papers|intcomma }}</span>
-                    <span class="stat-lbl">Papers</span>
+                    <span class="stat-lbl">Papers Added</span>
                 </div>
                 <div class="stat">
-                    <i class="fas fa-flask"></i>
+                    <i class="fas fa-rss"></i>
                     <span class="stat-num" data-count="{{ totals.fluxes }}">{{ totals.fluxes|intcomma }}</span>
-                    <span class="stat-lbl">Flux measurements</span>
+                    <span class="stat-lbl">Flux Measurements</span>
                 </div>
                 <div class="stat">
                     <i class="fas fa-earth-americas"></i>
                     <span class="stat-num" data-count="{{ totals.continents }}">{{ totals.continents|intcomma }}</span>
-                    <span class="stat-lbl">Continents</span>
+                    <span class="stat-lbl">Continents Spanned</span>
                 </div>
             </div>
         </section>
@@ -185,8 +190,8 @@
                     <th style="width:4.5rem; text-align:center;">#</th>
                     <th>Contributor</th>
                     <th class="num sortable active" data-key="papers">Papers<span class="caret">▼</span></th>
-                    <th class="num sortable" data-key="fluxes">Flux&nbsp;measurements<span class="caret">▼</span></th>
-                    <th class="num sortable" data-key="continents">Continents<span class="caret">▼</span></th>
+                    <th class="num sortable" data-key="fluxes">Flux&nbsp;Measurements<span class="caret">▼</span></th>
+                    <th class="num sortable" data-key="continents">Continents Spanned<span class="caret">▼</span></th>
                 </tr>
             </thead>
             <tbody>

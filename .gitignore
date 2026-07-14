@@ -26,3 +26,6 @@ ETL/RawData.csv
 ETL/*_manifest_*.json
 # Per-site SoilGrids/NASA POWER response cache (re-derivable from build_soil.py).
 ETL/_grid_cache.json
+
+# LibreOffice lock files
+.~lock.*#

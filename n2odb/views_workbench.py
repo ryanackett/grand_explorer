@@ -1538,6 +1538,7 @@ _REVIEW_SERIES_FIELDS = (
 DATE_FORMATS = [
     {"id": "iso", "label": "YYYY-MM-DD (ISO 8601)"},
     {"id": "mdy", "label": "MM/DD/YYYY (US)"},
+    {"id": "mdy2", "label": "MM-DD-YY (2-digit year)"},
     {"id": "dmy", "label": "DD/MM/YYYY (day first)"},
     {"id": "ymd", "label": "YYYY/MM/DD"},
 ]
@@ -1549,6 +1550,8 @@ _DATE_FORMAT_IDS = {f["id"] for f in DATE_FORMATS}
 _DATE_FORMAT_BASES = {
     "iso": ("%Y-%m-%d",),
     "mdy": ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y", "%m/%d/%y"),
+    # Month-first, 2-digit year (e.g. 11-20-05). Python maps %y 00–68 → 2000s, 69–99 → 1900s.
+    "mdy2": ("%m-%d-%y", "%m/%d/%y", "%m.%d.%y"),
     "dmy": ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%y"),
     "ymd": ("%Y/%m/%d", "%Y.%m.%d", "%Y-%m-%d"),
 }
@@ -2498,8 +2501,14 @@ def curation_list(request):
     """Staff queue of contributed submissions awaiting (or past) review."""
     from .services import promote
 
+    # ``parsed_content`` holds the whole parsed spreadsheet (MB-scale); dragging it
+    # through the ORDER BY overflows MySQL's sort buffer ("Out of sort memory", 1038).
+    # The queue only needs a treatment *count* (from the small ``treatment_details``),
+    # so defer the blob — it's lazily re-fetched only in the rare treatment-detection
+    # fallback for a submission with no saved treatments.
     subs = (UploadSubmission.objects
             .exclude(status="draft")
+            .defer("parsed_content")
             .order_by("-submitted_at", "-updated_at"))
     rows = []
     for s in subs:

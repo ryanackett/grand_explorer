@@ -146,4 +146,4 @@ class LeaderboardTests(TestCase):
     def test_why_contribute_page_renders(self):
         resp = self.client.get(reverse("why-contribute"))
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("Why it matters", resp.content.decode())  # a section heading
+        self.assertIn("What you get", resp.content.decode())  # a section heading

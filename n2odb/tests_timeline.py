@@ -1238,6 +1238,13 @@ class DateFormatTests(AuthedWorkbenchTestCase):
         self.assertIsNotNone(_parse_date("2020-03-04"))     # no format → legacy guess
         self.assertIsNotNone(_parse_date("03/04/2020"))
 
+    def test_two_digit_year_dashed_format(self):
+        from n2odb.views_workbench import _parse_date, _DATE_FORMAT_IDS
+        self.assertIn("mdy2", _DATE_FORMAT_IDS)                       # selectable in the dropdown
+        self.assertEqual(_parse_date("11-20-05", "mdy2").isoformat(), "2005-11-20")
+        self.assertEqual(_parse_date("05-06-07", "mdy2").isoformat(), "2007-05-06")  # month-first
+        self.assertIsNone(_parse_date("2020-03-04", "mdy2"))         # 4-digit ISO doesn't fit → flagged
+
     def test_parses_datetimes_and_strips_time_for_date(self):
         from n2odb.views_workbench import _parse_datetime, _parse_date
         dt = _parse_datetime("07/04/2018 13:45:00", "mdy")
