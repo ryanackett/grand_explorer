@@ -665,6 +665,30 @@ class PromoteTests(AuthedWorkbenchTestCase):
         self.assertEqual(sub.status, "promoted")
         self.assertEqual(sub.promotion["raw_count"], result["raw_count"])
 
+    def test_promote_derives_continent_and_country_from_coords(self):
+        # (42.4, -85.4) is Michigan, USA — offline reverse-geocode should fill
+        # Continent and (since the submission gives no country) Country too.
+        from n2odb.services import promote
+        from n2odb.models import Site
+        result = promote.promote(self._mk())
+        site = Site.objects.get(pk=result["siteid"])
+        self.assertEqual(site.Continent, "North America")
+        self.assertEqual(site.Country, "United States")
+
+    def test_contributor_country_wins_over_coords(self):
+        # A contributor-supplied country is not overwritten by the coord-derived one.
+        from n2odb.services import promote
+        from n2odb.models import Site
+        sub = self._mk()
+        md = sub.metadata_values
+        md["country"] = {"value": "Canada", "source": "user"}
+        sub.metadata_values = md
+        sub.save(update_fields=["metadata_values"])
+        result = promote.promote(sub)
+        site = Site.objects.get(pk=result["siteid"])
+        self.assertEqual(site.Country, "Canada")
+        self.assertEqual(site.Continent, "North America")  # still derived
+
     def test_promote_uses_readable_name_for_treatmentname(self):
         # Identifier keys the rows; the optional readable name becomes TreatmentName.
         from n2odb.services import promote

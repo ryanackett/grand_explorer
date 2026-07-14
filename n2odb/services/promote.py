@@ -155,11 +155,18 @@ def build_plan(submission) -> dict:
             f"Site coordinates are out of range (lat {lat}, lon {lon}); "
             "latitude must be −90..90 and longitude −180..180."
         )
+    # Derive Country/Continent from coordinates (offline) so the leaderboard's
+    # continent count and the site's country are correct the instant a submission
+    # is promoted — no manual `backfill_geography` re-run needed. A contributor-
+    # supplied country wins; the coord-derived value only fills a blank.
+    from ..management.commands.backfill_geography import geo_for_coords
+    geo_country, geo_continent = geo_for_coords(lat, lon)
     site_kwargs = {
         "Latitude": lat, "Longitude": lon,
         "MAP": _num(gv("map")), "MAT": _num(gv("mat")),
         "SiteName": _fit(Site, "SiteName", gv("site_name"), warnings),
-        "Country": _fit(Site, "Country", gv("country"), warnings),
+        "Country": _fit(Site, "Country", gv("country"), warnings) or geo_country,
+        "Continent": geo_continent,
     }
 
     experiment_name = _fit(Experiment, "ExperimentName", gv("pub_title"), warnings)
@@ -259,11 +266,8 @@ def promote(submission) -> dict:
             raise PromotionError("Cannot promote — " + "; ".join(plan["blocking"]))
 
         pub = Publication.objects.create(**plan["publication_kwargs"])
-        # ponytail: Site.Continent/Country are left blank here and filled later by the
-        # `backfill_geography` management command (must be re-run after promotions). TODO:
-        # derive them inline from lat/lon on promote so the leaderboard's continent count
-        # is correct immediately — reuse backfill_geography's reverse-geocode helpers
-        # rather than duplicating them.
+        # Continent/Country are derived from lat/lon in build_plan (site_kwargs) via
+        # geo_for_coords, so they're filled at promote time — no backfill_geography re-run.
         site = Site.objects.create(**plan["site_kwargs"])
         exp = Experiment.objects.create(
             ExperimentName=plan["experiment_name"], SiteID=site, PubID=pub
