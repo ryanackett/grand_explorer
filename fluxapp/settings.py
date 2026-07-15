@@ -154,6 +154,10 @@ EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+# Cap the SMTP send so a stalled connection (blocked port / bad host) fails fast
+# instead of hanging the request forever — a synchronous send happens on the
+# login/signup path (mandatory email verification), so no timeout = frozen worker.
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='GRAND Explorer <no-reply@grandexplorer.org>')
 # Where contact-form submissions are delivered. MUST be set in production.
 CONTACT_EMAIL = config('CONTACT_EMAIL', default='admin@example.com')   # primary (To)
