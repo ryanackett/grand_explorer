@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.sites',           # required by allauth
     'allauth',
     'allauth.account',                # contributor registration + email verification
+    'anymail',                        # send mail via Brevo's HTTP API (Railway blocks SMTP)
     'import_export',
     'explorer',
     'django_user_agents',
@@ -145,10 +146,15 @@ TEMPLATES = [
 ]
 
 # --- Email ---
-# Dev default: print emails to the console (no delivery). Production: set the
-# EMAIL_* env vars for a real SMTP provider (SendGrid/Mailgun/SES/Gmail, etc.)
-# and CONTACT_EMAIL to the address the contact form should reach.
+# Dev default: print emails to the console (no delivery).
+# Production runs on Railway, which BLOCKS outbound SMTP on every port — so mail
+# goes out over Brevo's HTTP API via django-anymail, not SMTP. In prod set:
+#   EMAIL_BACKEND=anymail.backends.brevo.EmailBackend
+#   ANYMAIL_BREVO_API_KEY=<key>   (Brevo -> SMTP & API -> API Keys)
+# The legacy EMAIL_HOST/PORT/USER vars below are only used if EMAIL_BACKEND is
+# pointed back at Django's SMTP backend (fine anywhere SMTP isn't blocked).
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+ANYMAIL = {'BREVO_API_KEY': config('ANYMAIL_BREVO_API_KEY', default='')}
 EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
