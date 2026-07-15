@@ -56,6 +56,21 @@ def _geo_for_code(cc):
     return country, continent
 
 
+def geo_for_coords(lat, lon):
+    """(country, continent) for a single lat/lon, offline; (None, None) if uncodable.
+
+    Same derivation the batch command uses, exposed for one-off calls (e.g. at
+    promotion). Importing reverse_geocoder loads its k-d tree into the process on
+    first use — a one-time cost per worker; skipped entirely for invalid coords.
+    """
+    if not _valid_coord(lat, lon):
+        return None, None
+    import reverse_geocoder as rg
+    res = rg.search([(lat, lon)], mode=1)
+    cc = (res[0].get("cc") or "").strip().upper() if res else ""
+    return _geo_for_code(cc) if cc else (None, None)
+
+
 class Command(BaseCommand):
     help = "Derive Site Country/Continent from coordinates (offline reverse-geocode)."
 

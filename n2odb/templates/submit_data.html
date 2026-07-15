@@ -1,0 +1,524 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Contribute Data | GRAND Explorer{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% include '_wizard_head.html' %}
+<style>
+    /* align-items:start + a header label on each column keeps the dropzone and
+       the textarea top-aligned. */
+    .upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start; }
+    @media (max-width: 720px) { .upload-grid { grid-template-columns:1fr; } }
+    .upload-grid .form-label { font-size:1.35rem; color:#2c3e50; display:block; margin-bottom:.5rem; }
+
+    .dropzone {
+        border:2px dashed #b7c2bb; border-radius:8px; padding:2rem 1.5rem;
+        text-align:center; color:#5a6b63; background:#f8faf9; cursor:pointer;
+        transition:all .2s ease;
+    }
+    .dropzone:hover, .dropzone.dragover { border-color:#82968c; background:#eef3f0; }
+    .dropzone i { font-size:2.2rem; color:#82968c; margin-bottom:.5rem; }
+    .dropzone .hint { font-size:1.2rem; margin-top:.4rem; }
+
+    .paste-area textarea {
+        width:100%; min-height:150px; border:1px solid #ced4da; border-radius:8px;
+        padding:12px; font-size:1.3rem; font-family:inherit; resize:vertical;
+    }
+
+    .doc-chip {
+        display:none; margin-top:1.5rem; padding:1rem 1.25rem; border-radius:8px;
+        background:#eef3f0; border-left:4px solid #82968c; font-size:1.4rem;
+    }
+    .doc-chip.failed { background:#fdf1ec; border-left-color:#c0704a; }
+    .doc-chip .counts { color:#5a6b63; font-size:1.25rem; margin-top:.25rem; }
+
+    .reupload-warn {
+        margin-top:.75rem; padding:.75rem 1rem; border-radius:6px;
+        background:#fef7ec; border-left:4px solid #d6a24a; color:#6b5326;
+        font-size:1.25rem; line-height:1.45;
+    }
+
+    .doc-panel { margin-top:1.5rem; }
+    .doc-panel-controls { display:flex; flex-wrap:wrap; gap:.75rem; }
+    .doc-text {
+        display:none; margin-top:1rem; max-height:340px; overflow:auto;
+        white-space:pre-wrap; background:#f8faf9; border:1px solid #e0e6e2;
+        border-radius:6px; padding:1rem; font-size:1.25rem; line-height:1.5; color:#3a463f;
+    }
+
+    /* Parsed data preview. */
+    .data-preview { margin-top:1.25rem; }
+    .data-preview__sheet { margin-bottom:1.5rem; }
+    .data-preview__caption { font-size:1.3rem; color:#5a6b63; margin-bottom:.5rem; }
+    .data-preview__scroll { overflow-x:auto; border:1px solid #e0e6e2; border-radius:8px; }
+    table.preview-table { border-collapse:collapse; font-size:1.2rem; width:100%; }
+    table.preview-table th, table.preview-table td {
+        border:1px solid #eceeed; padding:6px 10px; text-align:left; white-space:nowrap;
+    }
+    table.preview-table thead th { background:#f1f5f3; color:#2c3e50; }
+    .dtype-badge {
+        display:block; font-size:.95rem; font-weight:400; color:#82968c;
+        text-transform:uppercase; letter-spacing:.04em; margin-top:2px;
+    }
+    table.preview-table tbody td { color:#3a463f; }
+    table.preview-table tbody tr:nth-child(even) td { background:#fafbfa; }
+</style>
+
+<section class="workbench-section">
+  <div class="workbench-container"
+       data-data-url="{% url 'workbench-data' public_token %}"
+       data-mapping-url="{% url 'workbench-mapping' public_token %}"
+       data-doc-url="{% url 'workbench-document' public_token %}"
+       data-extract-url="{% url 'workbench-document-extract' public_token %}"
+       data-text-url="{% url 'workbench-document-text' public_token %}"
+       data-extracted="{% if already_extracted %}1{% endif %}">
+
+    {% include '_wizard_progress.html' %}
+
+    <h1>Contribute your data</h1>
+    <p class="step-lead">
+      Step 1 of the upload workbench. Start with your data file — a CSV or Excel
+      spreadsheet of measurements. You can also attach the paper it came from below.
+      We'll read it to grab key study details and metadata, and fill in
+      as much of the submission forms as we can using our LLM assistant.
+    </p>
+
+    <h2 class="wb-subhead">Your data file</h2>
+    <p class="wb-subhead__note">A CSV or Excel (.xlsx) spreadsheet of your measurements.</p>
+    <div id="data-dropzone" class="dropzone" role="button" tabindex="0"
+         aria-label="Upload a CSV or Excel file">
+      <i class="fa-solid fa-table"></i>
+      <div>Drop a <strong>CSV</strong> or <strong>Excel</strong> file here, or click to browse</div>
+      <div class="hint">We'll read the columns and show you a preview to confirm.</div>
+    </div>
+    <input type="file" id="data-file" accept=".csv,.tsv,.txt,.xlsx,.xlsm" hidden>
+
+    <div id="data-chip" class="doc-chip">
+      <div id="data-chip-title"></div>
+      <div id="data-chip-counts" class="counts"></div>
+    </div>
+    {% if has_data %}
+    <div class="reupload-warn">
+      A data file is already attached to this submission. Uploading a new one
+      <strong>replaces it</strong> and may reset your column mapping and the steps after it.
+    </div>
+    {% endif %}
+    <div id="data-preview" class="data-preview"></div>
+    {% if has_data %}{{ data_preview|json_script:"data-preview-json" }}{% endif %}
+
+    <h2 class="wb-subhead wb-subhead--optional">Add the source paper <span style="color:#8a978f;">(optional)</span></h2>
+    <p class="wb-subhead__note">Attach the paper and we'll pre-fill some study details — it saves you a lot of typing.</p>
+
+    <div class="upload-grid">
+      <div>
+        <label class="form-label">Attach the paper...</label>
+        <div id="dropzone" class="dropzone" role="button" tabindex="0"
+             aria-label="Upload a PDF or DOCX">
+          <i class="fa-solid fa-file-arrow-up"></i>
+          <div>Drop a <strong>PDF</strong> or <strong>DOCX</strong> here, or click to browse</div>
+          <div class="hint">Optional but recommended</div>
+        </div>
+        <input type="file" id="doc-file" accept=".pdf,.docx" hidden>
+      </div>
+
+      <div class="paste-area">
+        <label class="form-label" for="doc-paste">
+          …or paste the methods / site description text
+        </label>
+        <textarea id="doc-paste" placeholder="Paste text from the paper here…"></textarea>
+        <button type="button" class="wb-btn wb-btn--outline wb-btn--sm" id="paste-submit"
+                style="margin-top:.75rem;">
+          Use pasted text
+        </button>
+      </div>
+    </div>
+
+    {% if document %}
+    <div class="reupload-warn">
+      A paper is already attached. Uploading or pasting another <strong>adds a new one</strong>
+      and re-runs extraction over it.
+    </div>
+    {% endif %}
+
+    <style>
+      .doc-chip__title-row { display:flex; align-items:center; gap:.55rem; }
+      .wb-spinner { width:16px; height:16px; flex:none; border:2px solid #cdd6d1;
+        border-top-color:#82968c; border-radius:50%; animation:wb-spin .8s linear infinite; }
+      @keyframes wb-spin { to { transform:rotate(360deg); } }
+    </style>
+    <div id="doc-chip" class="doc-chip">
+      <div class="doc-chip__title-row">
+        <span id="doc-spinner" class="wb-spinner" hidden></span>
+        <div id="doc-chip-title"></div>
+      </div>
+      <div id="doc-chip-counts" class="counts"></div>
+    </div>
+
+    <div id="doc-panel" class="doc-panel" style="display:none;">
+      <div class="doc-panel-controls">
+        <button type="button" class="wb-btn wb-btn--outline wb-btn--sm" id="doc-panel-toggle">
+          Show extracted document text
+        </button>
+        <button type="button" class="wb-btn wb-btn--outline wb-btn--sm" id="doc-rerun">
+          Re-run extraction
+        </button>
+      </div>
+      <div id="doc-rerun-hint" class="hint" style="margin-top:.4rem;"></div>
+      <div id="doc-text" class="doc-text"></div>
+    </div>
+
+    <div class="wb-actions">
+      <span class="hint">
+        Your progress is saved to this draft when you click Continue, so you can leave and come back.
+      </span>
+      <button type="button" class="wb-btn wb-btn--primary" id="continue-btn">
+        Continue&nbsp;&rarr;
+      </button>
+    </div>
+
+  </div>
+</section>
+
+<script>
+(function () {
+  const root      = document.querySelector('.workbench-container');
+  const dataUrl   = root.dataset.dataUrl;
+  const mappingUrl= root.dataset.mappingUrl;
+  const docUrl    = root.dataset.docUrl;
+  const extractUrl= root.dataset.extractUrl;
+  const textUrl   = root.dataset.textUrl;
+
+  const dataDropzone = document.getElementById('data-dropzone');
+  const dataInput    = document.getElementById('data-file');
+  const dataChip     = document.getElementById('data-chip');
+  const dataChipTitle= document.getElementById('data-chip-title');
+  const dataChipCounts = document.getElementById('data-chip-counts');
+  const dataPreview  = document.getElementById('data-preview');
+
+  const dropzone  = document.getElementById('dropzone');
+  const fileInput = document.getElementById('doc-file');
+  const pasteBox  = document.getElementById('doc-paste');
+  const pasteBtn  = document.getElementById('paste-submit');
+
+  const chip      = document.getElementById('doc-chip');
+  const chipTitle = document.getElementById('doc-chip-title');
+  const chipCounts= document.getElementById('doc-chip-counts');
+  const spinner   = document.getElementById('doc-spinner');
+
+  const panel     = document.getElementById('doc-panel');
+  const panelToggle = document.getElementById('doc-panel-toggle');
+  const textBox   = document.getElementById('doc-text');
+  const rerunBtn  = document.getElementById('doc-rerun');
+  const rerunHint = document.getElementById('doc-rerun-hint');
+  const continueBtn = document.getElementById('continue-btn');
+
+  // Whether the current document has already been analysed successfully. Drives the
+  // "re-run is a fresh AI request" confirm + hint so re-runs aren't wasted by mistake.
+  let alreadyExtracted = root.dataset.extracted === '1';
+  function updateRerunHint() {
+    if (!rerunHint) return;
+    rerunHint.textContent = alreadyExtracted
+      ? 'Already analysed. Re-run only if the result was wrong or you replaced the paper — it sends a fresh AI request.'
+      : 'Runs the AI extraction on the attached paper.';
+  }
+
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+  const csrftoken = getCookie('csrftoken');
+
+  function showChip(kind, title, counts) {
+    chip.style.display = 'block';
+    chip.classList.toggle('failed', kind === 'failed');
+    spinner.hidden = kind !== 'pending';
+    chipTitle.textContent = title;
+    chipCounts.textContent = counts || '';
+  }
+
+  // --- data file (primary contribution) ---
+  function showDataChip(kind, title, counts) {
+    dataChip.style.display = 'block';
+    dataChip.classList.toggle('failed', kind === 'failed');
+    dataChipTitle.textContent = title;
+    dataChipCounts.textContent = counts || '';
+  }
+
+  function el(tag, attrs, text) {
+    const n = document.createElement(tag);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function renderPreview(preview) {
+    dataPreview.innerHTML = '';
+    (preview || []).forEach(function (sheet) {
+      const wrap = el('div', { class: 'data-preview__sheet' });
+      const shown = Math.min(sheet.sample_rows.length, sheet.n_rows);
+      wrap.appendChild(el('div', { class: 'data-preview__caption' },
+        '“' + sheet.name + '” — ' + sheet.n_rows + ' rows × ' + sheet.n_cols
+        + ' columns' + (sheet.truncated ? ' (large file — preview only)' : '')
+        + '. Showing first ' + shown + '.'));
+
+      const scroll = el('div', { class: 'data-preview__scroll' });
+      const table = el('table', { class: 'preview-table' });
+      const thead = el('thead');
+      const htr = el('tr');
+      sheet.headers.forEach(function (h, i) {
+        const th = el('th', null, h);
+        th.appendChild(el('span', { class: 'dtype-badge' }, sheet.dtypes[i] || 'string'));
+        htr.appendChild(th);
+      });
+      thead.appendChild(htr);
+      table.appendChild(thead);
+
+      const tbody = el('tbody');
+      sheet.sample_rows.forEach(function (row) {
+        const tr = el('tr');
+        row.forEach(function (cell) {
+          tr.appendChild(el('td', null, cell == null ? '' : String(cell)));
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      scroll.appendChild(table);
+      wrap.appendChild(scroll);
+      dataPreview.appendChild(wrap);
+    });
+  }
+
+  let dataReady = {{ has_data|yesno:"true,false" }};
+
+  async function uploadData(file) {
+    // Replacing an existing data file may invalidate the column mapping and later steps,
+    // so make the reset explicit before overwriting it.
+    if (dataReady && !confirm(
+        'A data file is already attached to this submission.\n\n'
+        + 'Uploading a new one replaces it and may reset your column mapping and the '
+        + 'steps after it.\n\nReplace the current data file?')) {
+      dataInput.value = '';
+      return;
+    }
+    showDataChip('pending', 'Reading your data file…', '');
+    dataPreview.innerHTML = '';
+    const fd = new FormData();
+    fd.append('data', file);
+    try {
+      const resp = await fetch(dataUrl, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        body: fd,
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error || data.status === 'failed') {
+        showDataChip('failed', 'We couldn’t read that file.', data.error || '');
+        return;
+      }
+      const sheets = data.sheet_count === 1 ? '1 sheet' : data.sheet_count + ' sheets';
+      showDataChip('parsed', 'Data file read.', data.row_count + ' rows across ' + sheets + '.');
+      renderPreview(data.preview);
+      dataReady = true;
+    } catch (e) {
+      showDataChip('failed', 'Something went wrong reading the file.', '');
+    }
+  }
+
+  function wireDropzone(zone, input, onFile) {
+    zone.addEventListener('click', () => input.click());
+    zone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
+    input.addEventListener('change', () => {
+      if (input.files.length) onFile(input.files[0]);
+    });
+    ['dragover', 'dragenter'].forEach(ev =>
+      zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('dragover'); }));
+    ['dragleave', 'dragend', 'drop'].forEach(ev =>
+      zone.addEventListener(ev, () => zone.classList.remove('dragover')));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files.length) onFile(e.dataTransfer.files[0]);
+    });
+  }
+  wireDropzone(dataDropzone, dataInput, uploadData);
+
+  async function loadText() {
+    try {
+      const resp = await fetch(textUrl);
+      textBox.textContent = await resp.text();
+    } catch (e) { textBox.textContent = ''; }
+  }
+
+  async function uploadDocument(formData) {
+    showChip('pending', 'Reading document…', '');
+    try {
+      const resp = await fetch(docUrl, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        body: formData,
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        showChip('failed', data.error || 'Upload failed.', data.detail || '');
+        return;
+      }
+      if (data.status === 'failed') {
+        showChip('failed', data.message, data.detail || '');
+        panel.style.display = 'block';
+        await loadText();
+        return;
+      }
+      panel.style.display = 'block';
+      // Automatically analyse the paper so the Site & Soil steps pre-fill without
+      // requiring a separate click (runExtraction refreshes the text panel too).
+      await runExtraction();
+    } catch (e) {
+      showChip('failed', 'Something went wrong uploading the document.', '');
+    }
+  }
+
+  function uploadFile(file) {
+    const fd = new FormData();
+    fd.append('document', file);
+    uploadDocument(fd);
+  }
+
+  // --- dropzone wiring (paper) ---
+  wireDropzone(dropzone, fileInput, uploadFile);
+
+  // --- pasted text ---
+  pasteBtn.addEventListener('click', () => {
+    const text = pasteBox.value.trim();
+    if (!text) return;
+    const fd = new FormData();
+    fd.append('text', text);
+    uploadDocument(fd);
+  });
+
+  // --- panel toggle + re-run ---
+  panelToggle.addEventListener('click', () => {
+    const open = textBox.style.display === 'block';
+    textBox.style.display = open ? 'none' : 'block';
+    panelToggle.textContent = open ? 'Show extracted document text' : 'Hide extracted document text';
+  });
+
+  async function runExtraction(force) {
+    rerunBtn.disabled = true;
+    rerunBtn.textContent = 'Analyzing…';
+    showChip('pending', 'Reading study details from your paper…',
+      'Scanning for location, soil, crop and management information — this can take a minute or two. Please stay on this page.');
+    try {
+      const body = new URLSearchParams();
+      if (force) body.set('force', '1');
+      const resp = await fetch(extractUrl, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      // Daily cap reached (or any error): surface the server message, don't retry.
+      if (resp.status === 429) {
+        const d = await resp.json().catch(() => ({}));
+        showChip('failed', d.error || 'Daily AI extraction limit reached.', '');
+        showToast(d.error || 'Daily AI extraction limit reached.', 'warning');
+        return;
+      }
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        showChip('failed', data.error || 'Extraction failed.', '');
+        return;
+      }
+      // A deduped no-op: unchanged paper, reused the earlier result — no AI request spent.
+      if (data.deduped) {
+        alreadyExtracted = true;
+        showChip('extracted', 'Already analysed — reused the earlier result.',
+          'No new AI request was used. Re-run only if you replaced the paper.');
+        return;
+      }
+      // Text was re-extracted server-side; refresh the panel so the user sees
+      // the updated wording.
+      await loadText();
+      const pages = data.page_count ? data.page_count + ' pages, ' : '';
+      const counts = pages + '~' + data.word_count + ' words'
+        + (data.regex_suggestions ? ' · ' + data.regex_suggestions + ' auto-suggestions (DOI/coords)' : '');
+      if (data.status === 'skipped') {
+        showChip('extracted', 'Document read.',
+          counts + '. AI study-detail extraction is off — you can still fill the forms yourself.');
+      } else if (data.status === 'ok') {
+        alreadyExtracted = true;
+        showChip('extracted',
+          'Pre-filled ' + data.metadata_count + ' study details from your paper.',
+          counts + ' · ' + data.events_count + ' event(s). These populate the Site & Soil steps. '
+          + 'Please continue to the next step.');
+        showToast('Pre-filled ' + data.metadata_count + ' study details from your paper. '
+          + 'Continue to review them.', 'success');
+      } else {
+        showChip('failed', 'Could not extract study details from the document.', counts);
+      }
+    } catch (e) {
+      showChip('failed', 'Something went wrong analyzing the document.', '');
+    } finally {
+      rerunBtn.disabled = false;
+      rerunBtn.textContent = 'Re-run extraction';
+      updateRerunHint();
+    }
+  }
+
+  // Re-running an already-successful paper is almost always a misunderstanding (it
+  // costs a fresh AI request and returns the same thing). Make that explicit; a failed
+  // or not-yet-analysed paper re-runs straight away (that's the intended retry).
+  rerunBtn.addEventListener('click', () => {
+    if (alreadyExtracted) {
+      const ok = confirm(
+        'This paper was already analysed successfully.\n\n'
+        + 'Re-running sends it to the AI again — it uses another request and usually '
+        + 'returns the same result. Only re-run if the earlier result was wrong or you '
+        + 'replaced the file.\n\nRe-run anyway?');
+      if (!ok) return;
+      runExtraction(true);
+    } else {
+      runExtraction(false);
+    }
+  });
+  updateRerunHint();
+
+  // --- continue to the next wizard step (column mapping) ---
+  continueBtn.addEventListener('click', () => {
+    if (!dataReady) {
+      showToast('Add a data file (CSV or Excel) to continue — that’s the data we’ll map.', 'warning');
+      return;
+    }
+    window.location.href = mappingUrl;
+  });
+
+  {% if has_data %}
+  // A data file is already attached — re-show the chip + preview so a returning
+  // contributor sees it without re-uploading.
+  (function () {
+    const pv = JSON.parse(document.getElementById('data-preview-json').textContent);
+    const rows = pv.reduce((a, s) => a + (s.n_rows || 0), 0);
+    const sheets = pv.length === 1 ? '1 sheet' : pv.length + ' sheets';
+    showDataChip('parsed', 'Data file already uploaded.', rows + ' rows across ' + sheets + '.');
+    renderPreview(pv);
+  })();
+  {% endif %}
+
+  {% if document %}
+  showChip(
+    '{{ document.extraction_status }}' === 'failed' ? 'failed' : 'extracted',
+    '{{ document.extraction_status }}' === 'failed'
+      ? 'We couldn’t read the last document.'
+      : 'Document captured.',
+    '{{ document.extraction_status }}' === 'failed'
+      ? ''
+      : ({{ document.page_count|default:'0' }} ? '{{ document.page_count }} pages, ' : '')
+        + '~{{ document.char_count }} chars'
+  );
+  panel.style.display = 'block';
+  loadText();
+  {% endif %}
+})();
+</script>
+{% endblock %}

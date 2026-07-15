@@ -1,0 +1,87 @@
+{% comment %}
+Reusable wizard progress rail. Expects context:
+  wizard_steps       - ordered list of {num, label, url, state} dicts (see
+                       _wizard_context); url is set only for already-reached steps
+  current_step       - 1-based index of the active step
+  current_step_label - label of the active step (for the compact mobile summary)
+  wizard_step_count  - len(wizard_steps)
+A step with a url renders as a link back to that page; steps the contributor
+hasn't reached yet are inert. Include on every wizard stage with that stage's
+current_step so the contributor always sees where they are and how much remains.
+{% endcomment %}
+<style>
+    .wizard-progress { max-width:820px; margin:0 auto 1.25rem; }
+    .wizard-progress ol {
+        list-style:none; display:flex; padding:0; margin:0;
+    }
+    .wizard-step {
+        flex:1 1 0; position:relative; text-align:center; min-width:0;
+        font-family:'Georgia', serif; font-size:1.2rem; color:#9aa8a0;
+    }
+    /* connector line into each step (coloured up to the current step) */
+    .wizard-step:not(:first-child)::before {
+        content:""; position:absolute; top:17px; left:-50%; width:100%; height:2px;
+        background:#dfe5e2; z-index:0;
+    }
+    .wizard-step.done::before, .wizard-step.active::before { background:#82968c; }
+    .wizard-step__dot {
+        position:relative; z-index:1; display:flex; align-items:center; justify-content:center;
+        width:36px; height:36px; margin:0 auto .55rem; border-radius:50%;
+        background:#ffffff; border:2px solid #dfe5e2; color:#9aa8a0;
+        font-weight:600; font-size:1.25rem;
+    }
+    .wizard-step.done .wizard-step__dot { background:#82968c; border-color:#82968c; color:#fff; }
+    .wizard-step.active .wizard-step__dot {
+        border-color:#82968c; color:#4a5d54; box-shadow:0 0 0 4px rgba(130,150,140,.18);
+    }
+    /* Reached steps are links back to their page; unreached ones are plain text. */
+    .wizard-step__link { display:block; text-decoration:none; color:inherit; cursor:pointer; }
+    .wizard-step__link:hover .wizard-step__dot {
+        border-color:#82968c; box-shadow:0 0 0 4px rgba(130,150,140,.14);
+    }
+    .wizard-step__link:hover .wizard-step__label { color:#4a5d54; text-decoration:underline; }
+    .wizard-step__label {
+        display:block; padding:0 .25rem; line-height:1.25;
+        overflow:hidden; text-overflow:ellipsis;
+    }
+    .wizard-step.active .wizard-step__label,
+    .wizard-step.done .wizard-step__label { color:#4a5d54; }
+
+    .wizard-progress__summary {
+        display:none; text-align:center; color:#5a6b63; font-size:1.35rem;
+        margin-bottom:1.75rem;
+    }
+    .wizard-progress__summary strong { color:#4a5d54; }
+
+    @media (max-width:600px) {
+        .wizard-step__label { display:none; }
+        .wizard-progress { margin-bottom:1.5rem; }
+        .wizard-progress__summary { display:block; }
+    }
+</style>
+
+<nav class="wizard-progress" aria-label="Upload progress">
+    <ol>
+        {% for step in wizard_steps %}
+        <li class="wizard-step{% if step.state %} {{ step.state }}{% endif %}"
+            data-step="{{ step.num }}"
+            {% if step.state == 'active' %}aria-current="step"{% endif %}>
+            {% if step.url %}
+            <a class="wizard-step__link" href="{{ step.url }}"
+               title="Go to {{ step.label }}">
+                <span class="wizard-step__dot">
+                    {% if step.state == 'done' %}&#10003;{% else %}{{ step.num }}{% endif %}
+                </span>
+                <span class="wizard-step__label">{{ step.label }}</span>
+            </a>
+            {% else %}
+            <span class="wizard-step__dot">{{ step.num }}</span>
+            <span class="wizard-step__label">{{ step.label }}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+</nav>
+<p class="wizard-progress__summary">
+    Step <strong>{{ current_step }}</strong> of {{ wizard_step_count }} — <strong>{{ current_step_label }}</strong>
+</p>

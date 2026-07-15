@@ -1,8 +1,14 @@
+import uuid
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
 class User(AbstractUser):
-    pass
+    # Stable, non-enumerable account handle. The DB pk already survives an email change,
+    # but it's sequential (leaks user counts) and not safe to expose; this UUID is the
+    # identifier we surface/track a contributor by, unchanged across email edits.
+    # first_name / last_name come from AbstractUser (captured at signup, editable in My Account).
+    public_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
 
 class Publication(models.Model):
@@ -12,7 +18,12 @@ class Publication(models.Model):
     Citation = models.CharField(db_column='Citation', max_length=500, blank=True, null=True)  # Field name made lowercase.
     PubYear = models.IntegerField(db_column='PubYear', blank=True, null=True)  # Field name made lowercase.
     Link = models.CharField(db_column='Link', max_length=255, blank=True, null=True)  # Field name made lowercase.
-    Abstract = models.TextField(db_column='Abstract', blank=True, null=True) 
+    Abstract = models.TextField(db_column='Abstract', blank=True, null=True)
+    # Persistent handle (User.public_id) of the workbench contributor who submitted this
+    # dataset, stamped at promotion. Null for scraped/legacy publications and for
+    # promotions with no owner. Stored as the UUID value (not a FK) so provenance
+    # survives account deletion; indexed to list everything a given user contributed.
+    Contributor = models.UUIDField(db_column='Contributor', null=True, blank=True, db_index=True)
     class Meta:
         db_table = 'Publication'
 
@@ -38,7 +49,7 @@ class Site(models.Model):
 
 class Experiment(models.Model):
     ExperimentID = models.AutoField(db_column='ExperimentID', primary_key=True)  # Field name made lowercase.
-    ExperimentName = models.CharField(db_column='ExperimentName', max_length=255)  # Field name made lowercase.
+    ExperimentName = models.CharField(db_column='ExperimentName', max_length=255, blank=True, null=True)  # Field name made lowercase.
     SiteID = models.ForeignKey('Site', models.DO_NOTHING, db_column='SiteID')  # Field name made lowercase.
     PubID = models.ForeignKey('Publication', models.DO_NOTHING, db_column='PubID')  # Field name made lowercase.
     class Meta:
@@ -48,9 +59,9 @@ class Experiment(models.Model):
 class Treatment(models.Model):
     TreatmentID = models.AutoField(db_column='TreatmentID', primary_key=True)  # Field name made lowercase.
     ExperimentID = models.ForeignKey(Experiment, models.DO_NOTHING, db_column='ExperimentID')  # Field name made lowercase.
-    PrimaryCrop = models.CharField(db_column='PrimaryCrop', max_length=32)  # Field name made lowercase.
-    SecondaryCrop = models.CharField(db_column='SecondaryCrop', max_length=32, blank=True, null=True)  # Field name made lowercase.
-    CoverCrop = models.CharField(db_column='CoverCrop', max_length=32, blank=True, null=True)  # Field name made lowercase.
+    PrimaryCrop = models.CharField(db_column='PrimaryCrop', max_length=128)  # Field name made lowercase.
+    SecondaryCrop = models.CharField(db_column='SecondaryCrop', max_length=128, blank=True, null=True)  # Field name made lowercase.
+    CoverCrop = models.CharField(db_column='CoverCrop', max_length=128, blank=True, null=True)  # Field name made lowercase.
     Management = models.CharField(db_column='Management', max_length=16, blank=True, null=True)
     Tillage = models.CharField(db_column='Tillage', blank=False, null=True, max_length=32)
     FluxInstrument = models.CharField(db_column='FluxInstrument', max_length=45, blank=False, null=True)  # Field name made lowercase.
@@ -131,7 +142,7 @@ class RawMeasurementTreatment(models.Model):
     nitrogenapplied = models.FloatField(db_column='NitrogenApplied', blank=True, null=True)  # Field name made lowercase.
     nitrogenform = models.CharField(db_column='NitrogenForm', blank=True, null=True, max_length=64)  # Field name made lowercase.
     nitrogentype = models.CharField(db_column='NitrogenType', blank=True, null=True, max_length=45)  # Field name made lowercase.
-    plantedcrop = models.CharField(db_column='PlantedCrop', max_length=32, blank=True, null=True,)  # Field name made lowercase.
+    plantedcrop = models.CharField(db_column='PlantedCrop', max_length=128, blank=True, null=True,)  # Field name made lowercase.
     harvest = models.IntegerField(db_column='Harvest', blank=True, null=True)  # Field name made lowercase.
     tillage = models.IntegerField(db_column='Tillage', blank=True, null=True)  # Field name made lowercase.
     irrigationapplied = models.FloatField(db_column='IrrigationApplied', blank=True, null=True)  # Field name made lowercase.
@@ -197,3 +208,13 @@ class UserAction(models.Model):
 
     def __str__(self):
         return f"{self.action_type} ({self.timestamp.strftime('%Y-%m-%d %H:%M')})"
+
+
+# Assisted-upload workbench models live in their own module for clarity; import
+# them here so Django's app-loader (and migrations) discover them.
+from n2odb.models_upload import (  # noqa: E402,F401
+    UploadSubmission,
+    ManuscriptSource,
+    UploadedDataFile,
+    LlmExtractionCall,
+)

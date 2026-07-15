@@ -1,0 +1,751 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Soil &amp; Management | GRAND Explorer{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+{% include '_wizard_head.html' %}
+<style>
+    /* Wider than the other stages: the per-treatment matrices need the room. */
+    .workbench-container.soil-container { max-width:1240px; }
+
+    /* Matrices on the left, the column pool sticky on the right so a chip is always
+       close to the header it drops onto (dragging the full page height is impractical). */
+    .soil-grid { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:1.75rem; align-items:start; }
+    .soil-main { min-width:0; }
+    .soil-side { min-width:0; position:sticky; top:1rem; max-height:calc(100vh - 2rem); overflow:auto; }
+    .soil-side #soil-cloud-panel { margin-bottom:0; }
+    @media (max-width:900px) {
+        .soil-grid { grid-template-columns:1fr; gap:1rem; }
+        .soil-side { position:static; max-height:none; }
+    }
+
+    .soil-status { display:flex; gap:1.25rem; align-items:baseline; flex-wrap:wrap;
+        margin-bottom:1rem; font-size:1.3rem; }
+    .soil-required--ok { color:#4a7c62; font-weight:600; }
+    .soil-required--warn { color:#b9832f; font-weight:600; }
+    .soil-saved { color:#9aa8a0; font-size:1.15rem; }
+
+    /* Treatments panel */
+    .trt-panel { background:#f7f9f8; border:1px solid #e6ece9; border-radius:12px;
+        padding:1.1rem 1.25rem 1.25rem; margin-bottom:1.75rem; }
+    .trt-note { font-size:1.2rem; color:#8a978f; margin:.15rem 0 .9rem; }
+    .trt-note code { background:#eef3f0; border-radius:4px; padding:1px 6px; color:#4a5d54; }
+    .trt-empty { color:#9aa8a0; font-size:1.2rem; font-style:italic; margin:.2rem 0 .8rem; }
+    .trt-row { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; margin-bottom:.55rem; }
+    .trt-name { flex:0 0 9rem; width:9rem; padding:7px 10px; border:1px solid #cdd6d1;
+        border-left:4px solid #82968c; border-radius:6px; font-size:1.2rem; font-family:inherit;
+        color:#2c3e50; background:#fff; font-weight:600; }
+    /* Read-only identifier from the data column — a static label, not an input. */
+    .trt-name--fixed { background:#f4f7f5; color:#3c4d45; cursor:default;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .trt-label, .trt-desc { min-width:0; padding:7px 10px; border:1px solid #ced4da; border-radius:6px;
+        font-size:1.2rem; font-family:inherit; color:#2c3e50; background:#fff; }
+    /* Readable name ~1/3, description ~2/3 of the row's editable space. */
+    .trt-label { flex:1 1 10rem; }
+    .trt-desc { flex:2 1 20rem; }
+    .trt-name:focus, .trt-label:focus, .trt-desc:focus { outline:none; border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+
+    /* Group section + scope toggle */
+    .grp { margin-bottom:2.25rem; }
+    .grp__head { display:flex; align-items:center; justify-content:space-between;
+        gap:1rem; flex-wrap:wrap; border-bottom:1px solid #eceeed; padding-bottom:.55rem; margin-bottom:1rem; }
+    .grp__name { font-family:'Georgia', serif; color:#2c3e50; font-size:1.75rem; margin:0; }
+    .seg { display:inline-flex; border:1px solid #cdd6d1; border-radius:50px; overflow:hidden; background:#fff; }
+    .seg button { border:none; background:none; margin:0; height:auto; width:auto;
+        font-family:inherit; text-transform:none; letter-spacing:normal; line-height:1.3;
+        font-size:1.2rem; color:#5a6b63; padding:.4rem 1.2rem; cursor:pointer; transition:background .15s ease; }
+    .seg button.on { background:#82968c; color:#fff; }
+    .seg button:disabled { opacity:.4; cursor:not-allowed; }
+    .grp__hint { font-size:1.15rem; color:#8a978f; margin:-.4rem 0 1rem; }
+
+    /* Global-mode fields */
+    .soil-field { margin-bottom:.9rem; }
+    .soil-field__label { font-size:1.3rem; color:#2c3e50; display:block; margin-bottom:.3rem; }
+    .soil-field__unit { color:#8a978f; font-size:1.1rem; }
+    .req { color:#c0704a; font-weight:700; }
+    .soil-field__row { display:flex; align-items:center; gap:.6rem; max-width:34rem; }
+
+    .soil-input, .cell-input {
+        padding:7px 10px; border:1px solid #ced4da; border-radius:6px;
+        font-size:1.2rem; font-family:inherit; background:#fff; color:#2c3e50; min-width:0;
+        border-left-width:4px; border-left-color:#e3e8e5;
+    }
+    .soil-input { flex:1; }
+    .soil-input:focus, .cell-input:focus { outline:none; border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.18); }
+    [data-source="document"] { border-left-color:#6b83c4; }
+    [data-source="user"]     { border-left-color:#b7c2ba; }
+    /* No spinner arrows — they waste width for little utility. */
+    .soil-input[type=number], .cell-input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+    .soil-input[type=number]::-webkit-outer-spin-button, .soil-input[type=number]::-webkit-inner-spin-button,
+    .cell-input[type=number]::-webkit-outer-spin-button, .cell-input[type=number]::-webkit-inner-spin-button {
+        -webkit-appearance:none; margin:0; }
+
+    .prov { font-size:1.05rem; border-radius:50px; padding:2px 10px; white-space:nowrap; cursor:default; }
+    .prov--document { background:#eef1fb; color:#4a5aa0; cursor:help; }
+    .prov--user     { background:#eef1f4; color:#7a8894; }
+    .prov--empty    { display:none; }
+
+    /* Leftover-column fill cloud — a vertical list in the right rail, one chip per line. */
+    .soil-cloud { display:flex; flex-direction:column; gap:.45rem; }
+    .soil-cloud-empty { color:#9aa8a0; font-size:1.2rem; font-style:italic; }
+    /* Amber left edge = no confident match (your call); green = a suggested match. */
+    .col-chip { display:inline-flex; align-items:center; gap:.45rem; background:#fff;
+        border:1px solid #cdd6d1; border-left:4px solid #d8a657; border-radius:50px;
+        padding:.35rem .8rem; font-size:1.2rem; color:#2c3e50; cursor:grab; user-select:none;
+        transition:box-shadow .12s ease, border-color .12s ease; }
+    .col-chip::before { content:'⠿'; color:#b8c2bc; font-size:1.05rem; line-height:1; letter-spacing:-1px; }
+    .col-chip:hover { box-shadow:0 2px 9px rgba(0,0,0,.08); border-color:#b7c2ba; }
+    .col-chip:active { cursor:grabbing; }
+    .col-chip.dragging { opacity:.45; }
+    .col-chip.armed { border-color:#82968c; box-shadow:0 0 0 3px rgba(130,150,140,.22); }
+    .col-chip.suggested { border-left-color:#6fae8b; }
+    .col-chip__dtype { font-size:.95rem; text-transform:uppercase; letter-spacing:.04em;
+        color:#82968c; background:#eef3f0; border-radius:4px; padding:1px 6px; }
+    .col-chip__sheet { font-size:.95rem; color:#b9832f; background:#fbf1e5; border-radius:4px; padding:1px 6px; }
+    /* A value filled from a CSV column gets the green cue (matches the suggested chip). */
+    [data-source="column"] { border-left-color:#6fae8b; }
+    /* A pool chip that's already the source of a field greys out (like the Map step). */
+    .col-chip.used { opacity:.4; }
+    /* In the narrow rail, a long column name truncates instead of wrapping. */
+    .soil-cloud .col-chip > span:not([class]) { flex:1 1 auto; min-width:0;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* Field headers are the only drop targets. Give them a persistent "droppable"
+       look, and light every one up while a chip is armed or being dragged. */
+    table.matrix thead th.fillable { cursor:copy; }
+    table.matrix thead th.fillable .th-drop { display:block; margin-top:2px; font-size:.9rem;
+        color:#cbb78a; opacity:0; transition:opacity .12s ease; }
+    /* The placed source chip that "stays" on a filled header — reuses the Map step's
+       assigned-chip styling verbatim (sage pill + flat white × button). */
+    .th-source-row { margin-top:4px; text-align:center; }
+    .assigned-chip {
+        display:inline-flex; align-items:center; gap:.35rem; background:#82968c;
+        color:#fff; border-radius:50px; padding:4px 6px 4px 12px; font-size:1.15rem;
+        max-width:100%; cursor:default;
+    }
+    .assigned-chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .assigned-chip button {
+        background:none; border:none; color:#fff; cursor:pointer; font-size:1.35rem;
+        line-height:1; padding:0 3px; margin:0; height:auto; width:auto;
+        text-transform:none; letter-spacing:normal;
+    }
+    .assigned-chip button:hover { background:none; color:#e6ede9; box-shadow:none; }
+    #groups.arming table.matrix thead th.fillable,
+    #groups.dragging-col table.matrix thead th.fillable {
+        outline:2px dashed #d8a657; outline-offset:-3px; background:#fdf6ec; }
+    #groups.arming table.matrix thead th.fillable .th-drop,
+    #groups.dragging-col table.matrix thead th.fillable .th-drop { opacity:1; color:#b9832f; }
+    table.matrix thead th.fillable.drop-hot { background:#f9ecd0; outline-color:#c99a3f; }
+
+    /* Per-treatment matrix */
+    .matrix-wrap { overflow-x:auto; border:1px solid #e6ece9; border-radius:10px; }
+    table.matrix { border-collapse:collapse; width:100%; font-size:1.15rem; }
+    table.matrix th, table.matrix td { padding:.45rem .55rem; border-bottom:1px solid #eef1ef; text-align:center; vertical-align:middle; }
+    table.matrix thead th { background:#f2f6f4; color:#4a5d54; font-family:inherit; font-weight:600; white-space:nowrap; }
+    table.matrix thead th .th-unit { color:#8a978f; font-weight:400; font-size:.95rem; }
+    table.matrix .trt-cell { font-weight:600; color:#2c3e50; white-space:nowrap;
+        position:sticky; left:0; background:#fff; border-right:1px solid #eef1ef; }
+    table.matrix .cell-input, table.matrix select.cell-input { width:100%; text-align:center; text-align-last:center; }
+</style>
+
+<section class="workbench-section">
+  <div class="workbench-container soil-container"
+       data-save-url="{% url 'workbench-soil-save' public_token %}"
+       data-back-url="{% url 'workbench-site' public_token %}"
+       data-next-url="{% url 'workbench-timeline' public_token %}">
+
+    {% include '_wizard_progress.html' %}
+
+    <h1>Soil &amp; management</h1>
+    <p class="step-lead">
+      Soil properties and management practices often differ between treatments
+      (contrasting rotations, tillage, amended vs. control). For each section below,
+      choose whether the value is the same across the whole study
+      (<strong>global</strong>) or entered <strong>per&nbsp;treatment</strong>.
+    </p>
+
+    <div class="soil-status">
+      <span id="soil-required" class="soil-required--warn">…</span>
+      <span id="soil-saved" class="soil-saved"></span>
+    </div>
+
+    <div class="soil-grid">
+      <div class="soil-main">
+        <div class="trt-panel">
+          <h2 class="wb-subhead" style="margin-top:.2rem;">Treatments</h2>
+          <p class="trt-note" id="trt-note"></p>
+          <div id="trt-list"></div>
+        </div>
+
+        <div id="groups"></div>
+      </div>
+
+      <aside class="soil-side">
+        <div class="trt-panel" id="soil-cloud-panel" hidden>
+          <h2 class="wb-subhead" style="margin-top:.2rem;">Columns from your spreadsheet</h2>
+          <p class="trt-note">Drag a column onto a field's header (or click a column, then a
+            header) to fill it. <strong>Per-treatment</strong> fields fill from the matching
+            plot rows; <strong>global</strong> fields use the first value.</p>
+          <div id="soil-cloud" class="soil-cloud"></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="wb-actions">
+      <a href="{% url 'workbench-site' public_token %}" class="wb-btn wb-btn--outline">&larr;&nbsp;Back</a>
+      <button type="button" class="wb-btn wb-btn--primary" id="soil-continue">Continue&nbsp;&rarr;</button>
+    </div>
+
+  </div>
+</section>
+
+{{ field_groups|json_script:"fields-data" }}
+{{ treatment_groups|json_script:"groups-data" }}
+{{ detected_treatments|json_script:"detected-data" }}
+{{ saved_details|json_script:"saved-data" }}
+{{ paper_facts|json_script:"paper-data" }}
+{{ required_ids|json_script:"required-data" }}
+{{ treatment_column|json_script:"trtcol-data" }}
+{{ leftover_columns|json_script:"columns-data" }}
+
+<script>
+(function () {
+  const root      = document.querySelector('.soil-container');
+  const saveUrl   = root.dataset.saveUrl;
+  const nextUrl   = root.dataset.nextUrl;
+  const fieldGroups = JSON.parse(document.getElementById('fields-data').textContent);
+  const groupNames  = JSON.parse(document.getElementById('groups-data').textContent);
+  const detected    = JSON.parse(document.getElementById('detected-data').textContent);
+  const saved       = JSON.parse(document.getElementById('saved-data').textContent) || {};
+  const paper       = JSON.parse(document.getElementById('paper-data').textContent) || {};
+  const requiredIds = JSON.parse(document.getElementById('required-data').textContent);
+  const trtColumn   = JSON.parse(document.getElementById('trtcol-data').textContent);
+  const columns     = JSON.parse(document.getElementById('columns-data').textContent) || [];
+
+  const fieldById = {};
+  fieldGroups.forEach(g => g.fields.forEach(f => { fieldById[f.id] = f; }));
+  const fieldsInGroup = {};
+  fieldGroups.forEach(g => { fieldsInGroup[g.name] = g.fields; });
+  const groupOfField = {};
+  fieldGroups.forEach(g => g.fields.forEach(f => { groupOfField[f.id] = g.name; }));
+  const colByKey = {};
+  columns.forEach(c => { colByKey[c.key] = c; });
+  const multiSheet = new Set(columns.map(c => c.sheet)).size > 1;
+  let armed = null;  // key of the column chip currently armed for click-to-fill
+
+  // An option-backed field only accepts a value already in its list. Anything else
+  // (stale free-text saved before the dropdowns were strict, or an unresolved paper
+  // value) is treated as empty, so the field re-fills from the paper or stays blank
+  // rather than showing a silently-blanked <select>.
+  function validForField(fid, value) {
+    const f = fieldById[fid];
+    if (!f || !f.options || !f.options.length) return true;
+    return f.options.indexOf(String(value)) !== -1;
+  }
+  function purgeInvalid(bucket) {
+    Object.keys(bucket).forEach(fid => {
+      const e = bucket[fid];
+      if (e && e.value != null && !validForField(fid, e.value)) delete bucket[fid];
+    });
+  }
+
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+  const csrftoken = getCookie('csrftoken');
+
+
+  // --- state ---------------------------------------------------------------
+  const state = {
+    // Owned by the mapped data column, not editable here — annotations key off these
+    // exact names so they stay attached to the raw rows / promoted Treatment FKs.
+    treatments: detected.slice(),
+    // Optional readable label per identifier → written to Treatment.TreatmentName.
+    names: Object.assign({}, saved.names || {}),
+    descriptions: Object.assign({}, saved.descriptions || {}),
+    scopes: {},
+    global: Object.assign({}, saved.global || {}),
+    per: {},
+  };
+  groupNames.forEach(g => { state.scopes[g] = (saved.scopes && saved.scopes[g]) || 'global'; });
+  Object.keys(saved.per_treatment || {}).forEach(t => { state.per[t] = Object.assign({}, saved.per_treatment[t]); });
+
+  // Discard any saved value that is no longer a legal option (e.g. free text saved
+  // before the dropdowns became strict) so it can be re-seeded below.
+  purgeInvalid(state.global);
+  Object.keys(state.per).forEach(t => purgeInvalid(state.per[t]));
+
+  // Values loaded from a prior save are already confirmed (the contributor saw and
+  // kept them); mark them so autosave keeps persisting them even though their origin
+  // is the document. Paper gaps seeded below stay unconfirmed until Continue.
+  const markConfirmed = obj => Object.values(obj).forEach(e => { if (e) e._c = true; });
+  markConfirmed(state.global);
+  Object.keys(state.per).forEach(t => markConfirmed(state.per[t]));
+
+  function paperEntry(fid) {
+    const p = paper[fid];
+    return p ? { value: p.value, source: 'document', source_quote: p.source_quote } : null;
+  }
+  function ensureTreatment(t, seedPaper) {
+    if (!state.per[t]) state.per[t] = {};
+    if (seedPaper) fieldGroups.forEach(g => g.fields.forEach(f => {
+      if (!state.per[t][f.id]) {
+        const p = paperEntry(f.id);
+        if (p && validForField(f.id, p.value)) state.per[t][f.id] = p;
+      }
+    }));
+  }
+  // Pre-fill any field the contributor hasn't already answered with the paper's
+  // value — for both scopes, on every visit. Saved answers were loaded into state
+  // above and take precedence; only genuine gaps get seeded, so a fresh upload's
+  // extracted soil/crop/management values always appear. Off-list paper values are
+  // skipped (they can't populate a strict dropdown) so the field stays blank.
+  fieldGroups.forEach(g => g.fields.forEach(f => {
+    if (!state.global[f.id]) {
+      const p = paperEntry(f.id);
+      if (p && validForField(f.id, p.value)) state.global[f.id] = p;
+    }
+  }));
+  state.treatments.forEach(t => ensureTreatment(t, true));
+
+  // --- elements ------------------------------------------------------------
+  const groupsEl = document.getElementById('groups');
+  const listEl   = document.getElementById('trt-list');
+  const trtNote  = document.getElementById('trt-note');
+  const soilReq  = document.getElementById('soil-required');
+  const soilSaved= document.getElementById('soil-saved');
+
+  function el(tag, attrs, text) {
+    const n = document.createElement(tag);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  // --- treatments UI (read-only: identity comes from the mapped data column) ---
+  function renderTreatments() {
+    listEl.innerHTML = '';
+    if (!state.treatments.length) {
+      listEl.appendChild(el('p', { class: 'trt-empty' },
+        'No treatment column is mapped. Go back to the Map step and map your treatment '
+        + 'identifier column — every dataset needs one.'));
+    }
+    state.treatments.forEach((t) => {
+      const row = el('div', { class: 'trt-row' });
+      // Read-only identifier from the data column — the join key for the raw rows. It
+      // can't be edited, but you can give it a readable name (next field) for the DB.
+      const key = el('div', { class: 'trt-name trt-name--fixed', title: 'Identifier from your data column' }, t);
+      const label = el('input', { class: 'trt-label', type: 'text',
+        placeholder: 'Readable name — e.g. Conservation tillage + urea' });
+      label.value = state.names[t] || '';
+      label.addEventListener('input', () => {
+        const v = label.value.trim();
+        if (v) state.names[t] = v; else delete state.names[t];
+        scheduleSave();
+      });
+      const desc = el('input', { class: 'trt-desc', type: 'text',
+        placeholder: 'Description — rotation, N rate… (optional)' });
+      desc.value = state.descriptions[t] || '';
+      desc.addEventListener('input', () => { state.descriptions[t] = desc.value; scheduleSave(); });
+      row.appendChild(key); row.appendChild(label); row.appendChild(desc);
+      listEl.appendChild(row);
+    });
+    trtNote.innerHTML = trtColumn
+      ? 'Detected from your <code>' + trtColumn + '</code> column — the identifiers match your '
+        + 'raw rows, so they can\'t be renamed or removed. Optionally give each a readable '
+        + 'name and a description.'
+      : 'No treatment column was mapped. Go back to the Map step and map your treatment column.';
+  }
+
+  // --- groups UI -----------------------------------------------------------
+  function renderGroups() {
+    groupsEl.innerHTML = '';
+    groupNames.forEach(gname => {
+      const sec = el('div', { class: 'grp' });
+      sec.dataset.group = gname;
+      const head = el('div', { class: 'grp__head' });
+      head.appendChild(el('h2', { class: 'grp__name' }, gname));
+      const seg = el('div', { class: 'seg' });
+      const scope = state.scopes[gname];
+      const gBtn = el('button', { type: 'button' }, 'Global');
+      const pBtn = el('button', { type: 'button' }, 'Per-treatment');
+      if (scope === 'global') gBtn.classList.add('on'); else pBtn.classList.add('on');
+      if (!state.treatments.length) { pBtn.disabled = true; pBtn.title = 'Add treatments first'; }
+      gBtn.addEventListener('click', () => setScope(gname, 'global'));
+      pBtn.addEventListener('click', () => { if (state.treatments.length) setScope(gname, 'per_treatment'); });
+      seg.appendChild(gBtn); seg.appendChild(pBtn);
+      head.appendChild(seg);
+      sec.appendChild(head);
+
+      if (scope === 'per_treatment' && state.treatments.length) {
+        sec.appendChild(el('p', { class: 'grp__hint' }, 'One value per treatment.'));
+        sec.appendChild(renderMatrix(gname));
+      } else {
+        sec.appendChild(el('p', { class: 'grp__hint' }, 'One value for the whole study.'));
+        sec.appendChild(renderGlobalDense(gname));
+      }
+      groupsEl.appendChild(sec);
+    });
+    wireFillTargets();
+  }
+
+  function setScope(gname, mode) {
+    if (state.scopes[gname] === mode) return;
+    state.scopes[gname] = mode;
+    // Keep any placed column chip and re-fill its values for the new scope: global takes
+    // the first value; per-treatment takes the first value per matching treatment row.
+    fieldsInGroup[gname].forEach(f => {
+      const ck = columnSourceOf(f.id);
+      if (ck) { clearColumnEntries(f.id); applyColumn(f.id, ck); }
+    });
+    renderAll(); scheduleSave();
+  }
+
+  // Global mode uses the same dense table as per-treatment, with a single
+  // "Whole study" row — carrying the compact layout across both modes.
+  function matrixHead(fields, corner) {
+    const thead = el('thead'); const htr = el('tr');
+    htr.appendChild(el('th', null, corner));
+    fields.forEach(f => {
+      const th = el('th', { class: 'fillable' });
+      th.dataset.field = f.id;
+      th.innerHTML = f.label + (f.required ? ' <span class="req">*</span>' : '')
+        + (f.unit ? '<br><span class="th-unit">' + f.unit + '</span>' : '');
+      const ck = columnSourceOf(f.id);
+      if (ck && colByKey[ck]) {
+        // The source column "stays" here as a chip (Map step's assigned-chip), so the
+        // origin of the data is visible.
+        const row = el('div', { class: 'th-source-row' });
+        const chip = el('span', { class: 'assigned-chip' });
+        chip.title = colByKey[ck].name + (multiSheet && colByKey[ck].sheet ? ' · ' + colByKey[ck].sheet : '');
+        chip.appendChild(el('span', null, colByKey[ck].name));
+        const x = el('button', { type: 'button', 'aria-label': 'Clear column source' }, '×');
+        x.addEventListener('click', (e) => { e.stopPropagation(); clearFieldColumn(f.id); });
+        chip.appendChild(x);
+        row.appendChild(chip);
+        th.appendChild(row);
+      } else {
+        th.appendChild(el('span', { class: 'th-drop' }, '⬇ drop column'));
+      }
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr); return thead;
+  }
+
+  function renderGlobalDense(gname) {
+    const fields = fieldsInGroup[gname];
+    const wrap = el('div', { class: 'matrix-wrap' });
+    const table = el('table', { class: 'matrix' });
+    table.appendChild(matrixHead(fields, ''));
+    const tbody = el('tbody'); const tr = el('tr');
+    tr.appendChild(el('td', { class: 'trt-cell' }, 'Whole study'));
+    fields.forEach(f => { const td = el('td'); td.appendChild(makeGlobalCell(f)); tr.appendChild(td); });
+    tbody.appendChild(tr); table.appendChild(tbody); wrap.appendChild(table);
+    return wrap;
+  }
+
+  function makeGlobalCell(f) {
+    const input = makeControl(f, 'cell-input');
+    const e = state.global[f.id];
+    if (e && e.value != null) {
+      applyValue(input, e.value, e.source);
+      if (e.source === 'document' && e.source_quote) input.title = 'From paper: ' + e.source_quote;
+    }
+    input.addEventListener('input', () => {
+      const v = input.value.trim();
+      state.global[f.id] = v === '' ? { value: null, source: null } : { value: v, source: 'user' };
+      input.dataset.source = v === '' ? '' : 'user';
+      input.removeAttribute('title');
+      renderStatus(); scheduleSave();
+    });
+    return input;
+  }
+
+  function makeControl(f, cls) {
+    if (f.options && f.options.length) {
+      // Strict dropdown of existing values (USDA texture, or DB Management / Flux).
+      const sel = el('select', { class: cls });
+      sel.appendChild(el('option', { value: '' }, '—'));
+      f.options.forEach(o => sel.appendChild(el('option', { value: o }, o)));
+      return sel;
+    }
+    const numeric = (f.dtype === 'int' || f.dtype === 'float');
+    const input = el('input', { class: cls, type: numeric ? 'number' : 'text', autocomplete: 'off' });
+    if (f.dtype === 'float') input.setAttribute('step', 'any');
+    return input;
+  }
+
+  // Set a control's value. A strict <select> only accepts a value already in its
+  // option list — the server resolves AI-extracted terms to the allowed vocabulary
+  // (or drops them), so an off-list value here just stays blank rather than being
+  // injected as a new, non-canonical option.
+  function applyValue(input, value, source) {
+    if (value == null || value === '') { input.value = ''; input.dataset.source = ''; return; }
+    const v = String(value);
+    if (input.tagName === 'SELECT' && ![].some.call(input.options, o => o.value === v)) {
+      input.value = ''; input.dataset.source = ''; return;
+    }
+    input.value = v;
+    input.dataset.source = source || 'user';
+  }
+
+  function renderMatrix(gname) {
+    const fields = fieldsInGroup[gname];
+    const wrap = el('div', { class: 'matrix-wrap' });
+    const table = el('table', { class: 'matrix' });
+    table.appendChild(matrixHead(fields, 'Treatment'));
+    const tbody = el('tbody');
+    state.treatments.forEach(t => {
+      const tr = el('tr');
+      const tc = el('td', { class: 'trt-cell' }, t);
+      if (state.descriptions[t]) tc.title = state.descriptions[t];
+      tr.appendChild(tc);
+      fields.forEach(f => { const td = el('td'); td.appendChild(makeCell(t, f)); tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); wrap.appendChild(table);
+    return wrap;
+  }
+
+  function makeCell(t, f) {
+    const input = makeControl(f, 'cell-input');
+    const e = (state.per[t] || {})[f.id];
+    if (e && e.value != null) applyValue(input, e.value, e.source);
+    input.addEventListener('input', () => {
+      const v = input.value.trim();
+      ensureTreatment(t, false);
+      state.per[t][f.id] = v === '' ? { value: null, source: null } : { value: v, source: 'user' };
+      input.dataset.source = v === '' ? '' : 'user';
+      renderStatus(); scheduleSave();
+    });
+    return input;
+  }
+
+  // --- leftover-column fill ------------------------------------------------
+  const cloudEl = document.getElementById('soil-cloud');
+  const cloudPanel = document.getElementById('soil-cloud-panel');
+
+  function setArmed(key) {
+    armed = (armed === key) ? null : key;
+    groupsEl.classList.toggle('arming', !!armed);
+    renderCloud();
+  }
+
+  function makeChip(c) {
+    const sug = c.suggestion || {};
+    const chip = el('div', {
+      class: 'col-chip', draggable: 'true', role: 'button', tabindex: '0',
+      title: (c.samples && c.samples.length ? c.name + ' — e.g. ' + c.samples.join(', ') : c.name)
+        + (c.distinct > 1 ? ' (varies across rows)' : ''),
+    });
+    if (armed === c.key) chip.classList.add('armed');
+    if (sug.canonical_field && sug.confidence >= 0.6 && fieldById[sug.canonical_field]) chip.classList.add('suggested');
+    chip.appendChild(el('span', null, c.name));
+    if (multiSheet && c.sheet) chip.appendChild(el('span', { class: 'col-chip__sheet' }, c.sheet));
+    chip.addEventListener('click', () => setArmed(c.key));
+    chip.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setArmed(c.key); }
+    });
+    chip.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', c.key); e.dataTransfer.effectAllowed = 'copy';
+      chip.classList.add('dragging');
+      groupsEl.classList.add('dragging-col');   // light up every droppable header
+    });
+    chip.addEventListener('dragend', () => {
+      chip.classList.remove('dragging');
+      groupsEl.classList.remove('dragging-col');
+    });
+    return chip;
+  }
+
+  // Sort key: a real suggestion's confidence, else -1 so unmatched chips sink.
+  function confOf(c) {
+    return (c.suggestion && c.suggestion.canonical_field && fieldById[c.suggestion.canonical_field])
+      ? c.suggestion.confidence : -1;
+  }
+
+  function renderCloud() {
+    if (!cloudEl) return;
+    cloudPanel.hidden = !columns.length;
+    cloudEl.innerHTML = '';
+    if (!columns.length) return;
+    const used = usedColumnKeys();
+    // Highest-confidence suggestions first (no suggestion sinks to the bottom).
+    columns.slice().sort((a, b) => confOf(b) - confOf(a)).forEach(c => {
+      const chip = makeChip(c);
+      if (used.has(c.key)) { chip.classList.add('used'); chip.title = c.name + ' → already filling a field'; }
+      cloudEl.appendChild(chip);
+    });
+  }
+
+  // --- column-source tracking (which field a column currently fills) -------
+  function usedColumnKeys() {
+    const keys = new Set();
+    const scan = e => { if (e && e.source === 'column' && e.columnKey) keys.add(e.columnKey); };
+    Object.values(state.global).forEach(scan);
+    Object.values(state.per).forEach(row => Object.values(row).forEach(scan));
+    return keys;
+  }
+  // The column key sourcing a field, in EITHER scope store — so a placed chip persists
+  // when the group toggles between global and per-treatment.
+  function columnSourceOf(fid) {
+    const g = state.global[fid];
+    if (g && g.source === 'column' && g.columnKey) return g.columnKey;
+    for (const t of state.treatments) {
+      const e = (state.per[t] || {})[fid];
+      if (e && e.source === 'column' && e.columnKey) return e.columnKey;
+    }
+    return null;
+  }
+  // Drop a field's column-sourced values from both scope stores (manual edits are kept).
+  function clearColumnEntries(fid) {
+    const g = state.global[fid];
+    if (g && g.source === 'column') state.global[fid] = { value: null, source: null };
+    state.treatments.forEach(t => {
+      const e = (state.per[t] || {})[fid];
+      if (e && e.source === 'column') state.per[t][fid] = { value: null, source: null };
+    });
+  }
+  function clearFieldColumn(fid) {
+    clearColumnEntries(fid);
+    renderAll(); scheduleSave();
+  }
+
+  // Write a column's values into a field for its *current* scope (no render). Per-treatment
+  // fills each treatment from the matching plot row (falling back to the first value);
+  // global uses the first value. Column-sourced values are confirmed (persist on autosave).
+  function applyColumn(fid, colKey) {
+    const col = colByKey[colKey];
+    if (!col) return;
+    const prov = { source: 'column', column: col.name, sheet: col.sheet, columnKey: col.key, _c: true };
+    if (state.scopes[groupOfField[fid]] === 'per_treatment' && state.treatments.length) {
+      state.treatments.forEach(t => {
+        const tv = (col.treatment_values || {})[t];
+        const v = (tv != null && tv !== '') ? tv : col.value;
+        if (v != null && v !== '' && validForField(fid, v)) {
+          ensureTreatment(t, false);
+          state.per[t][fid] = Object.assign({ value: v }, prov);
+        }
+      });
+    } else if (col.value != null && col.value !== '' && validForField(fid, col.value)) {
+      state.global[fid] = Object.assign({ value: col.value }, prov);
+    }
+  }
+
+  function fillField(fid, colKey) {
+    if (!colByKey[colKey]) return;
+    clearColumnEntries(fid);       // a fresh fill owns the field in one scope only
+    applyColumn(fid, colKey);
+    if (armed === colKey) armed = null;
+    groupsEl.classList.remove('arming');
+    renderAll(); scheduleSave();
+  }
+
+  function wireFillTargets() {
+    groupsEl.querySelectorAll('th.fillable[data-field]').forEach(th => {
+      const fid = th.dataset.field;
+      th.addEventListener('click', () => { if (armed) fillField(fid, armed); });
+      th.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+      th.addEventListener('dragenter', () => th.classList.add('drop-hot'));
+      th.addEventListener('dragleave', () => th.classList.remove('drop-hot'));
+      th.addEventListener('drop', (e) => {
+        e.preventDefault();
+        th.classList.remove('drop-hot');
+        const key = e.dataTransfer.getData('text/plain');
+        if (key && colByKey[key]) fillField(fid, key);   // only a real column key fills
+      });
+    });
+  }
+
+  // A column chip is only valid on a field header. Everywhere else — the matrix cell
+  // inputs especially — block the native drop so a chip can't dump its raw key
+  // ("1::BulkDensity_g_cm3") into a text field.
+  document.addEventListener('dragover', (e) => {
+    if (!groupsEl.classList.contains('dragging-col')) return;
+    if (!e.target.closest('th.fillable[data-field]')) {
+      e.preventDefault();                    // lets the drop fire so we can swallow it
+      e.dataTransfer.dropEffect = 'none';    // "no drop here" cursor off-target
+    }
+  });
+  document.addEventListener('drop', (e) => {
+    if (!e.target.closest('th.fillable[data-field]')) e.preventDefault();  // swallow off-target drops
+  });
+
+  // --- status + save -------------------------------------------------------
+  function missingRequired() {
+    const missing = [];
+    groupNames.forEach(gname => {
+      const scope = state.scopes[gname];
+      fieldsInGroup[gname].forEach(f => {
+        if (!f.required) return;
+        if (scope === 'per_treatment' && state.treatments.length) {
+          const gaps = state.treatments.filter(t => !((state.per[t] || {})[f.id] && (state.per[t][f.id].value || state.per[t][f.id].value === 0)));
+          if (gaps.length) missing.push(f.label + ' (' + gaps.length + ' treatment' + (gaps.length > 1 ? 's' : '') + ')');
+        } else {
+          if (!(state.global[f.id] && (state.global[f.id].value || state.global[f.id].value === 0))) missing.push(f.label);
+        }
+      });
+    });
+    return missing;
+  }
+  function renderStatus() {
+    const missing = missingRequired();
+    soilReq.textContent = missing.length ? (missing.length + ' required value(s) still needed') : 'All required values filled';
+    soilReq.className = missing.length ? 'soil-required--warn' : 'soil-required--ok';
+  }
+
+  let saveTimer = null;
+  function scheduleSave() { soilSaved.textContent = 'Saving…'; clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); }
+  function payloadFrom(obj) {
+    const out = {};
+    Object.keys(obj).forEach(fid => {
+      const e = obj[fid];
+      // Persist anything the contributor entered/edited (source 'user') or has
+      // confirmed (a prior save, or Continue on this stage — see confirmAll). Unedited,
+      // unconfirmed paper prefills are left out of autosaves so a future re-extraction
+      // can still refresh them; hitting Continue commits them. Empty fields never save.
+      if (e && (e.value || e.value === 0) && (e.source === 'user' || e._c)) out[fid] = e;
+    });
+    return out;
+  }
+  async function save() {
+    const descriptions = {};
+    state.treatments.forEach(t => { if ((state.descriptions[t] || '').trim()) descriptions[t] = state.descriptions[t].trim(); });
+    const names = {};
+    state.treatments.forEach(t => { if ((state.names[t] || '').trim()) names[t] = state.names[t].trim(); });
+    const payload = { treatments: state.treatments, names: names, descriptions: descriptions, scopes: state.scopes, global: payloadFrom(state.global), per_treatment: {} };
+    state.treatments.forEach(t => { if (state.per[t]) { const p = payloadFrom(state.per[t]); if (Object.keys(p).length) payload.per_treatment[t] = p; } });
+    try {
+      const resp = await fetch(saveUrl, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken }, body: JSON.stringify(payload),
+      });
+      soilSaved.textContent = resp.ok ? 'Saved' : 'Save failed';
+    } catch (e) { soilSaved.textContent = 'Save failed'; }
+  }
+
+  // Continue = the contributor confirms the page as shown. Accepting a paper-suggested
+  // value (no edit) is a confirmation, so mark every non-blank field confirmed before
+  // the final save — a good extraction should need no edits, yet still be persisted.
+  function confirmAll() {
+    const mark = obj => Object.values(obj).forEach(e => { if (e && (e.value || e.value === 0)) e._c = true; });
+    mark(state.global);
+    state.treatments.forEach(t => { if (state.per[t]) mark(state.per[t]); });
+  }
+
+  document.getElementById('soil-continue').addEventListener('click', async () => {
+    const missing = missingRequired();
+    if (missing.length) { showToast('Please fill the required value(s): ' + missing.join(', '), 'warning'); return; }
+    confirmAll();
+    await save();
+    window.location.href = nextUrl;
+  });
+
+  // --- initial paint -------------------------------------------------------
+  function renderAll() { renderTreatments(); renderCloud(); renderGroups(); renderStatus(); }
+  renderAll();
+})();
+</script>
+{% endblock %}

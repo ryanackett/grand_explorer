@@ -377,6 +377,28 @@
 
     <!-- header
     ================================================== -->
+    <style>
+        /* Desktop: open dropdowns on hover, not click — the toggle itself is a real
+           link (About→/about, Account→/account, Contribute→/submit-data). No
+           data-bs-toggle, so a click follows the href instead of toggling. */
+        @media (min-width: 992px) {
+            .navbar-nav .nav-item.dropdown:hover > .dropdown-menu { display: block; }
+            /* Kill the default gap so sliding the cursor from toggle to menu doesn't
+               cross empty space and close it. */
+            .navbar-nav .nav-item.dropdown > .dropdown-menu { margin-top: 0; }
+        }
+        /* Mobile (collapsed hamburger): hover has no meaning, so lay every dropdown
+           item out inline and always visible — nothing hides behind a click. */
+        @media (max-width: 991.98px) {
+            .navbar-nav .dropdown-menu {
+                display: block; position: static; float: none;
+                background: transparent; border: none; box-shadow: none; padding-left: 1rem;
+            }
+            .navbar-nav .dropdown-menu .dropdown-item { color: rgba(255,255,255,.9); }
+            .navbar-nav .dropdown-menu .dropdown-item:hover { background: rgba(255,255,255,.1); }
+            .navbar-nav .dropdown-divider { border-top-color: rgba(255,255,255,.25); }
+        }
+    </style>
     <nav class="navbar navbar-expand-lg navbar-dark navbar-glass fixed-top">
         <div class="container-fluid px-lg-5 px-3 py-1">
 
@@ -406,25 +428,54 @@
                 <ul class="navbar-nav ms-auto align-items-center my-3 my-lg-0">
                     
                     <li class="nav-item mx-3">
-                        <a class="nav-link grand-nav-link" href="/query-filters">Explore Data</a>
+                        <a class="nav-link grand-nav-link" href="/query-filters">Explore</a>
                     </li>
-                    <!-- Commenting out the "Submit Data" link for now, as the functionality is not yet implemented. 
-                    <li class="nav-item mx-3">
-                        <a class="nav-link grand-nav-link" onclick="showToast('Submit Data functionality coming soon!', 'warning'); return false;">Submit Data</a>
-                    </li>
-                    -->
                     <li class="nav-item dropdown mx-3">
-                        <a class="nav-link grand-nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link grand-nav-link dropdown-toggle" href="{% url 'submit-data' %}" id="contributeDropdown">
+                            Contribute
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px; overflow: hidden;" aria-labelledby="contributeDropdown">
+                            <li><a class="dropdown-item py-2" href="{% url 'submit-data' %}">Contribute Data</a></li>
+                            <li><a class="dropdown-item py-2" href="{% url 'why-contribute' %}">Why Contribute?</a></li>
+                            <li><hr class="dropdown-divider my-0"></li>
+                            <li><a class="dropdown-item py-2" href="{% url 'leaderboard' %}">Leaderboard</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown mx-3">
+                        <a class="nav-link grand-nav-link dropdown-toggle" href="/about" id="navbarDropdown">
                             About
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px; overflow: hidden;" aria-labelledby="navbarDropdown">
                             <li><a class="dropdown-item py-2" href="/about">About This Site</a></li>
                             <li><a class="dropdown-item py-2" href="/about-data">About the Data</a></li>
-                            <li><a class="dropdown-item py-2" href="/team">Our Team</a></li>
                             <li><hr class="dropdown-divider my-0"></li>
+                            <li><a class="dropdown-item py-2" href="/team">Our Team</a></li>
                             <li><a class="dropdown-item py-2" href="/contact">Contact Us</a></li>
                         </ul>
                     </li>
+
+                    {% if user.is_authenticated %}
+                    <li class="nav-item dropdown mx-3">
+                        <a class="nav-link grand-nav-link dropdown-toggle" href="{% url 'account-settings' %}" id="accountDropdown">
+                            Account
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px; overflow: hidden;" aria-labelledby="accountDropdown">
+                            <li><span class="dropdown-item-text py-2 text-muted" style="font-size:1.15rem;">{{ user.email|default:user.username }}</span></li>
+                            <li><hr class="dropdown-divider my-0"></li>
+                            <li><a class="dropdown-item py-2" href="{% url 'account-settings' %}">My Account</a></li>
+                            <li><a class="dropdown-item py-2" href="{% url 'my-submissions' %}">My Submissions</a></li>
+                            {% if user.is_staff %}
+                            <li><a class="dropdown-item py-2" href="{% url 'workbench-curation' %}">Curation Queue</a></li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider my-0"></li>
+                            <li><a class="dropdown-item py-2" href="{% url 'account_logout' %}">Log Out</a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item mx-3">
+                        <a class="nav-link grand-nav-link" href="{% url 'account_login' %}">Log In</a>
+                    </li>
+                    {% endif %}
 
                 </ul>
             </div>

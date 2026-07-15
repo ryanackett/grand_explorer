@@ -26,7 +26,97 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def index(request): 
+def account_settings(request):
+    """My Account: a read-only view of the contributor's details (name, email), with the
+    changes themselves routed to dedicated pages from the Security panel — name here, and
+    allauth's hardened flows for email (new email reverified) and password (current
+    password required). We don't reimplement the latter two."""
+    # Verification state of the login (primary) email, for an at-a-glance badge.
+    primary_verified = False
+    try:
+        from allauth.account.models import EmailAddress
+        primary_verified = EmailAddress.objects.filter(
+            user=request.user, email__iexact=request.user.email, verified=True
+        ).exists()
+    except Exception:  # noqa: BLE001 — a badge must never break the page
+        primary_verified = False
+
+    return render(request, 'account_settings.html', {
+        'primary_verified': primary_verified,
+    })
+
+
+def change_name(request):
+    """Edit first/last name — its own page so it looks and behaves like allauth's
+    change-email / change-password flows (linked from the Security panel)."""
+    from .forms import NameForm
+
+    if request.method == 'POST':
+        form = NameForm(request.POST, instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Your name has been updated.')
+            return redirect('account-settings')
+    else:
+        form = NameForm(instance=request.user)
+
+    return render(request, 'account_name.html', {'form': form})
+
+
+def why_contribute(request):
+    """Public 'why contribute your data' page — the pitch, linked from the Contribute menu."""
+    return render(request, 'why_contribute.html', {})
+
+
+def leaderboard(request):
+    """Public recognition board. Each contributor's promoted data is reached via the
+    persistent Publication.Contributor handle (see the promote flow), so it follows a
+    user across email changes. Three metrics per contributor:
+      * papers      — distinct Publications
+      * fluxes      — RawMeasurementTreatment rows with a non-null N2O flux
+      * continents  — distinct Site.Continent values (filled by `backfill_geography`)
+    Default rank is by papers; the template lets the visitor re-sort by any metric.
+    """
+    from django.db.models import Count, Q
+    from .models import User
+
+    # ponytail: the flux + continent joins fan out per publication, but each metric is a
+    # COUNT(DISTINCT ...) so the multiplication doesn't inflate it. Fine at contributor
+    # scale; revisit with subquery annotations if the board ever gets huge.
+    agg = list(Publication.objects
+               .filter(Contributor__isnull=False)
+               .values('Contributor')
+               .annotate(
+                   papers=Count('PubID', distinct=True),
+                   fluxes=Count('experiment__treatment__measurements',
+                                filter=Q(experiment__treatment__measurements__n2oflux__isnull=False),
+                                distinct=True),
+                   continents=Count('experiment__SiteID__Continent', distinct=True),
+               )
+               .order_by('-papers', '-fluxes', 'Contributor'))
+    users = {u.public_id: u for u in
+             User.objects.filter(public_id__in=[a['Contributor'] for a in agg])}
+    entries = []
+    for a in agg:
+        u = users.get(a['Contributor'])
+        # A user removed from the system leaves their promoted data (and its credit) intact.
+        name = (u.get_full_name().strip() or 'Contributor') if u else 'Former contributor'
+        entries.append({'name': name, 'papers': a['papers'],
+                        'fluxes': a['fluxes'], 'continents': a['continents']})
+
+    totals = {
+        'contributors': len(entries),
+        'papers': sum(e['papers'] for e in entries),
+        'fluxes': sum(e['fluxes'] for e in entries),
+        'continents': (Publication.objects
+                       .filter(Contributor__isnull=False)
+                       .exclude(experiment__SiteID__Continent__isnull=True)
+                       .values('experiment__SiteID__Continent').distinct().count()),
+    }
+    return render(request, 'leaderboard.html', {'entries': entries, 'totals': totals})
+
+
+def index(request):
     return render(request, 'index.html')
 
 

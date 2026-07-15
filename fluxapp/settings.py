@@ -29,6 +29,11 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost', cast=lambda v: [s.strip() for s in v.split(',')])
 
+# Full origins (with scheme) trusted for CSRF on unsafe methods — required in prod for
+# HTTPS POSTs (login/signup/forms) from the real domain(s), e.g.
+# "https://grandexplorer.org,https://www.grandexplorer.org". Empty in dev.
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
+
 
 # Application definition
 
@@ -40,10 +45,17 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',        # intcomma formatting on the leaderboard
+    'django.contrib.sites',           # required by allauth
+    'allauth',
+    'allauth.account',                # contributor registration + email verification
     'import_export',
     'explorer',
     'django_user_agents',
 ]
+
+# allauth builds verification-email links from the current Site.
+SITE_ID = 1
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -58,7 +70,45 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_user_agents.middleware.UserAgentMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',          # admin / username login
+    'allauth.account.auth_backends.AuthenticationBackend',  # allauth email login
+]
+
+# --- allauth (contributor auth) ---
+# Email is the credential; a verified email is MANDATORY before login succeeds, so an
+# unverified/fake address can never reach the login-gated workbench (or the LLM). This
+# is the core API-spam protection.
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+# First/last name captured at signup (editable later in My Account). allauth appends
+# these fields to the signup form and calls the form's signup() to persist them.
+ACCOUNT_SIGNUP_FORM_CLASS = 'n2odb.forms.SignupExtraForm'
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_UNIQUE_EMAIL = True
+# Don't reveal whether an email is registered (uniform responses on signup/login/reset).
+# This is allauth's default; pinned explicitly so it can't silently regress.
+ACCOUNT_PREVENT_ENUMERATION = True
+ACCOUNT_EMAIL_SUBJECT_PREFIX = '[GRAND Explorer] '
+# Scheme allauth uses to build links (verification, reset) from the Site domain.
+# Defaults to http for local dev; set ACCOUNT_DEFAULT_HTTP_PROTOCOL=https in production.
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = config('ACCOUNT_DEFAULT_HTTP_PROTOCOL', default='http')
+# Throttles, tightened from allauth's generic (NAT-safe-for-huge-apps) defaults to
+# fit this small, curated tool. Format is "amount/duration/scope", comma-joined
+# clauses all apply. duration unit: s/m/h/d (bare unit = 1). scope: ip = per client
+# IP, key = per target (email/account). Keys not listed here inherit allauth defaults
+# (e.g. confirm_email 1/180s/key, reset_password 20/m/ip,5/m/key).
+ACCOUNT_RATE_LIMITS = {
+    'login': '10/m/ip',            # total login attempts per IP
+    'login_failed': '5/5m/ip,5/5m/key',  # brute-force: per IP AND per account
+    'signup': '5/m/ip',            # new accounts per IP (real signups are rare)
+}
+LOGIN_URL = 'account_login'
+LOGIN_REDIRECT_URL = 'submit-data'   # after login, land on the upload workbench
+ACCOUNT_LOGOUT_REDIRECT_URL = 'home'
 
 # --- SQL Explorer Settings ---
 # Explorer is a live SQL console over the DB. Two safeguards for production:
@@ -197,6 +247,49 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'n2odb.User'
+
+# --- Assisted-upload workbench / manuscript extraction ---
+# Attaching a source paper to a submission and pre-filling review forms from it.
+# All optional and off by default: with the LLM flag off (or no key), documents
+# are still captured, deterministic parsers (DOI/coords) still run, and the review
+# forms simply start empty. See manuscript-extraction-implementation-plan §8.
+WORKBENCH_LLM_ENABLED = config("WORKBENCH_LLM_ENABLED", default=False, cast=bool)
+WORKBENCH_DOC_MAX_MB = config("WORKBENCH_DOC_MAX_MB", default=32, cast=int)
+WORKBENCH_DOC_MAX_PAGES = config("WORKBENCH_DOC_MAX_PAGES", default=60, cast=int)
+WORKBENCH_OCR_ENABLED = config("WORKBENCH_OCR_ENABLED", default=False, cast=bool)
+# Tabular data-file (CSV/XLSX) upload limits.
+WORKBENCH_DATA_MAX_MB = config("WORKBENCH_DATA_MAX_MB", default=16, cast=int)
+WORKBENCH_DATA_MAX_ROWS = config("WORKBENCH_DATA_MAX_ROWS", default=50000, cast=int)
+# Model-call settings for the manuscript fact-extraction module
+# (manuscript-llm-module.md §6). ANTHROPIC_API_KEY is read from the environment by
+# the SDK — keep it out of code. Model is a config knob, never a hardcoded downgrade.
+# Sonnet is the default: it handles structured fact extraction well and costs ~5×
+# less per token than Opus. Override with WORKBENCH_LLM_MODEL to escalate.
+WORKBENCH_LLM_MODEL = config("WORKBENCH_LLM_MODEL", default="claude-sonnet-4-6")
+WORKBENCH_LLM_PDF_NATIVE = config("WORKBENCH_LLM_PDF_NATIVE", default=False, cast=bool)
+WORKBENCH_MANUSCRIPT_MAX_TOKENS = config(
+    "WORKBENCH_MANUSCRIPT_MAX_TOKENS", default=60000, cast=int
+)
+# Trim Intro/Results/Discussion/Conclusions (+ back-matter) before sending a paper to
+# the model — the study facts live in the abstract + methods. Only trims when a
+# Methods-like section is detected; set False to always send the full text.
+WORKBENCH_TRIM_SECTIONS = config("WORKBENCH_TRIM_SECTIONS", default=True, cast=bool)
+# Prompt-cache lifetime for the cached system + manuscript blocks: "1h" keeps a paper
+# cached across a wizard session so re-runs are cheap; "5m" is the standard default.
+WORKBENCH_LLM_CACHE_TTL = config("WORKBENCH_LLM_CACHE_TTL", default="1h")
+# Safety ceiling on *actual* model calls per contributor per day (accidental-spam /
+# runaway-cost backstop). Deduped no-ops and disabled/skipped runs don't count; staff
+# are exempt. The primary guard is dedupe (no re-call on an unchanged, already-extracted
+# paper) — this only ever catches abuse. 0 disables the cap.
+WORKBENCH_LLM_DAILY_CAP = config("WORKBENCH_LLM_DAILY_CAP", default=10, cast=int)
+# Upload guards for the contributor workbench. Files are read into memory and stored as
+# a DB blob, so cap the size (avoids OOM / MySQL max_allowed_packet errors) and the
+# number of files a single submission can accumulate (one study = a dataset + a paper;
+# the extra headroom is for re-uploads/corrections).
+WORKBENCH_MAX_UPLOAD_MB = config("WORKBENCH_MAX_UPLOAD_MB", default=25, cast=int)
+WORKBENCH_MAX_FILES_PER_SUBMISSION = config(
+    "WORKBENCH_MAX_FILES_PER_SUBMISSION", default=15, cast=int
+)
 
 # --- Production security ---
 # All off in dev (defaults). In production, set these in your hosting

@@ -3,6 +3,74 @@ from import_export.admin import ImportExportModelAdmin
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 from .models import Publication, Site, Experiment, Treatment, RawMeasurementTreatment
+from .models_upload import (
+    UploadSubmission, ManuscriptSource, UploadedDataFile, LlmExtractionCall,
+)
+
+
+class ManuscriptSourceInline(admin.TabularInline):
+    model = ManuscriptSource
+    extra = 0
+    fields = ("kind", "original_name", "extraction_status", "page_count",
+              "char_count", "created_at")
+    readonly_fields = fields
+    show_change_link = True
+
+
+class UploadedDataFileInline(admin.TabularInline):
+    model = UploadedDataFile
+    extra = 0
+    fields = ("kind", "original_name", "parse_status", "sheet_count",
+              "row_count", "created_at")
+    readonly_fields = fields
+    show_change_link = True
+
+
+@admin.register(UploadSubmission)
+class UploadSubmissionAdmin(admin.ModelAdmin):
+    list_display = ("public_token", "status", "contributor_email",
+                    "manuscript_extracted_at", "created_at")
+    list_filter = ("status",)
+    readonly_fields = ("public_token", "created_at", "updated_at",
+                       "manuscript_extracted_at")
+    inlines = [UploadedDataFileInline, ManuscriptSourceInline]
+
+
+@admin.register(ManuscriptSource)
+class ManuscriptSourceAdmin(admin.ModelAdmin):
+    list_display = ("id", "submission", "kind", "original_name",
+                    "extraction_status", "page_count", "char_count", "created_at")
+    list_filter = ("kind", "extraction_status")
+    # file_bytes is a binary blob — exclude it from the change form.
+    exclude = ("file_bytes",)
+    readonly_fields = ("sha256", "size_bytes", "extracted_text", "page_count",
+                       "char_count", "extraction_status", "extraction_error",
+                       "created_at")
+
+
+@admin.register(UploadedDataFile)
+class UploadedDataFileAdmin(admin.ModelAdmin):
+    list_display = ("id", "submission", "kind", "original_name",
+                    "parse_status", "sheet_count", "row_count", "created_at")
+    list_filter = ("kind", "parse_status")
+    exclude = ("file_bytes",)
+    readonly_fields = ("sha256", "size_bytes", "sheet_count", "row_count",
+                       "parse_status", "parse_error", "created_at")
+
+@admin.register(LlmExtractionCall)
+class LlmExtractionCallAdmin(admin.ModelAdmin):
+    """Read-only audit log of billable manuscript-extraction calls (cost monitoring)."""
+    list_display = ("id", "user", "submission", "status", "created_at")
+    list_filter = ("status", "created_at")
+    date_hierarchy = "created_at"
+    readonly_fields = ("user", "submission", "status", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
 
 class PublicationResource(resources.ModelResource):
     

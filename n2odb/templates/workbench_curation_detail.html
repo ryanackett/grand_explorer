@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% block title %}Curate submission | GRAND Explorer{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/highcharts@11/highcharts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highcharts@11/modules/accessibility.js"></script>
+{% endblock %}
+
+{% block content %}
+<style>
+    .cur-sec { background:#fff; padding:10.5rem 20px 60px; min-height:80vh; }
+    .cur-wrap { max-width:1400px; margin:0 auto; }
+    .cur-back { display:inline-block; margin-bottom:1rem; color:#7a8b82; text-decoration:none; font-size:1.3rem; }
+    .cur-back:hover { color:#4a5d54; }
+    .cur-wrap h1 { font-family:'Georgia', serif; color:#2c3e50; margin:0 0 .6rem; font-size:2.2rem; }
+    .cur-meta { display:flex; flex-wrap:wrap; gap:1.25rem; align-items:center; font-size:1.25rem;
+        color:#6b7c73; margin-bottom:1.5rem; }
+    .badge { display:inline-block; padding:.15rem .7rem; border-radius:20px; font-size:1.1rem;
+        font-weight:700; color:#fff; }
+    .badge--submitted { background:#4a7c8f; } .badge--in_review { background:#8e6fb0; }
+    .badge--changes_requested { background:#c0704a; } .badge--approved { background:#4a7c62; }
+    .badge--promoted { background:#2c7a4b; } .badge--rejected { background:#a0505a; }
+
+    .cur-trust { display:inline-block; padding:.1rem .55rem; border-radius:20px; font-size:1.05rem;
+        font-weight:700; vertical-align:middle; }
+    .cur-trust--academic { background:#e7f3ec; color:#2c7a4b; border:1px solid #bfe0cb; }
+    .cur-trust--personal { background:#fff6e0; color:#8a6d3b; border:1px solid #f0d9c3; }
+    .cur-trust--other { background:#eef1f3; color:#5a6b63; border:1px solid #dbe0e4; }
+    .cur-verified { color:#2c7a4b; font-weight:700; }
+
+    .cur-msg { padding:.8rem 1.1rem; border-radius:8px; margin-bottom:1rem; font-size:1.3rem; }
+    .cur-msg--success { background:#e7f3ec; color:#2c7a4b; border:1px solid #bfe0cb; }
+    .cur-msg--error { background:#fbeaea; color:#a0505a; border:1px solid #edc9cd; }
+
+    .cur-banner { padding:.9rem 1.15rem; border-radius:10px; margin-bottom:1rem; font-size:1.3rem; }
+    .cur-banner--ok { background:#e7f3ec; color:#2c7a4b; border:1px solid #bfe0cb; }
+    .cur-banner--warn { background:#fff6e0; color:#8a6d3b; border:1px solid #f0d9c3; }
+    .cur-banner--block { background:#fbeaea; color:#a0505a; border:1px solid #edc9cd; }
+    .cur-banner ul { margin:.3rem 0 0; padding-left:1.4rem; }
+
+    /* Curation cards sit below the embedded review panel. */
+    .cur-panel { margin:1.5rem 0 2rem; }
+    .cur-card { background:#f7f9f8; border:1px solid #e6ece9; border-radius:12px;
+        padding:1.15rem 1.35rem; margin-bottom:1.25rem; max-width:820px; }
+    .cur-card h2 { font-family:'Georgia', serif; color:#2c3e50; font-size:1.5rem; margin:0 0 .8rem; }
+    .cur-write { font-size:1.35rem; color:#3c4d45; line-height:1.5; margin:0; }
+    .cur-write b { color:#2c3e50; }
+    .cur-warn { margin:.6rem 0 0; padding-left:1.3rem; color:#8a6d3b; font-size:1.2rem; }
+    .cur-none { color:#9aa8a0; font-style:italic; font-size:1.2rem; margin:.4rem 0 0; }
+    .cur-note { font-size:1.2rem; color:#3c4d45; padding:.5rem 0; border-bottom:1px dotted #e2e8e5; }
+    .cur-note b { color:#2c3e50; } .cur-note:last-child { border-bottom:none; }
+
+    .cur-card textarea { width:100%; min-height:4rem; padding:10px 13px; border:1px solid #ced4da;
+        border-radius:8px; font-size:1.25rem; font-family:inherit; resize:vertical; margin-bottom:1rem; }
+    .cur-actions { display:flex; flex-wrap:wrap; gap:.7rem; }
+    .cur-btn { padding:10px 20px; border-radius:8px; border:1px solid #c3cec8; background:#fff;
+        color:#3c4d45; font-size:1.25rem; font-family:inherit; cursor:pointer; text-transform:none;
+        letter-spacing:normal; height:auto; width:auto; margin:0; }
+    .cur-btn:hover:not(:disabled) { background:#eef3f0; }
+    .cur-btn--warn { background:#e0a325; border-color:#e0a325; color:#3d2c00; font-weight:700; }
+    .cur-btn--warn:hover:not(:disabled) { background:#c98f18; }
+    .cur-btn--danger { background:#b23b47; border-color:#b23b47; color:#fff; font-weight:700; }
+    .cur-btn--danger:hover:not(:disabled) { background:#9a2f3a; }
+    .cur-btn--primary { background:#2c7a4b; border-color:#2c7a4b; color:#fff; font-weight:700; }
+    .cur-btn--primary:hover:not(:disabled) { background:#256b41; }
+    .cur-btn:disabled { opacity:.4; cursor:not-allowed; }
+</style>
+
+<section class="cur-sec">
+    <div class="cur-wrap">
+        {% for message in messages %}
+        <div class="cur-msg cur-msg--{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+
+        <a href="{% url 'workbench-curation' %}" class="cur-back">&larr; Back to queue</a>
+        <h1>{{ preview.publication.PubTitle|default:"(untitled study)" }}</h1>
+        <div class="cur-meta">
+            <span class="badge badge--{{ status }}">{{ status_label }}</span>
+            <span>{{ submission.contributor_name|default:"—" }} &lt;{{ submission.contributor_email|default:"no email" }}&gt;
+                {% if contributor_trust %}<span class="cur-trust cur-trust--{{ contributor_trust.kind }}">{{ contributor_trust.label }}</span>{% endif %}
+            </span>
+            {% if account_email_differs %}
+            <span>signed-in account: {{ account_email }}{% if account_verified %} <span class="cur-verified">&#10003; verified</span>{% endif %}
+                {% if account_trust %}<span class="cur-trust cur-trust--{{ account_trust.kind }}">{{ account_trust.label }}</span>{% endif %}</span>
+            {% elif account_verified %}
+            <span class="cur-verified">&#10003; email verified</span>
+            {% endif %}
+            {% if submission.submitted_at %}<span>Submitted {{ submission.submitted_at|date:"Y-m-d H:i" }}</span>{% endif %}
+        </div>
+
+        {% if preview.already_promoted %}
+        <div class="cur-banner cur-banner--ok">
+            <strong>Already promoted.</strong> Publication #{{ submission.promotion.pubid }},
+            Site #{{ submission.promotion.siteid }}, {{ submission.promotion.raw_count }} measurement rows.
+        </div>
+        {% endif %}
+        {% if preview.doi_duplicates %}
+        <div class="cur-banner cur-banner--warn">
+            <strong>DOI already in the database:</strong>
+            {% for d in preview.doi_duplicates %}{{ d.title }}{% if not forloop.last %}; {% endif %}{% endfor %}.
+            Per policy this is treated as a new dataset — no reconciliation.
+        </div>
+        {% endif %}
+        {% if preview.blocking %}
+        <div class="cur-banner cur-banner--block">
+            <strong>Cannot promote until resolved:</strong>
+            <ul>{% for b in preview.blocking %}<li>{{ b }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+
+        <!-- Full graph + table review, identical to what the contributor saw -->
+        <div class="cur-panel">
+            {% include '_review_panel.html' %}
+        </div>
+
+        <div class="cur-card">
+            <h2>Promotion</h2>
+            <p class="cur-write">
+                Promoting writes a fresh <b>Publication</b>, <b>Site</b>, and <b>Experiment</b>
+                {% if preview.experiment_name %}(“{{ preview.experiment_name }}”){% endif %},
+                then <b>{{ preview.counts.treatments }}</b> Treatment row(s) and
+                <b>{{ preview.counts.raw_rows }}</b> daily RawMeasurementTreatment row(s).
+            </p>
+            {% if preview.warnings %}
+            <ul class="cur-warn">{% for w in preview.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+            {% else %}<p class="cur-none">No warnings — clean promotion.</p>{% endif %}
+        </div>
+
+        {% if notes %}
+        <div class="cur-card">
+            <h2>Contributor Notes</h2>
+            {% for n in notes %}
+            <div class="cur-note"><b>{{ n.author }}</b> · {{ n.at|slice:":10" }}<br>{{ n.note }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'workbench-curation-action' submission.public_token %}" class="cur-card">
+            {% csrf_token %}
+            <h2>Curator Notes</h2>
+            <textarea id="cur-note" name="note" placeholder="Note to the contributor — required when requesting changes, optional otherwise"></textarea>
+            <div class="cur-actions">
+                <button name="action" value="reject" class="cur-btn cur-btn--danger">Reject Submission</button>
+                <button name="action" value="request_changes" class="cur-btn cur-btn--warn"
+                    onclick="return document.getElementById('cur-note').value.trim() !== '' || (alert('Please add a note describing the changes needed — it will be emailed to the contributor.'), false);">Request Changes</button>
+                <button name="action" value="promote" class="cur-btn cur-btn--primary"
+                    onclick="return confirm('Promote to the live GRAND database? This writes {{ preview.counts.raw_rows }} measurement row(s) across {{ preview.counts.treatments }} treatment(s) and cannot be undone from here.');"
+                    {% if preview.blocking or not preview.promotable %}disabled{% endif %}>
+                    Promote to GRAND
+                </button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

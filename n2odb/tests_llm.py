@@ -1,0 +1,345 @@
+"""Tests for the manuscript fact-extraction module (manuscript-llm-module.md §7).
+
+The Anthropic client is mocked — no network in CI. We assert the request carries the
+cached system block + the ``already_have`` list + the delimited manuscript, that the
+flatten produces the plumbing's contract shape, and that the seam degrades to
+``skipped``/``failed`` instead of raising.
+"""
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import httpx
+import anthropic
+from django.test import TestCase, override_settings
+
+from n2odb.services import manuscript_extract as mx
+from n2odb.services.manuscript_extract import (
+    EventFact,
+    Fact,
+    ManuscriptFacts,
+    extract_facts,
+)
+
+
+# All schema fields are required-but-nullable now (see manuscript_extract), so these
+# factories fill the unlisted keys with None to keep test construction terse.
+def _fact(field, value=None, unit=None, source_quote=None, confidence=None):
+    return Fact(field=field, value=value, unit=unit, source_quote=source_quote, confidence=confidence)
+
+
+_EV_DEFAULTS = dict(
+    date_iso=None, date_text=None, amount=None, unit=None, nitrogen_form=None,
+    nitrogen_type=None, crop=None, tillage_instrument=None, notes=None,
+    source_quote=None, confidence=None,
+)
+
+
+def _event(type, **kw):
+    return EventFact(type=type, **{**_EV_DEFAULTS, **kw})
+
+
+def _canned() -> ManuscriptFacts:
+    return ManuscriptFacts(
+        facts=[
+            _fact(field="site_latitude", value="42.4", unit="°N", source_quote="42°24' N", confidence=0.9),
+            _fact(field="site_longitude", value="-85.4", source_quote="85°24' W", confidence=0.9),
+            _fact(field="site_name", value="KBS LTER", confidence=0.7),
+            _fact(field="ph", value="6.4", source_quote="pH 6.4", confidence=0.8),
+            _fact(field="sand", value="43"),
+            _fact(field="silt", value="38"),
+            _fact(field="clay", value="19"),
+            _fact(field="primary_crop", value="maize", confidence=0.95),
+        ],
+        events=[_event(
+            type="fertilisation", date_text="early May 2018", date_iso="2018-05-01",
+            amount=135, unit="kg N/ha", nitrogen_form="urea", nitrogen_type="mineral",
+            source_quote="135 kg N ha-1 as urea", confidence=0.85,
+        )],
+    )
+
+
+def _mock_client(parsed=None, error=None) -> MagicMock:
+    client = MagicMock()
+    if error is not None:
+        client.messages.parse.side_effect = error
+    else:
+        resp = MagicMock()
+        resp.parsed_output = parsed
+        client.messages.parse.return_value = resp
+    return client
+
+
+class TextureTriangleTests(TestCase):
+    def test_known_classes(self):
+        # (sand, silt, clay) -> expected USDA class
+        cases = {
+            (43, 40, 17): "Loam",
+            (33, 33, 34): "Clay loam",
+            (20, 60, 20): "Silt loam",
+            (90, 7, 3): "Sand",
+            (10, 10, 80): "Clay",
+            (50, 10, 40): "Sandy clay",
+            (10, 50, 40): "Silty clay",
+            (5, 90, 5): "Silt",
+        }
+        for (sand, silt, clay), expected in cases.items():
+            with self.subTest(split=(sand, silt, clay)):
+                self.assertEqual(mx._usda_texture(sand, silt, clay), expected)
+
+
+class StripReferencesTests(TestCase):
+    def test_trailing_reference_list_removed(self):
+        body = "Intro and methods. " * 40
+        text = body + "\nReferences\nSmith J. 2020. Soil N2O. Journal 1:2-3.\n"
+        out = mx._strip_references(text)
+        self.assertIn("Intro and methods.", out)
+        self.assertNotIn("Smith J. 2020", out)
+
+    def test_early_reference_mention_kept(self):
+        # A "references" heading in the first half is not the bibliography — keep all.
+        text = "References\n" + ("Real body content follows here. " * 60)
+        self.assertEqual(mx._strip_references(text), text)
+
+    def test_no_heading_returns_unchanged(self):
+        text = "A short manuscript with no reference section."
+        self.assertEqual(mx._strip_references(text), text)
+
+
+_IMRAD = """Soil N2O from a maize trial
+J. Smith and A. Jones, 2020
+
+Abstract
+KEEP_ABSTRACT: we measured N2O fluxes over two seasons.
+
+1. Introduction
+DROP_INTRO: nitrous oxide is a potent greenhouse gas discussed at length here.
+
+2. Materials and Methods
+KEEP_METHODS: the study site is at 42N, soil pH 6.4, maize, urea applied 1 May.
+
+2.1 Soil sampling
+KEEP_SUB: cores were taken to 30 cm and analysed for texture.
+
+3. Results
+DROP_RESULTS: cumulative fluxes were high in the fertilised plots.
+
+4. Discussion
+DROP_DISCUSSION: our findings agree with previous work.
+
+5. Conclusions
+DROP_CONCL: management matters.
+
+Acknowledgements
+DROP_ACK: we thank the technicians.
+
+References
+DROP_REF: Smith J. 2020. Journal 1:2-3.
+"""
+
+
+class SectionTrimTests(TestCase):
+    def test_keeps_abstract_and_methods_drops_the_rest(self):
+        out = mx._keep_relevant_sections(_IMRAD)
+        for kept in ("KEEP_ABSTRACT", "KEEP_METHODS", "KEEP_SUB"):
+            self.assertIn(kept, out)
+        for dropped in ("DROP_INTRO", "DROP_RESULTS", "DROP_DISCUSSION",
+                        "DROP_CONCL", "DROP_ACK", "DROP_REF"):
+            self.assertNotIn(dropped, out)
+
+    def test_combined_results_and_discussion_dropped(self):
+        text = _IMRAD.replace("3. Results\nDROP_RESULTS: cumulative fluxes were high in the fertilised plots.\n\n4. Discussion\nDROP_DISCUSSION: our findings agree with previous work.",
+                              "3. Results and Discussion\nDROP_COMBINED: fluxes were high and agree with prior work.")
+        out = mx._keep_relevant_sections(text)
+        self.assertNotIn("DROP_COMBINED", out)
+        self.assertIn("KEEP_METHODS", out)
+
+    def test_no_methods_section_returns_unchanged(self):
+        text = "Intro line\n1. Introduction\nbody\n3. Results\nmore body\n"
+        self.assertEqual(mx._keep_relevant_sections(text), text)
+
+    def test_no_headings_returns_unchanged(self):
+        text = "Just some running text with no section headings at all."
+        self.assertEqual(mx._keep_relevant_sections(text), text)
+
+    @override_settings(WORKBENCH_TRIM_SECTIONS=False)
+    def test_disabled_returns_unchanged(self):
+        self.assertEqual(mx._keep_relevant_sections(_IMRAD), _IMRAD)
+
+
+class SchemaTests(TestCase):
+    def test_field_ids_cover_all_site_fields(self):
+        # The flat schema's field ids must stay in sync with the plumbing registry,
+        # so every site field the model can fill maps to a real contract id.
+        from n2odb.services import site_fields
+        site_ids = {f.id for f in site_fields.SITE_FIELDS}
+        self.assertEqual(site_ids - mx._VALID_FIELD_IDS, set())
+
+
+class DisabledTests(TestCase):
+    @override_settings(WORKBENCH_LLM_ENABLED=False)
+    def test_disabled_returns_skipped(self):
+        # Force-disabled regardless of the ambient .env (which may carry a key).
+        out = extract_facts("some manuscript text", [])
+        self.assertEqual(out, {"status": "skipped", "metadata": {}, "events": []})
+
+    @patch("n2odb.services.llm_assist.is_enabled", return_value=True)
+    def test_empty_text_skipped_without_calling_model(self, _en):
+        with patch("n2odb.services.llm_assist._client") as client:
+            out = extract_facts("   ", ["n2oflux"])
+        self.assertEqual(out["status"], "skipped")
+        client.assert_not_called()
+
+
+@patch("n2odb.services.llm_assist.is_enabled", return_value=True)
+class EnabledTests(TestCase):
+    def test_ok_flattens_to_contract(self, _en):
+        client = _mock_client(parsed=_canned())
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("The KBS LTER site (42°24' N, 85°24' W)...", ["n2oflux", "vwc"])
+
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["model"], "claude-sonnet-4-6")
+        self.assertIn("generated_at", out)
+
+        meta = out["metadata"]
+        self.assertEqual(meta["site_latitude"]["value"], "42.4")
+        self.assertEqual(meta["ph"]["value"], "6.4")
+        self.assertEqual(meta["primary_crop"]["value"], "maize")
+        self.assertEqual(meta["site_name"]["value"], "KBS LTER")
+
+        self.assertEqual(len(out["events"]), 1)
+        ev = out["events"][0]
+        self.assertEqual(ev["type"], "input_application")  # "fertilisation" remapped
+        self.assertEqual(ev["date_iso"], "2018-05-01")
+        keys = {f["key"]: f for f in ev["fields"]}
+        self.assertEqual(keys["amount"]["value"], 135)
+        self.assertEqual(keys["amount"]["unit"], "kg N/ha")
+        self.assertEqual(keys["input_form"]["value"], "urea")
+        self.assertEqual(keys["input_source"]["value"], "mineral")
+
+    def test_request_carries_cached_system_and_delimited_doc(self, _en):
+        client = _mock_client(parsed=_canned())
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            extract_facts("MANUSCRIPT BODY TEXT HERE", ["n2oflux"])
+
+        kwargs = client.messages.parse.call_args.kwargs
+        # system: a single cached text block that names the already-have field.
+        sys_block = kwargs["system"][0]
+        self.assertEqual(sys_block["cache_control"]["type"], "ephemeral")
+        self.assertIn(sys_block["cache_control"]["ttl"], ("5m", "1h"))
+        self.assertIn("Nitrous oxide flux", sys_block["text"])
+        # user content: the manuscript wrapped in an explicit delimiter, and cached
+        # so re-runs on the same paper hit the cache instead of paying full input.
+        doc_block = kwargs["messages"][0]["content"][0]
+        self.assertEqual(doc_block["cache_control"]["type"], "ephemeral")
+        self.assertIn(doc_block["cache_control"]["ttl"], ("5m", "1h"))
+        content_text = doc_block["text"]
+        self.assertIn("<manuscript>", content_text)
+        self.assertIn("MANUSCRIPT BODY TEXT HERE", content_text)
+        # structured output + configured model.
+        self.assertIs(kwargs["output_format"], ManuscriptFacts)
+        self.assertEqual(kwargs["model"], "claude-sonnet-4-6")
+
+    def test_planting_and_tillage_event_fields_flatten(self, _en):
+        facts = ManuscriptFacts(events=[
+            _event(type="planting", date_iso="2018-04-20", crop="maize"),
+            _event(type="tillage", date_text="spring", tillage_instrument="moldboard plough"),
+        ])
+        client = _mock_client(parsed=facts)
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [])
+        by_type = {e["type"]: e for e in out["events"]}
+        plant = {f["key"]: f for f in by_type["planting"]["fields"]}
+        self.assertEqual(plant["crop"]["value"], "maize")
+        till = {f["key"]: f for f in by_type["tillage"]["fields"]}
+        self.assertEqual(till["tillage_instrument"]["value"], "moldboard plough")
+
+    def test_confidence_clamped_and_bad_coord_dropped(self, _en):
+        facts = ManuscriptFacts(facts=[
+            _fact(field="site_latitude", value="999", confidence=1.5),   # impossible → dropped
+            _fact(field="site_name", value="Farm A", confidence=1.7),    # clamp to 1.0
+        ])
+        client = _mock_client(parsed=facts)
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [])
+
+        self.assertEqual(out["status"], "ok")
+        self.assertNotIn("site_latitude", out["metadata"])
+        self.assertEqual(out["metadata"]["site_name"]["confidence"], 1.0)
+
+    def test_option_choices_enforced(self, _en):
+        facts = ManuscriptFacts(facts=[
+            _fact(field="flux_instrument", value="Static Chamber"),      # in list -> kept
+            _fact(field="management", value="conventional"),            # lowercase -> normalised
+            _fact(field="texture_class", value="fine-loamy family, mesic"),  # off-list -> dropped
+        ])
+        client = _mock_client(parsed=facts)
+        opts = {
+            "flux_instrument": ["Static Chamber", "Eddy Covariance"],
+            "management": ["Conventional", "No-till"],
+            "texture_class": ["Loam", "Clay"],
+        }
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [], opts)
+        meta = out["metadata"]
+        self.assertEqual(meta["flux_instrument"]["value"], "Static Chamber")
+        self.assertEqual(meta["management"]["value"], "Conventional")  # canonical casing
+        self.assertNotIn("texture_class", meta)                        # off-list dropped
+        # The allowed lists are handed to the model in the (cached) system prompt.
+        sys_text = client.messages.parse.call_args.kwargs["system"][0]["text"]
+        self.assertIn("CONTROLLED VOCABULARIES", sys_text)
+        self.assertIn("Static Chamber", sys_text)
+
+    def test_option_near_variants_resolved(self, _en):
+        # The model may return a near-canonical variant; resolve it, don't drop it.
+        facts = ManuscriptFacts(facts=[
+            _fact(field="flux_instrument", value="static chambers"),  # fuzzy -> Static Chamber
+            _fact(field="management", value="no till"),               # normalized -> No-till
+        ])
+        client = _mock_client(parsed=facts)
+        opts = {
+            "flux_instrument": ["Static Chamber", "Automatic Chamber", "Eddy Covariance"],
+            "management": ["Conventional", "No-till", "Reduced till"],
+        }
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [], opts)
+        self.assertEqual(out["metadata"]["flux_instrument"]["value"], "Static Chamber")
+        self.assertEqual(out["metadata"]["management"]["value"], "No-till")  # not "Reduced till"
+
+    def test_texture_derived_from_fractions_overrides_text(self, _en):
+        from n2odb.services import site_fields
+        usda = list(site_fields.get("texture_class").options)
+        facts = ManuscriptFacts(facts=[
+            _fact(field="sand", value="43", unit="%"),
+            _fact(field="clay", value="17", unit="%"),   # silt inferred = 40 -> Loam
+            _fact(field="texture_class", value="Clay"),   # text guess, should be overridden
+        ])
+        client = _mock_client(parsed=facts)
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [], {"texture_class": usda})
+        tex = out["metadata"]["texture_class"]
+        self.assertEqual(tex["value"], "Loam")
+        self.assertIn("derived", tex["source_quote"])
+
+    def test_texture_falls_back_to_text_without_fractions(self, _en):
+        from n2odb.services import site_fields
+        usda = list(site_fields.get("texture_class").options)
+        facts = ManuscriptFacts(facts=[_fact(field="texture_class", value="Silt loam")])
+        client = _mock_client(parsed=facts)
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [], {"texture_class": usda})
+        self.assertEqual(out["metadata"]["texture_class"]["value"], "Silt loam")
+
+    def test_api_error_returns_failed(self, _en):
+        err = anthropic.APIError("boom", httpx.Request("POST", "http://x"), body=None)
+        client = _mock_client(error=err)
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [])
+        self.assertEqual(out, {"status": "failed", "metadata": {}, "events": []})
+
+    def test_no_parseable_output_returns_failed(self, _en):
+        client = _mock_client(parsed=None)  # model returned nothing usable
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = extract_facts("text", [])
+        self.assertEqual(out["status"], "failed")

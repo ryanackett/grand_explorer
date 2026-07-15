@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+{% block head %}
+    {% load static humanize %}
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contributor Leaderboard | GRAND Explorer</title>
+    <style>
+        :root {
+            --grand-green:  #3B523D;   /* deep forest */
+            --grand-accent: #7A9E7E;   /* soft sage */
+            --grand-cream:  #f2ede5;
+            --text-color:   #333;
+            --bg-color:     #f7f8f7;
+            --section-bg:   #ffffff;
+        }
+
+        /* Whole leaderboard in Georgia serif for a cohesive, display feel. */
+        .about-wrap { color: var(--text-color); line-height: 1.6; font-family: "Georgia", serif; }
+
+        /* Header band — shared look with the About pages for site continuity. */
+        .about-hero {
+            background-color: #2F3E30;
+            background-image:
+                linear-gradient(100deg, rgba(47,62,48,0.96) 45%, rgba(59,82,61,0.74) 100%),
+                url("{% static 'images/FluxappBackground.webp' %}");
+            background-size: cover, cover;
+            background-position: center, right center;
+            background-repeat: no-repeat, no-repeat;
+            color: #fff;
+            text-align: center;
+            padding: 9rem 2rem 6rem;
+        }
+        .about-hero h1 {
+            color: #fff; font-family: "Georgia", serif; font-size: 4rem;
+            margin: 0 0 0.6rem; font-weight: 700;
+        }
+        .about-hero h1 em { color: var(--grand-accent); font-weight: 300; font-style: italic; }
+        .about-hero .tagline {
+            font-size: 1.9rem; font-weight: 300; opacity: 0.92; max-width: 640px; margin: 0 auto;
+        }
+
+        /* Overlapping card */
+        .about-card {
+            max-width: 900px; margin: -3.5rem auto 4rem; background: var(--section-bg);
+            border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 2.5rem 3rem 3rem;
+        }
+        .about-card .intro { font-size: 1.5rem; color: #666; margin: 0 0 1.75rem; }
+        .about-card .intro .hint { color: #8a978f; font-size: 1.3rem; }
+
+        /* Community Contributions — a green "impact band" that echoes the hero rather
+           than reusing the white feature cards (which felt out of place here). */
+        .impact-band {
+            background:
+                linear-gradient(115deg, var(--grand-green) 0%, #4d6b50 55%, var(--grand-accent) 130%);
+            border-radius: 14px; padding: 1.75rem 1.5rem; margin-bottom: 2.25rem;
+            box-shadow: 0 10px 30px rgba(47,62,48,0.18);
+        }
+        .impact-title {
+            color: rgba(255,255,255,0.85); font-family: "Georgia", serif; text-align: center;
+            font-size: 1.35rem; letter-spacing: 0.12em; text-transform: uppercase;
+            margin: 0 0 1.4rem; font-weight: 400;
+        }
+        .impact-stats { display: flex; align-items: stretch; }
+        .impact-stats .stat {
+            flex: 1; text-align: center; padding: 0 0.5rem; position: relative;
+        }
+        /* Hairline dividers between stats. */
+        .impact-stats .stat + .stat::before {
+            content: ""; position: absolute; left: 0; top: 12%; height: 76%;
+            border-left: 1px solid rgba(255,255,255,0.22);
+        }
+        .impact-stats .stat i { color: rgba(255,255,255,0.55); font-size: 1.7rem; margin-bottom: 0.5rem; }
+        .impact-stats .stat .stat-num {
+            display: block; font-family: "Georgia", serif; color: #fff; font-weight: 700;
+            font-size: 3.2rem; line-height: 1; text-shadow: 0 1px 8px rgba(0,0,0,0.15);
+            font-variant-numeric: tabular-nums;
+        }
+        .impact-stats .stat .stat-lbl {
+            display: block; margin-top: 0.4rem; color: rgba(255,255,255,0.82);
+            font-size: 1.25rem; letter-spacing: 0.02em;
+        }
+
+        /* Leaderboard table */
+        /* Override the global `table { font-family: var(--font-1) }` (styles.css) so the
+           cells stay Georgia like the rest of the board — otherwise the table digits
+           render in Inter and clash with the serif stat numbers. */
+        .lb-table { width: 100%; border-collapse: collapse; font-family: "Georgia", serif; }
+        .lb-table thead th {
+            color: var(--grand-green); font-family: "Georgia", serif; font-size: 1.4rem;
+            text-align: left; padding: 0 1rem 0.9rem; border-bottom: 2px solid #eef1ee; white-space: nowrap;
+        }
+        .lb-table thead th.num { text-align: right; }
+        /* Sortable metric headers */
+        .lb-table th.sortable { cursor: pointer; user-select: none; transition: color 0.15s ease; }
+        .lb-table th.sortable:hover { color: var(--grand-accent); }
+        .lb-table th.sortable .caret { opacity: 0; margin-left: 0.35rem; font-size: 1.1rem; }
+        .lb-table th.sortable.active { color: var(--grand-green); }
+        .lb-table th.sortable.active .caret { opacity: 1; }
+        .lb-table th.sortable:not(.active):hover .caret { opacity: 0.4; }
+
+        .lb-table td {
+            padding: 1.1rem 1rem; font-size: 1.6rem; border-bottom: 1px solid #f0f3f1; vertical-align: middle;
+        }
+        .lb-table tr:last-child td { border-bottom: none; }
+        .lb-table td.rank {
+            width: 4.5rem; color: var(--grand-accent); font-weight: 700;
+            font-family: "Georgia", serif; font-size: 1.7rem; text-align: center;
+        }
+        .lb-table td.name { color: var(--grand-green); font-weight: 700; }
+        .lb-table td.num { text-align: right; font-variant-numeric: tabular-nums; color: #33403a; }
+        /* The column currently sorted on gets a subtle wash + bolder figures. */
+        .lb-table td.num.active { background: #f6f8f6; font-weight: 700; color: var(--grand-green); }
+        .lb-medal { font-size: 2rem; line-height: 1; }
+        .lb-table tr.podium td { background: #f6f8f6; }
+        .lb-table tr.podium td.num.active { background: #eef3ee; }
+        .lb-table tr.podium td.name { font-size: 1.75rem; }
+
+        /* Empty state */
+        .lb-empty { text-align: center; padding: 2rem 1rem 1rem; color: #555; }
+        .lb-empty i { font-size: 3rem; color: var(--grand-accent); margin-bottom: 1rem; }
+        .lb-empty p { font-size: 1.65rem; margin: 0 0 1.6rem; }
+        .about-btn {
+            display: inline-flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.8rem;
+            border-radius: 50px; font-size: 1.5rem; font-weight: 700; text-decoration: none;
+            background: var(--grand-green); color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+            transition: transform 0.15s ease;
+        }
+        .about-btn:hover { transform: translateY(-2px); }
+
+        @media (max-width: 600px) {
+            .about-hero h1 { font-size: 3rem; }
+            .about-card { padding: 1.75rem 1.25rem; margin-top: -3rem; }
+            /* 4-across gets cramped on phones — wrap to a 2×2 grid. */
+            .impact-stats { flex-wrap: wrap; }
+            .impact-stats .stat { flex: 0 0 50%; margin-bottom: 1.25rem; }
+            .impact-stats .stat + .stat::before { display: none; }
+            .impact-stats .stat .stat-num { font-size: 2.7rem; }
+            .lb-table td, .lb-table thead th { font-size: 1.35rem; padding-left: 0.55rem; padding-right: 0.55rem; }
+            .lb-table td.name { font-size: 1.4rem; }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="about-wrap">
+
+    <header class="about-hero">
+        <h1>Contributor Leaderboard</h1>
+        <p class="tagline">Recognising the researchers who share their data with the community.</p>
+    </header>
+
+    <div class="about-card">
+
+        {% if entries %}
+        <section class="impact-band">
+            <h2 class="impact-title">Community Contributions</h2>
+            <div class="impact-stats">
+                <div class="stat">
+                    <i class="fas fa-users"></i>
+                    <span class="stat-num" data-count="{{ totals.contributors }}">{{ totals.contributors|intcomma }}</span>
+                    <span class="stat-lbl">Contributors</span>
+                </div>
+                <div class="stat">
+                    <i class="fas fa-file-lines"></i>
+                    <span class="stat-num" data-count="{{ totals.papers }}">{{ totals.papers|intcomma }}</span>
+                    <span class="stat-lbl">Papers Added</span>
+                </div>
+                <div class="stat">
+                    <i class="fas fa-rss"></i>
+                    <span class="stat-num" data-count="{{ totals.fluxes }}">{{ totals.fluxes|intcomma }}</span>
+                    <span class="stat-lbl">Flux Measurements</span>
+                </div>
+                <div class="stat">
+                    <i class="fas fa-earth-americas"></i>
+                    <span class="stat-num" data-count="{{ totals.continents }}">{{ totals.continents|intcomma }}</span>
+                    <span class="stat-lbl">Continents Spanned</span>
+                </div>
+            </div>
+        </section>
+
+        <p class="intro">
+            Ranked by papers contributed to the GRAND Explorer database.
+            <span class="hint">Click a metric to re-rank.</span>
+        </p>
+
+        <table class="lb-table" id="lb-table">
+            <thead>
+                <tr>
+                    <th style="width:4.5rem; text-align:center;">#</th>
+                    <th>Contributor</th>
+                    <th class="num sortable active" data-key="papers">Papers<span class="caret">▼</span></th>
+                    <th class="num sortable" data-key="fluxes">Flux&nbsp;Measurements<span class="caret">▼</span></th>
+                    <th class="num sortable" data-key="continents">Continents Spanned<span class="caret">▼</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr data-papers="{{ e.papers }}" data-fluxes="{{ e.fluxes }}" data-continents="{{ e.continents }}"
+                    {% if forloop.counter <= 3 %}class="podium"{% endif %}>
+                    <td class="rank">
+                        {% if forloop.counter == 1 %}<span class="lb-medal">🥇</span>
+                        {% elif forloop.counter == 2 %}<span class="lb-medal">🥈</span>
+                        {% elif forloop.counter == 3 %}<span class="lb-medal">🥉</span>
+                        {% else %}{{ forloop.counter }}{% endif %}
+                    </td>
+                    <td class="name">{{ e.name }}</td>
+                    <td class="num active" data-col="papers">{{ e.papers|intcomma }}</td>
+                    <td class="num" data-col="fluxes">{{ e.fluxes|intcomma }}</td>
+                    <td class="num" data-col="continents">{{ e.continents|intcomma }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="lb-empty">
+            <i class="fas fa-seedling"></i>
+            <p>No contributions have been published yet — be the first to make the board.</p>
+            <a class="about-btn" href="{% url 'submit-data' %}"><i class="fas fa-upload"></i> Contribute your data</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function () {
+    // Count-up animation on the Community Contributions figures (ease-out, ~1.1s).
+    document.querySelectorAll('.impact-stats .stat-num').forEach(function (el) {
+        var target = parseInt(el.dataset.count, 10) || 0;
+        if (target <= 0) { el.textContent = '0'; return; }
+        var dur = 1100, start = null;
+        function tick(ts) {
+            if (start === null) start = ts;
+            var p = Math.min((ts - start) / dur, 1);
+            var val = Math.round(target * (1 - Math.pow(1 - p, 3)));
+            el.textContent = val.toLocaleString();
+            if (p < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+    });
+
+    var table = document.getElementById('lb-table');
+    if (!table) return;
+    var tbody = table.tBodies[0];
+    var medals = ['🥇', '🥈', '🥉'];
+
+    function sortBy(key) {
+        var rows = Array.prototype.slice.call(tbody.rows);
+        // Always most → least.
+        rows.sort(function (a, b) {
+            return (+b.dataset[key]) - (+a.dataset[key]);
+        });
+        rows.forEach(function (row, i) {
+            tbody.appendChild(row);               // reorder in the DOM
+            var rank = i + 1;
+            row.querySelector('.rank').innerHTML =
+                rank <= 3 ? '<span class="lb-medal">' + medals[rank - 1] + '</span>' : rank;
+            row.classList.toggle('podium', rank <= 3);
+            // Highlight the sorted column's cells.
+            row.querySelectorAll('td.num').forEach(function (td) {
+                td.classList.toggle('active', td.dataset.col === key);
+            });
+        });
+        table.querySelectorAll('th.sortable').forEach(function (th) {
+            th.classList.toggle('active', th.dataset.key === key);
+        });
+    }
+
+    table.querySelectorAll('th.sortable').forEach(function (th) {
+        th.addEventListener('click', function () { sortBy(th.dataset.key); });
+    });
+})();
+</script>
+{% endblock %}

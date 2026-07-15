@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block head %}
+    {% load static %}
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Contribute? | GRAND Explorer</title>
+    <style>
+        :root {
+            --grand-green:  #3B523D;   /* deep forest */
+            --grand-accent: #7A9E7E;   /* soft sage */
+            --grand-cream:  #f2ede5;
+            --text-color:   #333;
+            --bg-color:     #f7f8f7;
+            --section-bg:   #ffffff;
+        }
+
+        .about-wrap { color: var(--text-color); line-height: 1.6; }
+
+        /* Header band — shared look with the About pages for site continuity. */
+        .about-hero {
+            background-color: #2F3E30;
+            background-image:
+                linear-gradient(100deg, rgba(47,62,48,0.96) 45%, rgba(59,82,61,0.74) 100%),
+                url("{% static 'images/FluxappBackground.webp' %}");
+            background-size: cover, cover;
+            background-position: center, right center;
+            background-repeat: no-repeat, no-repeat;
+            color: #fff;
+            text-align: center;
+            padding: 9rem 2rem 6rem;
+        }
+        .about-hero h1 {
+            color: #fff; font-family: "Georgia", serif; font-size: 4rem;
+            margin: 0 0 0.6rem; font-weight: 700;
+        }
+        .about-hero h1 em { color: var(--grand-accent); font-weight: 300; font-style: italic; }
+        .about-hero .tagline {
+            font-size: 1.9rem; font-weight: 300; opacity: 0.92; max-width: 640px; margin: 0 auto;
+        }
+
+        /* Overlapping card */
+        .about-card {
+            max-width: 900px; margin: -3.5rem auto 4rem; background: var(--section-bg);
+            border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 3rem 3.5rem;
+        }
+        .about-card h2 {
+            color: var(--grand-green); font-size: 2.3rem; font-weight: 700;
+            margin: 3rem 0 1rem; padding-bottom: 0.6rem; border-bottom: 2px solid #eef1ee;
+        }
+        .about-card h2:first-child { margin-top: 0.5rem; }
+        .about-card p { font-size: 1.65rem; margin: 0 0 1.1rem; }
+        .about-card strong { color: var(--grand-green); }
+
+        /* Feature grid — fixed 2 columns so the four cards form a balanced 2×2
+           block rather than an off-kilter 3 + 1 row. */
+        .feature-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr);
+            gap: 1.4rem; margin-top: 1.6rem;
+        }
+        .feature {
+            background: #f6f8f6; border-left: 4px solid var(--grand-accent); border-radius: 8px;
+            padding: 1.6rem 1.6rem 1.4rem; transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .feature:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+        .feature i { font-size: 2.2rem; color: var(--grand-green); margin-bottom: 0.7rem; }
+        .feature h3 { color: var(--grand-green); font-size: 1.6rem; font-weight: 700; margin: 0 0 0.4rem; }
+        .feature p { font-size: 1.4rem; margin: 0; color: #555; }
+        .feature a { color: var(--grand-green); font-weight: 700; }
+
+        /* Numbered steps */
+        .steps { list-style: none; counter-reset: step; padding: 0; margin: 1.6rem 0 0; }
+        .steps li {
+            position: relative; padding: 0.2rem 0 1.4rem 4rem; font-size: 1.5rem; color: #444;
+        }
+        .steps li::before {
+            counter-increment: step; content: counter(step);
+            position: absolute; left: 0; top: 0; width: 2.6rem; height: 2.6rem;
+            background: var(--grand-green); color: #fff; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-family: "Georgia", serif; font-weight: 700; font-size: 1.4rem;
+        }
+        .steps li strong { color: var(--grand-green); }
+
+        /* CTA buttons */
+        .about-cta { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 2.5rem; }
+        .about-btn {
+            display: inline-flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.8rem;
+            border-radius: 50px; font-size: 1.5rem; font-weight: 700; text-decoration: none;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .about-btn.primary { background: var(--grand-green); color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.2); }
+        .about-btn.secondary { background: #fff; color: var(--grand-green); border: 2px solid var(--grand-green); }
+        .about-btn:hover { transform: translateY(-2px); }
+
+        @media (max-width: 600px) {
+            .about-hero h1 { font-size: 3rem; }
+            .about-card { padding: 2rem 1.5rem; margin-top: -3rem; }
+            .feature-grid { grid-template-columns: 1fr; }  /* single column on phones */
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="about-wrap">
+
+    <header class="about-hero">
+        <h1>Why <em>contribute?</em></h1>
+        <p class="tagline">Join the community and multiply the impact of your work.</p>
+    </header>
+
+    <div class="about-card">
+
+        <p>
+            GRAND Explorer is an open, harmonized repository for agricultural <strong>N<sub>2</sub>O</strong>
+            flux data. At launch, our dataset already contained ~100 published datasets, but the field is constantly growing
+            with new research, from new locations, investigating novel angles of soil N<sub>2</sub>O production to fill in the
+            gaps that remain. Our community helps us stay current with the latest research, and growing to meet 
+            the needs for novel synthesis. Every dataset you add is one more
+            piece pulled into a single, clean, searchable hub that the <strong>whole community</strong> can benefit from.
+        </p>
+
+        <h2>What you get</h2>
+        <div class="feature-grid">
+            <div class="feature">
+                <i class="fas fa-magnifying-glass-chart"></i>
+                <h3>Amplified Reach</h3>
+                <p>Your data becomes discoverable and reusable alongside work from labs worldwide, extending the life of the effort you already invested.
+                    Every datapoint downloaded from GRAND Explorer is tagged with its source publication, and requires citation for use under CC-BY Licensing.
+                </p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-diagram-project"></i>
+                <h3>Better Models</h3>
+                <p>Improved flux models, and particularly cutting-edge machine learning models that hold the potential to detangle the complex web of covariate
+                    interactions governing nitrogen processes, require large-scale, high quality datasets. GRAND Explorer does the boring part for you by 
+                    cleaning and harmonizing datasets from around the world. More community contributions means we all benefit.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-wand-magic-sparkles"></i>
+                <h3>An Assisted Upload</h3>
+                <p>Our smart contributor workbench is designed to make the tedious work of harmonizing your unique data into our schema easy. You dont have to 
+                    have a perfectly formatted dataset to contribute — just bring what you have, and let the assistant do the rest. We'll even pull key information
+                    from your manuscript PDF to pre-fill site, soil, and management details for you. </p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-award"></i>
+                <h3>Climb the Leaderboard</h3>
+                <p>Contributors are credited and ranked on our <a href="{% url 'leaderboard' %}">leaderboard</a>, so your generosity is visible to the community.
+                Climb the ranks to take the lead in one of multiple categories and be recognized for your contributions!</p>
+            </div>
+        </div>
+
+        <h2>How it works</h2>
+        <ol class="steps">
+            <li><strong>Upload your data.</strong> Drop in a CSV or Excel file of measurements — and, optionally, the paper it came from.</li>
+            <li><strong>Review the pre-fill.</strong> We read your file and paper to suggest columns, site details, and management; you confirm or adjust.</li>
+            <li><strong>Submit for curation.</strong> A curator checks it over, and once approved it's published into the live database — credited to you.</li>
+        </ol>
+
+        <div class="about-cta">
+            <a class="about-btn primary" href="{% url 'submit-data' %}"><i class="fas fa-upload"></i> Contribute data</a>
+            <a class="about-btn secondary" href="{% url 'leaderboard' %}"><i class="fas fa-ranking-star"></i> See the leaderboard</a>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

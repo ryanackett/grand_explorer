@@ -16,7 +16,9 @@
       "Bash(python3 build_tables.py --data DorichData --out /tmp/tbl_fix --pub-offset 59 --site-offset 47 --exp-offset 58 --trt-offset 334 --raw-offset 211616)",
       "Bash(python -m py_compile n2odb/views.py)",
       "Bash(ls -la .claude/launch.json)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8001/get-data/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8001/get-data/)",
+      "Bash(awk 'NR>=44 && NR<=82' n2odb/templates/contact.html)",
+      "Bash(docker exec *)"
     ]
   }
 }
