@@ -17,6 +17,7 @@ pyod
 reverse_geocoder
 pycountry_convert
 django-allauth>=65,<66   # contributor auth: registration + mandatory email verification
+django-anymail[brevo]>=10.3   # send mail over Brevo's HTTP API (Railway blocks SMTP egress)
 # --- Assisted-upload workbench: source-document ingestion ---
 # Text extraction from uploaded papers. Licenses are deliberate: pdfplumber (MIT),
 # pypdf (BSD), python-docx (MIT). Do NOT add PyMuPDF/fitz — it is AGPL.
