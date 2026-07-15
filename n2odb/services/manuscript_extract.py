@@ -571,13 +571,10 @@ def _build_content(text: str) -> list:
     budget = settings.WORKBENCH_MANUSCRIPT_MAX_TOKENS * _CHARS_PER_TOKEN
     trimmed = _strip_references(_keep_relevant_sections(text))
     body = _bounded(trimmed, budget)
-    # Cache the manuscript block: re-runs on the same paper (the common testing case)
-    # then hit the cache and pay ~0.1× on these tokens instead of full input price.
-    return [{
-        "type": "text",
-        "text": _DOC_TEMPLATE.format(body=body),
-        "cache_control": llm_assist.cache_control(),
-    }]
+    # Cache-tag the manuscript block only when WORKBENCH_LLM_CACHE_TTL sets a TTL;
+    # with the default "none" it is sent uncached at base input price (the sha256
+    # dedupe already prevents repeat calls on an unchanged paper).
+    return [llm_assist.text_block(_DOC_TEMPLATE.format(body=body))]
 
 
 def _now_iso() -> str:

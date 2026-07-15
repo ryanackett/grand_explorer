@@ -20,8 +20,9 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Per-million-token USD rates (input, output). Cache writes bill at 1.25× input,
-# cache reads at 0.1× input. Used only to annotate the usage log — approximate.
+# Per-million-token USD rates (input, output). Cache writes bill at 1.25× input
+# for a 5m TTL and 2× for 1h; cache reads at 0.1× input. Used only to annotate
+# the usage log — approximate.
 _PRICES = {
     "claude-opus-4-8": (15.0, 75.0),
     "claude-sonnet-4-6": (3.0, 15.0),
@@ -38,9 +39,11 @@ def _log_usage(model: str, usage: Any) -> None:
     cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
     cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
     in_rate, out_rate = _PRICES.get(model, (0.0, 0.0))
+    cc = cache_control()
+    write_mult = 2.0 if cc and cc.get("ttl") == "1h" else 1.25
     cost = (
         inp * in_rate
-        + cache_write * in_rate * 1.25
+        + cache_write * in_rate * write_mult
         + cache_read * in_rate * 0.1
         + out * out_rate
     ) / 1_000_000
@@ -59,17 +62,29 @@ class LLMUnavailable(Exception):
     """
 
 
-def cache_control() -> dict:
-    """The ``cache_control`` block for cached prompt segments.
+def cache_control() -> dict | None:
+    """The ``cache_control`` block for prompt segments, or ``None`` for no caching.
 
-    Defaults to a 1-hour TTL so re-running extraction later in the same wizard
-    session (minutes apart) still hits the cache — the 5-minute default would
-    expire between the upload and a re-run, forcing a full-price re-send.
+    Caching is opt-in via ``WORKBENCH_LLM_CACHE_TTL`` = ``5m`` or ``1h``; any other
+    value (the default ``none`` included) disables it. Rationale: cache *writes*
+    bill at a premium (1.25x input for 5m, 2x for 1h) that only pays off when the
+    same prompt is re-sent within the TTL — and the sha256 dedupe means an
+    unchanged manuscript normally makes exactly one call, so the premium would buy
+    nothing. Enable a TTL only if force re-extractions become a common pattern.
     """
-    ttl = getattr(settings, "WORKBENCH_LLM_CACHE_TTL", "1h")
-    if ttl not in ("5m", "1h"):
-        ttl = "1h"
-    return {"type": "ephemeral", "ttl": ttl}
+    ttl = str(getattr(settings, "WORKBENCH_LLM_CACHE_TTL", "none")).lower()
+    if ttl in ("5m", "1h"):
+        return {"type": "ephemeral", "ttl": ttl}
+    return None
+
+
+def text_block(text: str) -> dict:
+    """A text content block, cache-tagged only when a cache TTL is configured."""
+    block: dict = {"type": "text", "text": text}
+    cc = cache_control()
+    if cc:
+        block["cache_control"] = cc
+    return block
 
 
 def is_enabled() -> bool:
@@ -120,11 +135,7 @@ def parse_structured(
         resp = _client().messages.parse(
             model=model,
             max_tokens=max_tokens,
-            system=[{
-                "type": "text",
-                "text": system,
-                "cache_control": cache_control(),
-            }],
+            system=[text_block(system)],
             messages=[{"role": "user", "content": content}],
             output_format=output_model,
         )

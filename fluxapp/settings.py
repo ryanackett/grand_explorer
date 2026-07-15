@@ -284,9 +284,12 @@ WORKBENCH_MANUSCRIPT_MAX_TOKENS = config(
 # the model — the study facts live in the abstract + methods. Only trims when a
 # Methods-like section is detected; set False to always send the full text.
 WORKBENCH_TRIM_SECTIONS = config("WORKBENCH_TRIM_SECTIONS", default=True, cast=bool)
-# Prompt-cache lifetime for the cached system + manuscript blocks: "1h" keeps a paper
-# cached across a wizard session so re-runs are cheap; "5m" is the standard default.
-WORKBENCH_LLM_CACHE_TTL = config("WORKBENCH_LLM_CACHE_TTL", default="1h")
+# Prompt-cache lifetime for the system + manuscript blocks. Default "none" sends
+# them uncached at base input price — cache WRITES bill at a premium (1.25× for
+# "5m", 2× for "1h") that only pays off if the same paper is re-extracted within
+# the TTL, and the sha256 dedupe makes that rare. Set "5m"/"1h" only if force
+# re-extraction becomes a common workflow.
+WORKBENCH_LLM_CACHE_TTL = config("WORKBENCH_LLM_CACHE_TTL", default="none")
 # Safety ceiling on *actual* model calls per contributor per day (accidental-spam /
 # runaway-cost backstop). Deduped no-ops and disabled/skipped runs don't count; staff
 # are exempt. The primary guard is dedupe (no re-call on an unchanged, already-extracted

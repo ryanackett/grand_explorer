@@ -224,22 +224,32 @@ class EnabledTests(TestCase):
             extract_facts("MANUSCRIPT BODY TEXT HERE", ["n2oflux"])
 
         kwargs = client.messages.parse.call_args.kwargs
-        # system: a single cached text block that names the already-have field.
+        # system: a single text block that names the already-have field. With the
+        # default WORKBENCH_LLM_CACHE_TTL="none" no cache_control is attached —
+        # cache writes bill at a premium that a one-shot call never earns back.
         sys_block = kwargs["system"][0]
-        self.assertEqual(sys_block["cache_control"]["type"], "ephemeral")
-        self.assertIn(sys_block["cache_control"]["ttl"], ("5m", "1h"))
+        self.assertNotIn("cache_control", sys_block)
         self.assertIn("Nitrous oxide flux", sys_block["text"])
-        # user content: the manuscript wrapped in an explicit delimiter, and cached
-        # so re-runs on the same paper hit the cache instead of paying full input.
+        # user content: the manuscript wrapped in an explicit delimiter, likewise
+        # uncached by default.
         doc_block = kwargs["messages"][0]["content"][0]
-        self.assertEqual(doc_block["cache_control"]["type"], "ephemeral")
-        self.assertIn(doc_block["cache_control"]["ttl"], ("5m", "1h"))
+        self.assertNotIn("cache_control", doc_block)
         content_text = doc_block["text"]
         self.assertIn("<manuscript>", content_text)
         self.assertIn("MANUSCRIPT BODY TEXT HERE", content_text)
         # structured output + configured model.
         self.assertIs(kwargs["output_format"], ManuscriptFacts)
         self.assertEqual(kwargs["model"], "claude-sonnet-4-6")
+
+    def test_cache_ttl_opt_in_tags_blocks(self, _en):
+        # Setting a TTL re-enables prompt caching on both blocks.
+        client = _mock_client(parsed=_canned())
+        with patch("n2odb.services.llm_assist._client", return_value=client), \
+                self.settings(WORKBENCH_LLM_CACHE_TTL="1h"):
+            extract_facts("MANUSCRIPT BODY TEXT HERE", ["n2oflux"])
+        kwargs = client.messages.parse.call_args.kwargs
+        for block in (kwargs["system"][0], kwargs["messages"][0]["content"][0]):
+            self.assertEqual(block["cache_control"], {"type": "ephemeral", "ttl": "1h"})
 
     def test_planting_and_tillage_event_fields_flatten(self, _en):
         facts = ManuscriptFacts(events=[
