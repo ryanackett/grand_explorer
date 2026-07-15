@@ -250,7 +250,13 @@ def submit_data(request):
 def my_submissions(request):
     """The signed-in contributor's own submissions (newest first) — the resume/track
     page that replaces sharing raw bearer URLs."""
-    subs = UploadSubmission.objects.filter(owner=request.user).order_by("-updated_at")
+    # defer(parsed_content): the MB-scale parsed-sheet JSON must stay out of the
+    # ORDER BY row buffer or MySQL's filesort overflows (error 1038) once a user
+    # has a few real submissions — same fix as curation_list. _is_empty_draft
+    # touches the field only on draft rows, where Django lazily fetches it per row.
+    subs = (UploadSubmission.objects.filter(owner=request.user)
+            .defer("parsed_content")
+            .order_by("-updated_at"))
     rows = []
     for s in subs:
         if s.status == "draft" and _is_empty_draft(s):
