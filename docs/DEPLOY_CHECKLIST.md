@@ -12,30 +12,39 @@ Required before enabling public/contributor signup in production. The auth
 system is django-allauth with mandatory email verification; several settings
 that are harmless in dev will silently break email links or CSRF in prod.
 
-- [ ] **Re-apply the Site domain in the PROD database.** The
-  `django.contrib.sites` `Site` row (pk = `SITE_ID` = 1) is a **database row,
-  not code**. Dev is set to `grandexplorer.org` / "GRAND Explorer", but the
-  prod DB still defaults to `example.com` until changed there. allauth builds
-  all email link text from this row. Apply via one-off shell:
-  ```bash
-  python manage.py shell -c "from django.contrib.sites.models import Site; \
-from django.conf import settings; s=Site.objects.get(pk=settings.SITE_ID); \
-s.domain='grandexplorer.org'; s.name='GRAND Explorer'; s.save()"
+- [x] **Email MUST use Brevo's HTTP API — Railway blocks outbound SMTP on ALL
+  ports** (587, 2525, 465 all hang; discovered 2026-07-14). Symptom: any
+  synchronous email send — e.g. allauth's verification email during
+  login/signup — freezes the request until gunicorn kills the worker
+  (`[CRITICAL] WORKER TIMEOUT` in the deploy logs). Never point prod at
+  Django's SMTP backend. Set in the Railway env:
   ```
-- [ ] **`ACCOUNT_DEFAULT_HTTP_PROTOCOL=https`** in the Railway env. Defaults to
+  EMAIL_BACKEND=anymail.backends.brevo.EmailBackend
+  ANYMAIL_BREVO_API_KEY=<Brevo v3 API key>   # SMTP & API → API Keys — NOT the SMTP password
+  ```
+  The `EMAIL_HOST/PORT/...` SMTP vars are ignored while anymail is the backend.
+  `EMAIL_TIMEOUT=10` is set in settings as defense-in-depth for any SMTP use
+  elsewhere. *(Done + verified end-to-end 2026-07-14.)*
+- [x] **Re-apply the Site domain in the PROD database.** The
+  `django.contrib.sites` `Site` row (pk = `SITE_ID` = 1) is a **database row,
+  not code** — a fresh prod DB defaults to `example.com`, and allauth builds
+  all email link text from this row. Easiest fix: edit it in the live Django
+  admin at `/admin/sites/site/` (domain `grandexplorer.org`, display name
+  "GRAND Explorer"). Takes effect immediately, no redeploy. *(Done 2026-07-14.)*
+- [x] **`ACCOUNT_DEFAULT_HTTP_PROTOCOL=https`** in the Railway env. Defaults to
   `http`; without this, emailed verification/reset links come out as
-  `http://grandexplorer.org/...`.
-- [ ] **`CSRF_TRUSTED_ORIGINS`** = full origins with scheme, e.g.
+  `http://grandexplorer.org/...`. *(Set; verified via a real verification email.)*
+- [x] **`CSRF_TRUSTED_ORIGINS`** = full origins with scheme, e.g.
   `https://grandexplorer.org,https://www.grandexplorer.org`. Without it, HTTPS
   logins and form POSTs fail CSRF validation.
-- [ ] **Exempt `/accounts/` from `SoftLaunchGateMiddleware`.** While
-  `SITE_PASSWORD` is set (the soft-launch HTTP Basic gate), email-verification
-  links opened in a fresh browser sit behind the shared gate and block new
-  contributors from completing signup.
+- [x] **Exempt `/accounts/` from `SoftLaunchGateMiddleware`.** *(Shipped in code
+  2026-07-14 — `n2odb/middleware.py` skips the gate for `/accounts/` paths, so
+  verification links opened in a fresh browser work while `SITE_PASSWORD` is
+  set. Covered by `SoftLaunchGateTests`.)*
 - [ ] **Authenticate `grandexplorer.org` in Brevo (SPF + DKIM DNS records)** so
   verification/notification mail from `no-reply@grandexplorer.org` isn't junked
-  or blocked by recipients. The SMTP relay auth itself already works; this is
-  the deliverability piece.
+  or blocked by recipients. Sending (via the API) already works; this is the
+  deliverability piece.
 
 ## Shared cache (required for rate limiting to actually work)
 
@@ -63,6 +72,15 @@ s.domain='grandexplorer.org'; s.name='GRAND Explorer'; s.save()"
 - [ ] Set up Railway DB backups (the data is the whole value).
 - [ ] Add `grand_ro` SELECT-only DB user + `READONLY_DATABASE_URL` for SQL Explorer.
 - [ ] Remove `SITE_PASSWORD` to lift the HTTP Basic gate.
+
+## Manuscript LLM pre-fill (workbench)
+
+- [ ] **`ANTHROPIC_API_KEY`** set in the Railway env — without it every
+  manuscript extraction fails (`LLMUnavailable`).
+- [ ] **`WORKBENCH_LLM_ENABLED=True`** — defaults to `False`, so the feature
+  stays off even with a key.
+- [ ] Smoke-test on the live site: upload a manuscript PDF in the workbench and
+  confirm the pre-fill runs. *(Not yet verified in prod as of 2026-07-14.)*
 
 ## Optional tuning (no action required to deploy)
 
