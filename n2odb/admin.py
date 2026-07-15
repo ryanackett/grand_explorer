@@ -35,6 +35,11 @@ class UploadSubmissionAdmin(admin.ModelAdmin):
                        "manuscript_extracted_at")
     inlines = [UploadedDataFileInline, ManuscriptSourceInline]
 
+    def get_queryset(self, request):
+        # The MB-scale parsed_content JSON must stay out of the changelist's
+        # ORDER BY (Meta.ordering) or MySQL's filesort overflows (error 1038).
+        return super().get_queryset(request).defer("parsed_content")
+
 
 @admin.register(ManuscriptSource)
 class ManuscriptSourceAdmin(admin.ModelAdmin):

@@ -154,7 +154,10 @@ def _get_or_create_draft(request) -> UploadSubmission:
         ).first()
         if sub:
             return sub
-    for sub in UploadSubmission.objects.filter(owner=request.user, status="draft").order_by("-updated_at"):
+    # defer(parsed_content): keep the MB-scale blob out of the ORDER BY buffer
+    # (MySQL error 1038) — _is_empty_draft lazily fetches it per draft row.
+    for sub in (UploadSubmission.objects.filter(owner=request.user, status="draft")
+                .defer("parsed_content").order_by("-updated_at")):
         if _is_empty_draft(sub):
             request.session["workbench_token"] = str(sub.public_token)
             return sub
