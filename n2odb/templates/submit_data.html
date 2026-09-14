@@ -64,6 +64,28 @@
     }
     table.preview-table tbody td { color:#3a463f; }
     table.preview-table tbody tr:nth-child(even) td { background:#fafbfa; }
+
+    .workbench-guide {
+        margin:1.5rem 0 2.25rem; border:1px solid #dfe5e2; border-radius:10px;
+        background:#f8faf9; color:#3a463f;
+    }
+    .workbench-guide summary {
+        cursor:pointer; padding:1rem 1.25rem; font-family:'Georgia', serif;
+        font-size:1.45rem; color:#4a5d54; font-weight:600;
+    }
+    .workbench-guide__body { padding:0 1.25rem 1.25rem; }
+    .workbench-guide__body p { font-size:1.25rem; line-height:1.5; }
+    .workbench-guide__grid {
+        display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:1rem 1.5rem;
+        margin-top:1rem;
+    }
+    .workbench-guide__item { font-size:1.2rem; line-height:1.45; }
+    .workbench-guide__item strong { color:#4a5d54; }
+    .workbench-guide__item ul { margin:.35rem 0 0 1.2rem; padding:0; }
+    .workbench-guide__stages { margin:.35rem 0 0 1.4rem; padding:0; }
+    @media (max-width:720px) {
+        .workbench-guide__grid { grid-template-columns:1fr; }
+    }
 </style>
 
 <section class="workbench-section">
@@ -84,6 +106,52 @@
       We'll read it to grab key study details and metadata, and fill in
       as much of the submission forms as we can using our LLM assistant.
     </p>
+
+    <details class="workbench-guide" open>
+      <summary>How to complete this submission</summary>
+      <div class="workbench-guide__body">
+        <p>
+          Plan for one study at a time. You can save your progress and return later;
+          nothing is published until a curator reviews and approves your submission.
+        </p>
+        <div class="workbench-guide__grid">
+          <div class="workbench-guide__item">
+            <strong>Before you start</strong>
+            <ul>
+              <li>Prepare a CSV or XLSX with one measurement per row.</li>
+              <li>Include a date column and keep the original column headers.</li>
+              <li>Have the source paper ready, if available.</li>
+            </ul>
+          </div>
+          <div class="workbench-guide__item">
+            <strong>What happens next</strong>
+            <ol class="workbench-guide__stages">
+              <li>Upload and preview your measurements.</li>
+              <li>Map columns to the database fields.</li>
+              <li>Confirm study, site, soil, and management details.</li>
+              <li>Add dates and management events, then review.</li>
+              <li>Submit for curator review.</li>
+            </ol>
+          </div>
+          <div class="workbench-guide__item">
+            <strong>Paper assistance</strong>
+            <p>
+              A PDF, DOCX, or pasted methods/site description can pre-fill DOI,
+              location, crop, soil, and management details. Suggestions are only a
+              starting point: check every value and correct anything that is wrong.
+            </p>
+          </div>
+          <div class="workbench-guide__item">
+            <strong>If something is missing</strong>
+            <p>
+              You can continue without a paper or without AI assistance. Fill in the
+              forms manually, use the progress rail to revisit completed stages, and
+              use the preview to confirm that the data file was read correctly.
+            </p>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <h2 class="wb-subhead">Your data file</h2>
     <p class="wb-subhead__note">A CSV or Excel (.xlsx) spreadsheet of your measurements.</p>
