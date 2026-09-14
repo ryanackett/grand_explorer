@@ -41,6 +41,8 @@ COPY . .
 RUN chown -R appuser:appuser /app
 USER appuser
 
-# Migrations and static collection run once in Railway's pre-deploy command.
+# Static files must be collected in the serving container because Railway's
+# pre-deploy container filesystem is not shared with the runtime container.
 # Gunicorn binds Railway's injected $PORT (falls back to 8000 locally).
-CMD gunicorn fluxapp.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120
+CMD python manage.py collectstatic --noinput && \
+    gunicorn fluxapp.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120
