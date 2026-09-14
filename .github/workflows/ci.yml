@@ -25,12 +25,14 @@ jobs:
 
     env:
       SECRET_KEY: ci-only-secret-key
-      DEBUG: "False"
+      # Tests use Django's normal non-HTTPS test client. The production security
+      # configuration is validated separately in the Django checks step.
+      DEBUG: "True"
       ALLOWED_HOSTS: ci.example.com
       CSRF_TRUSTED_ORIGINS: https://ci.example.com
-      SECURE_SSL_REDIRECT: "True"
-      SESSION_COOKIE_SECURE: "True"
-      CSRF_COOKIE_SECURE: "True"
+      SECURE_SSL_REDIRECT: "False"
+      SESSION_COOKIE_SECURE: "False"
+      CSRF_COOKIE_SECURE: "False"
       DATABASE_URL: mysql://flux:flux@127.0.0.1:3306/fluxapp
       READONLY_DATABASE_URL: ""
       USE_SHARED_CACHE: "False"
@@ -68,8 +70,17 @@ jobs:
       - name: Django checks
         run: |
           python manage.py check
+          DEBUG=False \
+          ALLOWED_HOSTS=ci.example.com \
+          CSRF_TRUSTED_ORIGINS=https://ci.example.com \
+          SECURE_SSL_REDIRECT=True \
+          SESSION_COOKIE_SECURE=True \
+          CSRF_COOKIE_SECURE=True \
+          SECURE_HSTS_SECONDS=300 \
           python manage.py check --deploy
       - name: Migration drift check
         run: python manage.py makemigrations --check --dry-run
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
       - name: Test suite
         run: python manage.py test n2odb
