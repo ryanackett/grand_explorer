@@ -45,6 +45,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Grant test database privileges
+        run: |
+          python - <<'PY'
+          import MySQLdb
+
+          connection = MySQLdb.connect(
+              host="127.0.0.1",
+              user="root",
+              passwd="root",
+              port=3306,
+          )
+          try:
+              with connection.cursor() as cursor:
+                  cursor.execute(
+                      "GRANT ALL PRIVILEGES ON *.* TO 'flux'@'%'"
+                  )
+              connection.commit()
+          finally:
+              connection.close()
+          PY
       - name: Django checks
         run: |
           python manage.py check
