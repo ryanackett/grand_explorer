@@ -204,6 +204,24 @@ _EXPLORER_CONNECTION = 'readonly' if 'readonly' in DATABASES else 'default'
 EXPLORER_CONNECTIONS = {'Read-only': _EXPLORER_CONNECTION}
 EXPLORER_DEFAULT_CONNECTION = _EXPLORER_CONNECTION
 
+# allauth throttles must be shared across Gunicorn workers in production. Keep
+# local development and CI on process-local memory unless explicitly enabled.
+USE_SHARED_CACHE = config("USE_SHARED_CACHE", default=False, cast=bool)
+if USE_SHARED_CACHE:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": config("CACHE_TABLE", default="django_cache"),
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "fluxapp-local",
+        }
+    }
+
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
 
@@ -303,6 +321,13 @@ WORKBENCH_MAX_UPLOAD_MB = config("WORKBENCH_MAX_UPLOAD_MB", default=25, cast=int
 WORKBENCH_MAX_FILES_PER_SUBMISSION = config(
     "WORKBENCH_MAX_FILES_PER_SUBMISSION", default=15, cast=int
 )
+WORKBENCH_MAX_PASTED_TEXT_CHARS = config(
+    "WORKBENCH_MAX_PASTED_TEXT_CHARS", default=250000, cast=int
+)
+
+# Public analytics/export guard. These endpoints intentionally serve public data,
+# but requests still need bounded work so one caller cannot exhaust a worker.
+PUBLIC_CART_MAX_IDS = config("PUBLIC_CART_MAX_IDS", default=500, cast=int)
 
 # --- Production security ---
 # All off in dev (defaults). In production, set these in your hosting
@@ -330,6 +355,17 @@ SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 # SECURE_SSL_REDIRECT=True would bounce every request into an INFINITE redirect
 # loop. This tells Django to trust the proxy's X-Forwarded-Proto header.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Fail closed for settings that otherwise produce a misleadingly healthy but
+# unusable production deployment. Local development remains unchanged with DEBUG=True.
+if not DEBUG:
+    required_hosts = [host for host in ALLOWED_HOSTS if host not in {"localhost", "127.0.0.1"}]
+    if not required_hosts:
+        raise RuntimeError("Production requires ALLOWED_HOSTS to contain the public host")
+    if not CSRF_TRUSTED_ORIGINS:
+        raise RuntimeError("Production requires CSRF_TRUSTED_ORIGINS")
+    if not SECURE_SSL_REDIRECT or not SESSION_COOKIE_SECURE or not CSRF_COOKIE_SECURE:
+        raise RuntimeError("Production requires HTTPS redirect and secure cookies")
 
 # --- Soft-launch gate ---
 # Set SITE_PASSWORD in production to lock the entire site behind a single shared

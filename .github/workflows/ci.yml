@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: fluxapp
+          MARIADB_USER: flux
+          MARIADB_PASSWORD: flux
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      SECRET_KEY: ci-only-secret-key
+      DEBUG: "False"
+      ALLOWED_HOSTS: ci.example.com
+      CSRF_TRUSTED_ORIGINS: https://ci.example.com
+      SECURE_SSL_REDIRECT: "True"
+      SESSION_COOKIE_SECURE: "True"
+      CSRF_COOKIE_SECURE: "True"
+      DATABASE_URL: mysql://flux:flux@127.0.0.1:3306/fluxapp
+      READONLY_DATABASE_URL: ""
+      USE_SHARED_CACHE: "False"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Django checks
+        run: |
+          python manage.py check
+          python manage.py check --deploy
+      - name: Migration drift check
+        run: python manage.py makemigrations --check --dry-run
+      - name: Test suite
+        run: python manage.py test n2odb

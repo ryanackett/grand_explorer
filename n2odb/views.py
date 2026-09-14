@@ -651,7 +651,7 @@ def get_graph_json(treatment_id):
 
     except Exception as e:
         logger.exception("Error building graph JSON for treatment %s", treatment_id)
-        return JsonResponse({'error': f"Server Error: {str(e)}"})
+        return JsonResponse({'error': 'Unable to load graph data.'}, status=500)
 
 def get_abstract_json(experiment_id):
     """Return the publication abstract for a single experiment, on demand.
@@ -691,6 +691,12 @@ def get_cart_data(request):
             body = json.loads(request.body)
             raw_ids = body.get('ids', [])
             treatment_ids = [int(x) for x in raw_ids if str(x).isdigit()]
+            max_ids = getattr(settings, 'PUBLIC_CART_MAX_IDS', 500)
+            if len(treatment_ids) > max_ids:
+                return JsonResponse(
+                    {'error': f'Please select no more than {max_ids} treatments.'},
+                    status=400,
+                )
 
             # 2. Fetch Treatments
             # We use select_related to traverse the ForeignKeys defined in your models:
@@ -814,9 +820,9 @@ def get_cart_data(request):
             }
             return JsonResponse(data)
 
-        except Exception as e:
+        except Exception:
             logger.exception("get_cart_data failed")
-            return JsonResponse({'error': str(e)}, status=400)
+            return JsonResponse({'error': 'Unable to prepare cart data.'}, status=500)
 
     return JsonResponse({'error': 'POST method required'}, status=405)
     
@@ -836,6 +842,11 @@ def download_zip(request):
     parent_ids = request.POST.getlist('ids')
     # Cast to integers and filter out invalid entries
     parent_ids = [int(x) for x in parent_ids if str(x).isdigit()]
+    max_ids = getattr(settings, 'PUBLIC_CART_MAX_IDS', 500)
+    if len(parent_ids) > max_ids:
+        return StreamingHttpResponse(
+            f"Please select no more than {max_ids} treatments.", status=400
+        )
     email = request.POST.get('email_address')
     result_count = len(parent_ids)
     

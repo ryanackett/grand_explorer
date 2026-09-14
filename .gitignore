@@ -1,5 +1,6 @@
 # --- Secrets / environment ---
 .env
+DEPLOY_REVIEW.md
 
 # --- Python ---
 __pycache__/

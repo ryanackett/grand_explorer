@@ -323,6 +323,15 @@ class UploadEndpointTests(AuthedWorkbenchTestCase):
         self.assertIn("pub_doi", meta)
         self.assertIn("site_latitude", meta)
 
+    @override_settings(WORKBENCH_MAX_PASTED_TEXT_CHARS=10)
+    def test_reject_oversize_pasted_text(self):
+        resp = self.client.post(
+            reverse("workbench-document", args=[self.token]),
+            {"text": "x" * 11},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("too long", resp.json()["error"].lower())
+
     def test_reject_unsupported_file(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
 
@@ -347,6 +356,25 @@ class UploadEndpointTests(AuthedWorkbenchTestCase):
         url = reverse("workbench-document", args=[self.token])
         self.assertEqual(self.client.post(url, {"text": "first"}).status_code, 200)
         resp = self.client.post(url, {"text": "second"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("files", resp.json()["error"].lower())
+
+    @override_settings(WORKBENCH_MAX_FILES_PER_SUBMISSION=1)
+    def test_document_and_data_files_share_file_cap(self):
+        self.assertEqual(
+            self.client.post(
+                reverse("workbench-document", args=[self.token]),
+                {"text": "first"},
+            ).status_code,
+            200,
+        )
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        data = SimpleUploadedFile("data.csv", b"date,n2o_flux\n2020-01-01,1.2\n")
+        resp = self.client.post(
+            reverse("workbench-data", args=[self.token]),
+            {"data": data},
+        )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("files", resp.json()["error"].lower())
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from urllib.parse import urlparse
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
@@ -176,17 +177,23 @@ def _owned_submission(request, token) -> UploadSubmission:
     raise Http404()
 
 
-def _upload_rejection(upload, existing_count: int) -> JsonResponse | None:
+def _upload_rejection(upload, existing_count: int, pasted_text: str = "") -> JsonResponse | None:
     """Reject an upload that's too large or over the per-submission file cap, else None.
 
     Files are read fully into memory and stored as a DB blob, so both bounds matter:
     size (OOM / MySQL ``max_allowed_packet``) and count (unbounded blob accumulation).
-    ``upload`` is None for pasted text — size is skipped, but it still counts.
+    ``upload`` is None for pasted text, which has its own character limit.
     """
     cap_mb = getattr(settings, "WORKBENCH_MAX_UPLOAD_MB", 25)
     if upload is not None and (upload.size or 0) > cap_mb * 1024 * 1024:
         return JsonResponse(
             {"error": f"That file is too large — the limit is {cap_mb} MB."}, status=400
+        )
+    text_cap = getattr(settings, "WORKBENCH_MAX_PASTED_TEXT_CHARS", 250000)
+    if pasted_text and len(pasted_text) > text_cap:
+        return JsonResponse(
+            {"error": f"Pasted text is too long — the limit is {text_cap:,} characters."},
+            status=400,
         )
     max_files = getattr(settings, "WORKBENCH_MAX_FILES_PER_SUBMISSION", 15)
     if existing_count >= max_files:
@@ -331,7 +338,11 @@ def create_document(request, token):
     upload = request.FILES.get("document")
     pasted = request.POST.get("text", "")
 
-    rejection = _upload_rejection(upload, submission.documents.count())
+    rejection = _upload_rejection(
+        upload,
+        submission.documents.count() + submission.data_files.count(),
+        pasted,
+    )
     if rejection is not None:
         return rejection
 
@@ -589,7 +600,10 @@ def upload_data(request, token):
     if upload is None:
         return JsonResponse({"error": "No data file provided."}, status=400)
 
-    rejection = _upload_rejection(upload, submission.data_files.count())
+    rejection = _upload_rejection(
+        upload,
+        submission.documents.count() + submission.data_files.count(),
+    )
     if rejection is not None:
         return rejection
 
@@ -1004,6 +1018,10 @@ def save_site(request, token):
         value = entry.get("value")
         if value in (None, ""):
             continue
+        if field_id == "pub_link":
+            parsed = urlparse(str(value).strip())
+            if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+                continue
         src = entry.get("source")
         clean = {"value": value, "source": src if src in _VALUE_SOURCES else "user"}
         for key in ("column", "columnKey", "sheet", "source_quote"):

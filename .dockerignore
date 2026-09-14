@@ -5,6 +5,7 @@ venv
 .git
 .env
 .devcontainer
+.claude
 
 # --- Not needed in the runtime image ---
 # ETL tooling + 82MB RawData.csv (data is loaded separately, not served by the app)

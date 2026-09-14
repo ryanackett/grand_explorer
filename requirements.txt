@@ -1,33 +1,34 @@
-django
-psycopg2-binary
-pillow
-python-decouple
-whitenoise
-gunicorn
+django==6.1.1
+psycopg2-binary==2.9.13
+pillow==12.3.0
+python-decouple==3.8
+whitenoise==6.12.0
+gunicorn==26.2.0
 dj-database-url==2.1.0
-mysqlclient
-tablib
-diff-match-patch
-django-import-export
-zipstream-ng
-django-sql-explorer 
-django-user_agents
-pandas
-pyod
-reverse_geocoder
-pycountry_convert
-django-allauth>=65,<66   # contributor auth: registration + mandatory email verification
-django-anymail[brevo]>=10.3   # send mail over Brevo's HTTP API (Railway blocks SMTP egress)
+mysqlclient==2.2.8
+tablib==3.10.0
+diff-match-patch==20241021
+django-import-export==4.4.1
+zipstream-ng==1.9.3
+django-sql-explorer==5.3
+django_user_agents==0.4.0
+pandas==3.0.5
+pyod==3.6.5
+reverse_geocoder==1.5.1
+pycountry_convert==0.7.2
+django-allauth==65.19.3   # contributor auth: registration + mandatory email verification
+django-anymail[brevo]==15.2   # send mail over Brevo's HTTP API (Railway blocks SMTP egress)
 # --- Assisted-upload workbench: source-document ingestion ---
 # Text extraction from uploaded papers. Licenses are deliberate: pdfplumber (MIT),
 # pypdf (BSD), python-docx (MIT). Do NOT add PyMuPDF/fitz — it is AGPL.
-pdfplumber
-pypdf
-python-docx
-openpyxl             # XLSX parsing for the data-file upload (Plane A)
-charset-normalizer   # encoding sniffing for CSV uploads
-rapidfuzz            # fuzzy column-header → canonical-field matching
-anthropic            # used only by the language-model module (§5); safe to install now
+pdfplumber==0.11.10
+pypdf==6.18.1
+python-docx==1.2.0
+openpyxl==3.1.5             # XLSX parsing for the data-file upload (Plane A)
+charset-normalizer==3.5.1   # encoding sniffing for CSV uploads
+rapidfuzz==3.14.6           # fuzzy column-header → canonical-field matching
+anthropic==1.5.0            # used only by the language-model module (§5); safe to install now
+httpx==0.28.1               # direct test dependency used by the LLM test suite
 # Phase C OCR only (also add tesseract-ocr + poppler-utils to the Dockerfile):
 # pytesseract
 # pdf2image
