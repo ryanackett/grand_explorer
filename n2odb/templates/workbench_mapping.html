@@ -157,6 +157,12 @@
     {% include '_wizard_progress.html' %}
 
     <h1>Map your time-series columns</h1>
+    <p class="map-hint" style="font-size:1.3rem; line-height:1.5; margin-bottom:1.25rem;">
+      Start with the required <strong>Date</strong> field, then map the measurements you
+      have. If the file contains multiple treatments, map the treatment column too.
+      Fields marked required must be mapped before you can continue; extra or unused
+      columns can remain unmatched.
+    </p>
 
     <div id="rep-note" class="rep-note" hidden>
       <strong>Replicates detected.</strong> You've mapped both a treatment and a

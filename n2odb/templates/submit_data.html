@@ -100,12 +100,6 @@
     {% include '_wizard_progress.html' %}
 
     <h1>Contribute your data</h1>
-    <p class="step-lead">
-      Step 1 of the upload workbench. Start with your data file — a CSV or Excel
-      spreadsheet of measurements. You can also attach the paper it came from below.
-      We'll read it to grab key study details and metadata, and fill in
-      as much of the submission forms as we can using our LLM assistant.
-    </p>
 
     <details class="workbench-guide" open>
       <summary>How to complete this submission</summary>
@@ -118,15 +112,19 @@
           <div class="workbench-guide__item">
             <strong>Before you start</strong>
             <ul>
-              <li>Prepare a CSV or XLSX with one measurement per row.</li>
-              <li>Include a date column and keep the original column headers.</li>
+              <li>Prepare a CSV or XLSX file with one measurement observation per row and a valid date column. Repeated dates are allowed for replicates or multiple measurements within a day; the workbench will organize them into daily values.</li>
+              <li>In addition to the mandatory date column, include the relevant measurement columns and a treatment column if your file contains multiple treatments.</li>
+              <li>Fill in each row with the observed measurements you have for that observation. Values should be measured rather than interpolated or estimated. It is okay to leave some columns blank if you do not have a value for that date.</li>
+              <li>Excel workbooks may contain multiple sheets, but only ONE sheet can contain the primary time-series data. Other sheets can contain metadata, static site data (for example, texture or climate), or treatment information. CSV files contain one sheet.</li>
               <li>Have the source paper ready, if available.</li>
             </ul>
           </div>
           <div class="workbench-guide__item">
             <strong>What happens next</strong>
             <ol class="workbench-guide__stages">
-              <li>Upload and preview your measurements.</li>
+              <li>Upload and preview your measurements as a CSV or Excel file.
+                Optionally add your paper text, PDF, or DOCX for AI-assisted extraction of study details.
+              </li>
               <li>Map columns to the database fields.</li>
               <li>Confirm study, site, soil, and management details.</li>
               <li>Add dates and management events, then review.</li>
@@ -137,8 +135,10 @@
             <strong>Paper assistance</strong>
             <p>
               A PDF, DOCX, or pasted methods/site description can pre-fill DOI,
-              location, crop, soil, and management details. Suggestions are only a
-              starting point: check every value and correct anything that is wrong.
+              location, crop, soil, management details, and events. The assistant does
+              not replace your measurement data or validate every scientific value.
+              Suggestions are only a starting point: check every value and correct
+              anything that is wrong.
             </p>
           </div>
           <div class="workbench-guide__item">
@@ -152,6 +152,13 @@
         </div>
       </div>
     </details>
+
+    <p class="step-lead">
+      Step 1 of the upload workbench. Start with your data file — a CSV or Excel
+      spreadsheet of measurements. You can also attach the paper it came from below.
+      We'll read it to grab key study details and metadata, and fill in
+      as much of the submission forms as we can using our LLM assistant.
+    </p>
 
     <h2 class="wb-subhead">Your data file</h2>
     <p class="wb-subhead__note">A CSV or Excel (.xlsx) spreadsheet of your measurements.</p>
