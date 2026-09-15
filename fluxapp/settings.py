@@ -52,7 +52,6 @@ INSTALLED_APPS = [
     'anymail',                        # send mail via Brevo's HTTP API (Railway blocks SMTP)
     'import_export',
     'explorer',
-    'django_user_agents',
 ]
 
 # allauth builds verification-email links from the current Site.
@@ -70,7 +69,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_user_agents.middleware.UserAgentMiddleware',
     'allauth.account.middleware.AccountMiddleware',
 ]
 

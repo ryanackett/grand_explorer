@@ -20,7 +20,13 @@ RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONOPTIMIZE=1 \
+    MALLOC_TRIM_THRESHOLD_=131072
+
+# PYTHONOPTIMIZE=1 strips assert statements at compile time (no asserts are used
+# outside tests). MALLOC_TRIM_THRESHOLD_ encourages glibc to return idle heap
+# to the OS, keeping resting RSS down.
 
 WORKDIR /app
 

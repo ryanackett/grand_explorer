@@ -854,11 +854,11 @@ def download_zip(request):
         return StreamingHttpResponse("No data selected", status=400)
     
     # Log selections
-    if parent_ids and not request.user_agent.is_bot:
+    if parent_ids:
         _log_user_action(
-        request, 
-        'DOWNLOAD_CART', 
-        ids=parent_ids, 
+        request,
+        'DOWNLOAD_CART',
+        ids=parent_ids,
         count=result_count,
         email=email,
         payload={}

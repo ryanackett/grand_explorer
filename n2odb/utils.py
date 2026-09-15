@@ -9,10 +9,7 @@ class Echo:
 # ### ANALYTICS INSERTION: HELPER FUNCTION ###
 def _log_user_action(request, action_type, payload, email=None, ids=None, count=None):
     try:
-        from .models import UserAction 
-        
-        if hasattr(request, 'user_agent') and request.user_agent.is_bot:
-            return
+        from .models import UserAction
 
         if not request.session.session_key:
             request.session.save()
