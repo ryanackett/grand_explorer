@@ -21,6 +21,10 @@
     .dropzone:hover, .dropzone.dragover { border-color:#82968c; background:#eef3f0; }
     .dropzone i { font-size:2.2rem; color:#82968c; margin-bottom:.5rem; }
     .dropzone .hint { font-size:1.2rem; margin-top:.4rem; }
+    .dropzone--attached { border-style:solid; border-color:#9bb8a5; background:#f1f7f3; }
+    .dropzone--attached i { color:#4a7c62; }
+    .dropzone__filename { font-size:1.35rem; color:#2c3e50; font-weight:600; word-break:break-word; }
+    .dropzone__filename--pending { color:#5a6b63; }
 
     .paste-area textarea {
         width:100%; min-height:150px; border:1px solid #ced4da; border-radius:8px;
@@ -189,11 +193,11 @@
     <div class="upload-grid">
       <div>
         <label class="form-label">Attach the paper...</label>
-        <div id="dropzone" class="dropzone" role="button" tabindex="0"
+        <div id="dropzone" class="dropzone{% if document %} dropzone--attached{% endif %}" role="button" tabindex="0"
              aria-label="Upload a PDF or DOCX">
-          <i class="fa-solid fa-file-arrow-up"></i>
-          <div>Drop a <strong>PDF</strong> or <strong>DOCX</strong> here, or click to browse</div>
-          <div class="hint">Optional but recommended</div>
+          <i id="dropzone-icon" class="fa-solid {% if document.kind == 'pdf' %}fa-file-pdf{% elif document.kind == 'docx' %}fa-file-word{% else %}fa-file-lines{% endif %}"></i>
+          <div id="dropzone-title" class="{% if document %}dropzone__filename{% endif %}">{% if document %}{{ document.original_name|default:'Pasted text' }}{% else %}Drop a <strong>PDF</strong> or <strong>DOCX</strong> here, or click to browse{% endif %}</div>
+          <div id="dropzone-hint" class="hint">{% if document %}Paper attached. Click or drop another file to add another source.{% else %}Optional but recommended{% endif %}</div>
         </div>
         <input type="file" id="doc-file" accept=".pdf,.docx" hidden>
       </div>
@@ -272,7 +276,10 @@
   const dataChipCounts = document.getElementById('data-chip-counts');
   const dataPreview  = document.getElementById('data-preview');
 
-  const dropzone  = document.getElementById('dropzone');
+   const dropzone  = document.getElementById('dropzone');
+   const dropzoneIcon = document.getElementById('dropzone-icon');
+   const dropzoneTitle = document.getElementById('dropzone-title');
+   const dropzoneHint = document.getElementById('dropzone-hint');
   const fileInput = document.getElementById('doc-file');
   const pasteBox  = document.getElementById('doc-paste');
   const pasteBtn  = document.getElementById('paste-submit');
@@ -305,13 +312,25 @@
   }
   const csrftoken = getCookie('csrftoken');
 
-  function showChip(kind, title, counts) {
+   function showChip(kind, title, counts) {
     chip.style.display = 'block';
     chip.classList.toggle('failed', kind === 'failed');
     spinner.hidden = kind !== 'pending';
     chipTitle.textContent = title;
     chipCounts.textContent = counts || '';
-  }
+   }
+
+   function showAttachedDocument(name, kind, pending) {
+     const icon = kind === 'pdf' ? 'fa-file-pdf'
+       : kind === 'docx' ? 'fa-file-word' : 'fa-file-lines';
+     dropzone.classList.add('dropzone--attached');
+     dropzoneIcon.className = 'fa-solid ' + icon;
+     dropzoneTitle.className = 'dropzone__filename' + (pending ? ' dropzone__filename--pending' : '');
+     dropzoneTitle.textContent = name || 'Pasted text';
+     dropzoneHint.textContent = pending
+       ? 'Uploading and reading this paper…'
+       : 'Paper attached. Click or drop another file to add another source.';
+   }
 
   // --- data file (primary contribution) ---
   function showDataChip(kind, title, counts) {
@@ -427,38 +446,46 @@
     } catch (e) { textBox.textContent = ''; }
   }
 
-  async function uploadDocument(formData) {
-    showChip('pending', 'Reading document…', '');
+   async function uploadDocument(formData, displayName, kind) {
+     showAttachedDocument(displayName, kind, true);
+     showChip('pending', 'Reading document…', '');
     try {
       const resp = await fetch(docUrl, {
         method: 'POST',
         headers: { 'X-CSRFToken': csrftoken },
         body: formData,
       });
-      const data = await resp.json();
-      if (!resp.ok || data.error) {
-        showChip('failed', data.error || 'Upload failed.', data.detail || '');
-        return;
+       const data = await resp.json();
+       if (!resp.ok || data.error) {
+         showAttachedDocument(displayName, kind, false);
+         dropzoneHint.textContent = 'Upload could not be completed. Click or drop the file again to retry.';
+         showChip('failed', data.error || 'Upload failed.', data.detail || '');
+         return;
       }
-      if (data.status === 'failed') {
-        showChip('failed', data.message, data.detail || '');
+       if (data.status === 'failed') {
+         showAttachedDocument(displayName, kind, false);
+         showChip('failed', data.message, data.detail || '');
         panel.style.display = 'block';
         await loadText();
         return;
-      }
-      panel.style.display = 'block';
+       }
+       showAttachedDocument(displayName, kind, false);
+       panel.style.display = 'block';
       // Automatically analyse the paper so the Site & Soil steps pre-fill without
       // requiring a separate click (runExtraction refreshes the text panel too).
       await runExtraction();
-    } catch (e) {
-      showChip('failed', 'Something went wrong uploading the document.', '');
-    }
+     } catch (e) {
+       showAttachedDocument(displayName, kind, false);
+       dropzoneHint.textContent = 'Upload could not be completed. Click or drop the file again to retry.';
+       showChip('failed', 'Something went wrong uploading the document.', '');
+     }
   }
 
-  function uploadFile(file) {
-    const fd = new FormData();
-    fd.append('document', file);
-    uploadDocument(fd);
+   function uploadFile(file) {
+     const fd = new FormData();
+     fd.append('document', file);
+     const kind = (file.name || '').toLowerCase().endsWith('.docx') ? 'docx' : 'pdf';
+     uploadDocument(fd, file.name, kind);
   }
 
   // --- dropzone wiring (paper) ---
@@ -468,9 +495,9 @@
   pasteBtn.addEventListener('click', () => {
     const text = pasteBox.value.trim();
     if (!text) return;
-    const fd = new FormData();
-    fd.append('text', text);
-    uploadDocument(fd);
+     const fd = new FormData();
+     fd.append('text', text);
+     uploadDocument(fd, 'Pasted text', 'text');
   });
 
   // --- panel toggle + re-run ---
