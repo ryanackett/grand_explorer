@@ -45,4 +45,5 @@ USER appuser
 # pre-deploy container filesystem is not shared with the runtime container.
 # Gunicorn binds Railway's injected $PORT (falls back to 8000 locally).
 CMD python manage.py collectstatic --noinput && \
-    gunicorn fluxapp.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120
+    gunicorn fluxapp.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --preload \
+    --max-requests 1000 --max-requests-jitter 100 --timeout 120
