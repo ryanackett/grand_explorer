@@ -25,6 +25,8 @@
     .dropzone--attached i { color:#4a7c62; }
     .dropzone__filename { font-size:1.35rem; color:#2c3e50; font-weight:600; word-break:break-word; }
     .dropzone__filename--pending { color:#5a6b63; }
+    .data-dropzone--attached { border-style:solid; border-color:#9bb8a5; background:#f1f7f3; }
+    .data-dropzone--attached i { color:#4a7c62; }
 
     .paste-area textarea {
         width:100%; min-height:150px; border:1px solid #ced4da; border-radius:8px;
@@ -166,11 +168,11 @@
 
     <h2 class="wb-subhead">Your data file</h2>
     <p class="wb-subhead__note">A CSV or Excel (.xlsx) spreadsheet of your measurements.</p>
-    <div id="data-dropzone" class="dropzone" role="button" tabindex="0"
+    <div id="data-dropzone" class="dropzone{% if has_data %} data-dropzone--attached{% endif %}" role="button" tabindex="0"
          aria-label="Upload a CSV or Excel file">
-      <i class="fa-solid fa-table"></i>
-      <div>Drop a <strong>CSV</strong> or <strong>Excel</strong> file here, or click to browse</div>
-      <div class="hint">We'll read the columns and show you a preview to confirm.</div>
+      <i id="data-dropzone-icon" class="fa-solid {% if data_file.kind == 'xlsx' %}fa-file-excel{% else %}fa-file-csv{% endif %}"></i>
+      <div id="data-dropzone-title" class="{% if has_data %}dropzone__filename{% endif %}">{% if has_data %}{{ data_file.original_name|default:'Data file attached' }}{% else %}Drop a <strong>CSV</strong> or <strong>Excel</strong> file here, or click to browse{% endif %}</div>
+      <div id="data-dropzone-hint" class="hint">{% if has_data %}Data file attached. Click or drop another file to replace it.{% else %}We'll read the columns and show you a preview to confirm.{% endif %}</div>
     </div>
     <input type="file" id="data-file" accept=".csv,.tsv,.txt,.xlsx,.xlsm" hidden>
 
@@ -269,7 +271,10 @@
   const extractUrl= root.dataset.extractUrl;
   const textUrl   = root.dataset.textUrl;
 
-  const dataDropzone = document.getElementById('data-dropzone');
+   const dataDropzone = document.getElementById('data-dropzone');
+   const dataDropzoneIcon = document.getElementById('data-dropzone-icon');
+   const dataDropzoneTitle = document.getElementById('data-dropzone-title');
+   const dataDropzoneHint = document.getElementById('data-dropzone-hint');
   const dataInput    = document.getElementById('data-file');
   const dataChip     = document.getElementById('data-chip');
   const dataChipTitle= document.getElementById('data-chip-title');
@@ -333,12 +338,23 @@
    }
 
   // --- data file (primary contribution) ---
-  function showDataChip(kind, title, counts) {
+   function showDataChip(kind, title, counts) {
     dataChip.style.display = 'block';
     dataChip.classList.toggle('failed', kind === 'failed');
     dataChipTitle.textContent = title;
     dataChipCounts.textContent = counts || '';
-  }
+   }
+
+   function showAttachedData(name, kind, pending) {
+     const icon = kind === 'xlsx' ? 'fa-file-excel' : 'fa-file-csv';
+     dataDropzone.classList.add('data-dropzone--attached');
+     dataDropzoneIcon.className = 'fa-solid ' + icon;
+     dataDropzoneTitle.className = 'dropzone__filename' + (pending ? ' dropzone__filename--pending' : '');
+     dataDropzoneTitle.textContent = name || 'Data file attached';
+     dataDropzoneHint.textContent = pending
+       ? 'Uploading and reading this data file…'
+       : 'Data file attached. Click or drop another file to replace it.';
+   }
 
   function el(tag, attrs, text) {
     const n = document.createElement(tag);
@@ -386,7 +402,7 @@
 
   let dataReady = {{ has_data|yesno:"true,false" }};
 
-  async function uploadData(file) {
+   async function uploadData(file) {
     // Replacing an existing data file may invalidate the column mapping and later steps,
     // so make the reset explicit before overwriting it.
     if (dataReady && !confirm(
@@ -396,8 +412,11 @@
       dataInput.value = '';
       return;
     }
-    showDataChip('pending', 'Reading your data file…', '');
-    dataPreview.innerHTML = '';
+     showDataChip('pending', 'Reading your data file…', '');
+     const kind = (file.name || '').toLowerCase().endsWith('.xlsx')
+       || (file.name || '').toLowerCase().endsWith('.xlsm') ? 'xlsx' : 'csv';
+     showAttachedData(file.name, kind, true);
+     dataPreview.innerHTML = '';
     const fd = new FormData();
     fd.append('data', file);
     try {
@@ -407,16 +426,20 @@
         body: fd,
       });
       const data = await resp.json();
-      if (!resp.ok || data.error || data.status === 'failed') {
-        showDataChip('failed', 'We couldn’t read that file.', data.error || '');
+       if (!resp.ok || data.error || data.status === 'failed') {
+         showAttachedData(file.name, kind, false);
+         dataDropzoneHint.textContent = 'Upload could not be completed. Click or drop the file again to retry.';
+         showDataChip('failed', 'We couldn’t read that file.', data.error || '');
         return;
       }
       const sheets = data.sheet_count === 1 ? '1 sheet' : data.sheet_count + ' sheets';
       showDataChip('parsed', 'Data file read.', data.row_count + ' rows across ' + sheets + '.');
       renderPreview(data.preview);
       dataReady = true;
-    } catch (e) {
-      showDataChip('failed', 'Something went wrong reading the file.', '');
+     } catch (e) {
+       showAttachedData(file.name, kind, false);
+       dataDropzoneHint.textContent = 'Upload could not be completed. Click or drop the file again to retry.';
+       showDataChip('failed', 'Something went wrong reading the file.', '');
     }
   }
 

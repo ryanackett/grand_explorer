@@ -233,6 +233,7 @@ def submit_data(request):
     """Render the wizard's Stage-0 page for the session's draft submission."""
     submission = _get_or_create_draft(request)
     document = submission.documents.order_by("-created_at").first()
+    data_file = submission.data_files.order_by("-created_at").first()
     has_data = bool((submission.parsed_content or {}).get("sheets"))
     # Was the *current* document already analysed successfully? Drives the "re-run"
     # confirm so a contributor knows a re-run is a fresh (billable) AI request.
@@ -247,6 +248,7 @@ def submit_data(request):
             "submission": submission,
             "public_token": submission.public_token,
             "document": document,
+            "data_file": data_file,
             "has_data": has_data,
             # Re-render the parsed preview on a return visit so a contributor sees their
             # data file is already attached (kept in sync with the fresh-upload preview).
