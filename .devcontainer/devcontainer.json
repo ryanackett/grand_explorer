@@ -5,6 +5,10 @@
 	"workspaceFolder": "/workspaces/fluxapp",
     "forwardPorts": [8001],
 
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {}
+    },
+
 	"customizations": {
 		"vscode": {
 		"extensions": [
