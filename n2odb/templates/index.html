@@ -78,7 +78,7 @@
         /* The Big Letters (G, R, A, N, D) */
         .big-cap-modern {
             font-family: "Georgia", serif;
-            font-size: 5rem;
+            font-size: clamp(3.75rem, 3.75vw, 7.5rem);
             font-weight: 700;
             color: black;
             line-height: 1;
@@ -92,7 +92,7 @@
             text-orientation: upright;
             
             font-family: "Georgia", serif;
-            font-size: 1.5rem; /* Much larger than before */
+            font-size: clamp(1.125rem, 1.2vw, 2.25rem); /* Much larger than before */
             font-weight: 600;
             color: black;
             letter-spacing: -2px; /* Tighter spacing for vertical stacking */
@@ -103,7 +103,7 @@
         .explorer-text {
             align-self: flex-start; /* Aligns with the top of the G, R, A... */
             font-family: "Georgia", serif;
-            font-size: 8rem;
+            font-size: clamp(6rem, 6vw, 12rem);
             font-weight: 300;
             font-style: italic;
             color: #7a9c80;
@@ -218,16 +218,17 @@
             align-items: center;
             justify-content: center;
             
-            min-width: 380px; /* Ensures both buttons are roughly the same width */
-            padding: 1rem 2rem;
+            min-width: clamp(380px, 26vw, 640px); /* Ensures both buttons are roughly the same width */
+            padding: clamp(1rem, 1vw, 1.6rem) clamp(2rem, 2vw, 3.4rem);
             border-radius: 50px;
+            font-family: 'Georgia', 'Times New Roman', serif;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 1px;
             text-decoration: none;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
             border: none;
-            font-size: 1.6rem;
+            font-size: clamp(1.6rem, 1.7vw, 2.8rem);
         }
 
         /* Primary Green Button */
@@ -257,8 +258,8 @@
 
         /* --- Icon & Image Alignment --- */
         .btn-modern i {
-            margin-right: 12px;
-            font-size: 2.1rem;
+            margin-right: clamp(12px, 0.8vw, 24px);
+            font-size: clamp(2.1rem, 2.2vw, 3.8rem);
         }
 
         .kofi-icon {
@@ -267,6 +268,13 @@
             margin-right: 12px; /* Space between logo and text */
             display: block;     /* Removes inline spacing quirks */
             margin-bottom: 0 !important; 
+        }
+
+        /* --- Hero intro paragraph: fluid so it scales with the viewport,
+               filling the width on large monitors (laptop stays original) --- */
+        .hero-lead {
+            font-size: clamp(1.125rem, 1.125vw, 1.875rem);
+            max-width: clamp(600px, 40vw, 1100px);
         }
     </style>
 
@@ -312,7 +320,7 @@
                         </h1>
                     </div>
 
-                    <p class="lead mt-4 mb-5" style="color: black; max-width: 600px; font-size: 1.5rem; font-family: 'Georgia', serif;">
+                    <p class="lead hero-lead mt-4 mb-5" style="color: black; font-family: 'Georgia', serif;">
                         An open-access data platform for researchers and scientists.
                         Explore over 400 rich soil flux datasets across 80 unique locations around the globe.
                         Visualize, curate, and download near model-ready data in minutes.
