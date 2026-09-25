@@ -18,10 +18,43 @@
     table.mine-tbl a { color:#4a7c8f; font-weight:600; text-decoration:none; }
     table.mine-tbl a:hover { text-decoration:underline; }
     .mine-actions { white-space:nowrap; }
-    .mine-discard { background:none; border:none; padding:0; margin-left:1rem; cursor:pointer;
-        color:#a0505a; font-weight:600; font-size:1.35rem; font-family:inherit; }
-    .mine-discard:hover { text-decoration:underline; }
+    /* Reset the site-wide button treatment (uppercase, .4em tracking, fixed
+       height/padding, dark hover bar) so Discard reads as a quiet text link
+       matching Resume — same size/weight, muted red from the status palette. */
+    table.mine-tbl .mine-discard {
+        background:none; border:none; box-shadow:none;
+        padding:0; margin:0 0 0 1rem; height:auto; width:auto; line-height:inherit;
+        font-family:inherit; font-size:inherit; font-weight:600;
+        text-transform:none; letter-spacing:normal; white-space:nowrap;
+        color:#a0505a; cursor:pointer;
+    }
+    table.mine-tbl .mine-discard:hover {
+        background:none; box-shadow:none; color:#7e3f46; text-decoration:underline;
+    }
     .mine-empty { color:#9aa8a0; font-style:italic; padding:2rem 0; }
+    /* Discard confirmation modal — same language as the page: Georgia serif,
+       soft rounding, sage for the safe choice, muted red for the destructive one.
+       (Class selectors beat the site-wide `button` treatment, as above.) */
+    .discard-modal { position:fixed; inset:0; z-index:1200; display:flex;
+        align-items:center; justify-content:center; background:rgba(44,62,80,.45);
+        padding:1rem; }
+    .discard-modal[hidden] { display:none; }
+    .discard-modal__box { background:#fff; border-radius:12px; max-width:34em; width:100%;
+        padding:1.75rem 2rem; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+    .discard-modal__box h2 { font-family:'Georgia', serif; color:#2c3e50;
+        margin:0 0 .6rem; font-size:2rem; }
+    .discard-modal__box p { font-size:1.35rem; color:#5a6b63; margin:0 0 1.5rem; line-height:1.5; }
+    .discard-modal__box p strong { color:#2c3e50; }
+    .discard-modal__actions { display:flex; justify-content:flex-end; gap:.75rem; flex-wrap:wrap; }
+    .mine-keep, .mine-confirm {
+        border-radius:50px; padding:10px 22px; font-size:1.3rem; font-family:'Georgia', serif;
+        height:auto; width:auto; line-height:1.3; text-transform:none; letter-spacing:normal;
+        cursor:pointer; margin:0;
+    }
+    .mine-keep { background:#fff; border:1px solid #b7c2bb; box-shadow:none; color:#4a5d54; }
+    .mine-keep:hover { background:#eef3f0; border-color:#82968c; box-shadow:none; color:#4a5d54; }
+    .mine-confirm { background:#a0505a; border:1px solid #a0505a; box-shadow:none; color:#fff; }
+    .mine-confirm:hover { background:#7e3f46; border-color:#7e3f46; box-shadow:none; color:#fff; }
     .badge { display:inline-block; padding:.15rem .6rem; border-radius:20px; font-size:1.1rem; font-weight:700; color:#fff; }
     .badge--draft { background:#9aa8a0; } .badge--submitted { background:#4a7c8f; }
     .badge--in_review { background:#8e6fb0; } .badge--changes_requested { background:#c0704a; }
@@ -58,7 +91,7 @@
                         {% endif %}
                         {% if r.discardable %}
                         <form method="post" action="{% url 'workbench-discard' r.token %}" style="display:inline;"
-                              onsubmit="return confirm('Discard this submission? This cannot be undone.');">
+                              class="discard-form" data-title="{{ r.title|escape }}">
                             {% csrf_token %}
                             <button type="submit" class="mine-discard">Discard</button>
                         </form>
@@ -70,6 +103,59 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <div id="discard-modal" class="discard-modal" hidden>
+            <div class="discard-modal__box" role="alertdialog" aria-modal="true"
+                 aria-labelledby="discard-modal-title">
+                <h2 id="discard-modal-title">Discard this submission?</h2>
+                <p id="discard-modal-text"></p>
+                <div class="discard-modal__actions">
+                    <button type="button" class="mine-keep" id="discard-cancel">Keep submission</button>
+                    <button type="button" class="mine-confirm" id="discard-confirm">Discard submission</button>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
+
+<script>
+(function () {
+    var modal = document.getElementById('discard-modal');
+    var text = document.getElementById('discard-modal-text');
+    var cancelBtn = document.getElementById('discard-cancel');
+    var confirmBtn = document.getElementById('discard-confirm');
+    var pendingForm = null;
+
+    function close() { modal.hidden = true; pendingForm = null; }
+
+    // Intercept each Discard submit: confirm in the modal first. A form marked
+    // confirmed is let through; without JS the form just submits (no confirm).
+    document.querySelectorAll('.discard-form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (form.dataset.confirmed === '1') return;
+            e.preventDefault();
+            pendingForm = form;
+            var title = form.dataset.title || 'this submission';
+            text.innerHTML = '';
+            text.appendChild(document.createTextNode('“' + title + '” will be permanently deleted, including its uploaded files. '));
+            var strong = document.createElement('strong');
+            strong.textContent = 'This cannot be undone.';
+            text.appendChild(strong);
+            modal.hidden = false;
+            cancelBtn.focus();
+        });
+    });
+
+    cancelBtn.addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modal.hidden) close();
+    });
+    confirmBtn.addEventListener('click', function () {
+        if (!pendingForm) return;
+        pendingForm.dataset.confirmed = '1';
+        pendingForm.submit();  // .submit() skips the handler above — no loop
+    });
+})();
+</script>
 {% endblock %}
