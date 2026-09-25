@@ -83,14 +83,14 @@ class WorkbenchAccessTests(TestCase):
         self.client.force_login(owner)
         resp = self.client.get(reverse("workbench-review", args=[sub.public_token]))
         self.assertEqual(resp.status_code, 302)          # not a 404/login: access allowed
-        self.assertIn("submit-data", resp.url)
+        self.assertEqual(resp.url, reverse("workbench-upload", args=[sub.public_token]))
 
     def test_staff_can_access_any_submission(self):
         sub = UploadSubmission.objects.create(owner=self._user("owner"))
         self.client.force_login(self._user("curator", is_staff=True))
         resp = self.client.get(reverse("workbench-review", args=[sub.public_token]))
         self.assertEqual(resp.status_code, 302)
-        self.assertIn("submit-data", resp.url)
+        self.assertEqual(resp.url, reverse("workbench-upload", args=[sub.public_token]))
 
     def test_my_submissions_hides_empty_drafts(self):
         owner = self._user("owner")
@@ -110,6 +110,23 @@ class WorkbenchAccessTests(TestCase):
         # Adopted the blank draft instead of spawning a second one.
         self.assertEqual(UploadSubmission.objects.filter(owner=owner).count(), 1)
 
+    def test_submit_data_starts_fresh_when_a_draft_is_ongoing(self):
+        # The reported bug: with an unfinished submission in progress, "Start a new
+        # submission" (and top-nav Contribute Data) resumed it instead of starting
+        # fresh, making a second concurrent submission impossible.
+        owner = self._user("owner")
+        self.client.force_login(owner)
+        self.client.get(reverse("submit-data"))       # draft A becomes the session draft
+        first = UploadSubmission.objects.get(owner=owner)
+        first.metadata_values = {"pub_title": {"value": "Ongoing", "source": "user"}}
+        first.save()
+        self.client.get(reverse("submit-data"))       # must NOT resume A
+        subs = UploadSubmission.objects.filter(owner=owner)
+        self.assertEqual(subs.count(), 2)             # A kept + a fresh draft B
+        session_token = self.client.session.get("workbench_token")
+        self.assertIsNotNone(session_token)
+        self.assertNotEqual(str(first.public_token), session_token)
+
     def test_resume_reopens_changes_requested(self):
         owner = self._user("owner")
         sub = UploadSubmission.objects.create(
@@ -117,7 +134,8 @@ class WorkbenchAccessTests(TestCase):
             metadata_values={"pub_title": {"value": "Sent back", "source": "user"}})
         self.client.force_login(owner)
         resp = self.client.get(reverse("workbench-resume", args=[sub.public_token]))
-        self.assertEqual(resp.status_code, 302)          # → submit-data
+        self.assertEqual(resp.status_code, 302)          # → this submission's upload page
+        self.assertEqual(resp.url, reverse("workbench-upload", args=[sub.public_token]))
         sub.refresh_from_db()
         self.assertEqual(sub.status, "draft")            # editable again
 
@@ -140,6 +158,76 @@ class WorkbenchAccessTests(TestCase):
         body = self.client.get(reverse("my-submissions")).content.decode()
         self.assertIn("Mine", body)
         self.assertNotIn("Theirs", body)
+
+    def test_my_submissions_offers_discard_for_editable_only(self):
+        owner = self._user("owner")
+        draft = UploadSubmission.objects.create(owner=owner, status="draft", metadata_values={
+            "pub_title": {"value": "Drafty", "source": "user"}})
+        sent = UploadSubmission.objects.create(owner=owner, status="submitted", metadata_values={
+            "pub_title": {"value": "Sent", "source": "user"}})
+        self.client.force_login(owner)
+        body = self.client.get(reverse("my-submissions")).content.decode()
+        # Exactly one Discard control: the draft's. The submitted row has none.
+        self.assertIn(reverse("workbench-discard", args=[draft.public_token]), body)
+        self.assertNotIn(reverse("workbench-discard", args=[sent.public_token]), body)
+        self.assertIn("Drafty", body)
+
+    def test_discard_deletes_owned_draft(self):
+        owner = self._user("owner")
+        sub = UploadSubmission.objects.create(owner=owner, metadata_values={
+            "pub_title": {"value": "Scrap me", "source": "user"}})
+        self.client.force_login(owner)
+        # Make it the session draft first: discarding must clear the pointer too.
+        self.client.get(reverse("workbench-resume", args=[sub.public_token]))
+        resp = self.client.post(reverse("workbench-discard", args=[sub.public_token]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("my-submissions"))
+        self.assertFalse(UploadSubmission.objects.filter(pk=sub.pk).exists())
+        self.assertNotIn("workbench_token", self.client.session)
+
+    def test_discard_rejects_non_owner(self):
+        sub = UploadSubmission.objects.create(owner=self._user("owner"), metadata_values={
+            "pub_title": {"value": "Mine", "source": "user"}})
+        self.client.force_login(self._user("intruder"))
+        resp = self.client.post(reverse("workbench-discard", args=[sub.public_token]))
+        self.assertEqual(resp.status_code, 404)  # token never leaks the row exists
+        self.assertTrue(UploadSubmission.objects.filter(pk=sub.pk).exists())
+
+    def test_discard_rejects_submitted(self):
+        owner = self._user("owner")
+        sub = UploadSubmission.objects.create(owner=owner, status="submitted",
+                                              metadata_values={
+                                                  "pub_title": {"value": "Sent", "source": "user"}})
+        self.client.force_login(owner)
+        resp = self.client.post(reverse("workbench-discard", args=[sub.public_token]))
+        self.assertEqual(resp.status_code, 400)  # with a curator: not ours to throw away
+        self.assertTrue(UploadSubmission.objects.filter(pk=sub.pk).exists())
+
+    def test_discard_requires_post(self):
+        owner = self._user("owner")
+        sub = UploadSubmission.objects.create(owner=owner, metadata_values={
+            "pub_title": {"value": "Mine", "source": "user"}})
+        self.client.force_login(owner)
+        self.assertEqual(
+            self.client.get(reverse("workbench-discard", args=[sub.public_token])).status_code,
+            405,
+        )
+        self.assertTrue(UploadSubmission.objects.filter(pk=sub.pk).exists())
+
+    def test_workbench_upload_renders_owned_draft(self):
+        owner = self._user("owner")
+        sub = UploadSubmission.objects.create(owner=owner, metadata_values={
+            "pub_title": {"value": "Mine", "source": "user"}})
+        self.client.force_login(owner)
+        resp = self.client.get(reverse("workbench-upload", args=[sub.public_token]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.client.session.get("workbench_token"), str(sub.public_token))
+
+    def test_workbench_upload_rejects_non_owner(self):
+        sub = UploadSubmission.objects.create(owner=self._user("owner"))
+        self.client.force_login(self._user("intruder"))
+        resp = self.client.get(reverse("workbench-upload", args=[sub.public_token]))
+        self.assertEqual(resp.status_code, 404)
 
 
 class ResumeStepTests(TestCase):

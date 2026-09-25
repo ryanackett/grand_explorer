@@ -10,11 +10,17 @@
     .mine-new { display:inline-block; margin-bottom:1.75rem; padding:11px 24px; border-radius:50px;
         background:#82968c; color:#fff; text-decoration:none; font-size:1.35rem; font-family:'Georgia', serif; }
     .mine-new:hover { background:#6b7e75; color:#fff; }
+    .mine-msg { padding:.7rem 1.1rem; border-radius:8px; font-size:1.3rem; margin-bottom:1.25rem;
+        background:#eef5f0; border-left:4px solid #6fae8b; color:#3c5a49; }
     table.mine-tbl { width:100%; border-collapse:collapse; font-size:1.35rem; }
     table.mine-tbl th, table.mine-tbl td { padding:.7rem .9rem; text-align:left; border-bottom:1px solid #eef2f0; }
     table.mine-tbl th { color:#7a8b82; font-weight:700; font-size:1.15rem; text-transform:uppercase; letter-spacing:.03em; }
     table.mine-tbl a { color:#4a7c8f; font-weight:600; text-decoration:none; }
     table.mine-tbl a:hover { text-decoration:underline; }
+    .mine-actions { white-space:nowrap; }
+    .mine-discard { background:none; border:none; padding:0; margin-left:1rem; cursor:pointer;
+        color:#a0505a; font-weight:600; font-size:1.35rem; font-family:inherit; }
+    .mine-discard:hover { text-decoration:underline; }
     .mine-empty { color:#9aa8a0; font-style:italic; padding:2rem 0; }
     .badge { display:inline-block; padding:.15rem .6rem; border-radius:20px; font-size:1.1rem; font-weight:700; color:#fff; }
     .badge--draft { background:#9aa8a0; } .badge--submitted { background:#4a7c8f; }
@@ -27,6 +33,11 @@
     <div class="mine-wrap">
         <h1>My submissions</h1>
         <p class="mine-lead">Resume a draft, or track a contribution through curator review.</p>
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mine-msg mine-msg--{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
         <a href="{% url 'submit-data' %}" class="mine-new">+ Start a new submission</a>
 
         <table class="mine-tbl">
@@ -39,11 +50,18 @@
                     <td>{{ r.title }}</td>
                     <td><span class="badge badge--{{ r.status }}">{{ r.status_label }}</span></td>
                     <td>{{ r.updated_at|date:"Y-m-d H:i" }}</td>
-                    <td>
+                    <td class="mine-actions">
                         {% if r.resumable %}
                         <a href="{% url 'workbench-resume' r.token %}">{% if r.status == 'changes_requested' %}Edit &amp; resubmit{% else %}Resume{% endif %} &rarr;</a>
                         {% else %}
                         <a href="{% url 'workbench-review' r.token %}">View &rarr;</a>
+                        {% endif %}
+                        {% if r.discardable %}
+                        <form method="post" action="{% url 'workbench-discard' r.token %}" style="display:inline;"
+                              onsubmit="return confirm('Discard this submission? This cannot be undone.');">
+                            {% csrf_token %}
+                            <button type="submit" class="mine-discard">Discard</button>
+                        </form>
                         {% endif %}
                     </td>
                 </tr>

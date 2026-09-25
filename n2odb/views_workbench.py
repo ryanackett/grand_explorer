@@ -6,7 +6,9 @@ parsers, and expose a re-runnable model-extraction endpoint. Nothing here commit
 study data — it produces suggestions on the draft.
 
 Endpoints (all scoped by the submission's ``public_token``):
-  GET  /submit-data/                          → get/create a draft, render Stage 0
+  GET  /submit-data/                          → start a fresh draft, render Stage 0
+  GET  /workbench/<token>/upload/             → render Stage 0 for one owned draft
+  POST /workbench/<token>/discard/            → delete an owned draft
   POST /workbench/<token>/document/           → create ManuscriptSource + extract text
   POST /workbench/<token>/document/extract/   → run/re-run extract_facts()
   GET  /workbench/<token>/document/text/       → serve extracted_text for the panel
@@ -114,7 +116,10 @@ def _wizard_context(current_step: int, submission=None) -> dict:
         url = None
         if i <= furthest:
             if i == 1:
-                url = reverse("submit-data")  # resumes the session's draft
+                if token is not None:
+                    url = reverse("workbench-upload", args=[token])
+                else:
+                    url = reverse("submit-data")
             elif i in _STEP_URLS and token is not None:
                 url = reverse(_STEP_URLS[i], args=[token])
         steps.append({
@@ -147,7 +152,11 @@ def _is_empty_draft(sub: UploadSubmission) -> bool:
 def _get_or_create_draft(request) -> UploadSubmission:
     """The signed-in user's active draft. Resumes the session's draft; failing that,
     reuses an existing *empty* draft rather than spawning throwaway ones; only then
-    creates a fresh draft."""
+    creates a fresh draft.
+
+    Kept for backwards compatibility (tests / one-off callers). The ``submit_data``
+    entry point itself no longer resumes non-empty drafts — see ``_start_new_draft``.
+    """
     token = request.session.get("workbench_token")
     if token:
         sub = UploadSubmission.objects.filter(
@@ -157,6 +166,31 @@ def _get_or_create_draft(request) -> UploadSubmission:
             return sub
     # defer(parsed_content): keep the MB-scale blob out of the ORDER BY buffer
     # (MySQL error 1038) — _is_empty_draft lazily fetches it per draft row.
+    for sub in (UploadSubmission.objects.filter(owner=request.user, status="draft")
+                .defer("parsed_content").order_by("-updated_at")):
+        if _is_empty_draft(sub):
+            request.session["workbench_token"] = str(sub.public_token)
+            return sub
+    sub = UploadSubmission.objects.create(owner=request.user)
+    request.session["workbench_token"] = str(sub.public_token)
+    return sub
+
+
+def _start_new_draft(request) -> UploadSubmission:
+    """Fresh-draft entry for ``submit_data`` (top nav Contribute Data / Start a new
+    submission). Never resumes a non-empty draft — otherwise there'd be no way to
+    have two ongoing submissions at once. A still-empty session draft (or any other
+    empty draft) is reused to avoid piling up throwaway rows; anything with content
+    is left alone and a brand-new draft is created."""
+    token = request.session.get("workbench_token")
+    if token:
+        sub = UploadSubmission.objects.filter(
+            public_token=token, status="draft", owner=request.user
+        ).first()
+        if sub is not None and _is_empty_draft(sub):
+            return sub
+        # Non-empty (or foreign/missing) session draft: fall through to fresh.
+    # defer(parsed_content): same MySQL-1038 guard as _get_or_create_draft.
     for sub in (UploadSubmission.objects.filter(owner=request.user, status="draft")
                 .defer("parsed_content").order_by("-updated_at")):
         if _is_empty_draft(sub):
@@ -229,9 +263,8 @@ def _verified_email(user) -> str:
     return getattr(user, "email", "") or ""
 
 
-def submit_data(request):
-    """Render the wizard's Stage-0 page for the session's draft submission."""
-    submission = _get_or_create_draft(request)
+def _render_upload(request, submission: UploadSubmission):
+    """Shared Stage-0 rendering for a concrete draft (fresh or resumed)."""
     document = submission.documents.order_by("-created_at").first()
     data_file = submission.data_files.order_by("-created_at").first()
     has_data = bool((submission.parsed_content or {}).get("sheets"))
@@ -259,6 +292,25 @@ def submit_data(request):
     )
 
 
+def submit_data(request):
+    """Fresh-submission entry (top nav Contribute Data / Start a new submission).
+
+    Always lands on an empty draft — never resumes a non-empty one — so a
+    contributor can keep several ongoing submissions at once. Resuming happens
+    explicitly via My Submissions (``resume_submission``) or the token-scoped
+    ``workbench_upload`` page."""
+    submission = _start_new_draft(request)
+    return _render_upload(request, submission)
+
+
+def workbench_upload(request, token):
+    """Token-scoped Stage-0 page for one owned submission — the resume/edit target
+    for a specific draft (progress rail, My Submissions, stage guards)."""
+    submission = _owned_submission(request, token)
+    request.session["workbench_token"] = str(submission.public_token)
+    return _render_upload(request, submission)
+
+
 def my_submissions(request):
     """The signed-in contributor's own submissions (newest first) — the resume/track
     page that replaces sharing raw bearer URLs."""
@@ -281,6 +333,9 @@ def my_submissions(request):
             "updated_at": s.updated_at,
             # Editable states: a live draft, or one a curator sent back for changes.
             "resumable": s.status in ("draft", "changes_requested"),
+            # Only editable (not-yet-submitted) work can be thrown away; anything
+            # under curator review is left for the curator to decide.
+            "discardable": s.status in ("draft", "changes_requested"),
         })
     return render(request, "workbench_my_submissions.html", {"rows": rows})
 
@@ -315,8 +370,26 @@ def resume_submission(request, token):
     request.session["workbench_token"] = str(sub.public_token)
     step = _resume_step(sub)
     if step == 1:
-        return redirect("submit-data")
+        return redirect("workbench-upload", token=sub.public_token)
     return redirect(_STEP_URLS[step], token=sub.public_token)
+
+
+@require_POST
+def discard_submission(request, token):
+    """Throw away one of the contributor's own editable submissions (draft, or one a
+    curator sent back). Submitted / curated work is never discardable here — once it
+    is with a curator, its fate is theirs. Cascades to the submission's documents
+    and data files via the FKs."""
+    sub = _owned_submission(request, token)
+    if sub.status not in ("draft", "changes_requested"):
+        return JsonResponse(
+            {"error": "Only draft submissions can be discarded."}, status=400
+        )
+    if request.session.get("workbench_token") == str(sub.public_token):
+        request.session.pop("workbench_token", None)
+    sub.delete()
+    messages.success(request, "Submission discarded.")
+    return redirect("my-submissions")
 
 
 def _sniff_kind(filename: str, head: bytes) -> str | None:
@@ -715,8 +788,8 @@ def mapping(request, token):
     submission = _owned_submission(request, token)
     sheet = _primary_sheet(submission)
     if sheet is None:
-        # No data uploaded yet — send them back to Stage 0.
-        return redirect("submit-data")
+        # No data uploaded yet — send them back to this submission's Stage 0.
+        return redirect("workbench-upload", token=submission.public_token)
 
     headers = sheet["headers"]
     dtypes = sheet.get("dtypes", [])
@@ -1208,7 +1281,7 @@ def soil_mgmt(request, token):
     """Render the Soil & Management stage (per-group global vs per-treatment)."""
     submission = _owned_submission(request, token)
     if _primary_sheet(submission) is None:
-        return redirect("submit-data")
+        return redirect("workbench-upload", token=submission.public_token)
 
     fields = site_fields.treatment_fields()
     trt_col = _treatment_column(submission)
@@ -1433,7 +1506,7 @@ def timeline(request, token):
     """Render the Timeline stage (dated events, per-type global vs per-treatment)."""
     submission = _owned_submission(request, token)
     if _primary_sheet(submission) is None:
-        return redirect("submit-data")
+        return redirect("workbench-upload", token=submission.public_token)
 
     options = _event_option_choices()
     saved = submission.events if isinstance(submission.events, dict) else {}
@@ -2292,7 +2365,7 @@ def review(request, token):
     the global site/study details in a side panel."""
     submission = _owned_submission(request, token)
     if _primary_sheet(submission) is None:
-        return redirect("submit-data")
+        return redirect("workbench-upload", token=submission.public_token)
 
     data = _build_review(submission)
     return render(
@@ -2426,7 +2499,7 @@ def submit(request, token):
     draft) the contributor form. Once submitted, show the confirmation state instead."""
     submission = _owned_submission(request, token)
     if _primary_sheet(submission) is None:
-        return redirect("submit-data")
+        return redirect("workbench-upload", token=submission.public_token)
 
     ctx = {
         "submission": submission,
