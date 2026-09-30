@@ -340,6 +340,18 @@ class ReviewTests(AuthedWorkbenchTestCase):
         doi = next(i for i in pub["items"] if i["label"] == "DOI")
         self.assertTrue(doi["empty"])
 
+    def test_global_panel_derives_link_from_doi(self):
+        # A DOI implies a link, so the review panel never shows a bare "—" for Link
+        # while a DOI is known — even when no explicit Link was captured.
+        from n2odb.views_workbench import _build_review
+        sub = self._review_submission(manuscript_facts={"metadata": {
+            "pub_doi": {"value": "10.1029/2019JG005032", "source": "regex"}}})
+        data = _build_review(sub)
+        pub = next(g for g in data["global"] if g["name"] == "Publication")
+        link = next(i for i in pub["items"] if i["label"] == "Link")
+        self.assertFalse(link["empty"])
+        self.assertEqual(link["value"], "https://doi.org/10.1029/2019jg005032")
+
     def test_page_renders(self):
         sub = self._review_submission()
         resp = self.client.get(reverse("workbench-review", args=[sub.public_token]))
@@ -403,6 +415,34 @@ class SubmitTests(AuthedWorkbenchTestCase):
         })
         req = next(c for c in _submit_readiness(sub) if "Required columns" in c["label"])
         self.assertFalse(req["ok"])
+
+    def test_missing_metadata_warns_but_does_not_block(self):
+        # Citation/Link/Abstract gaps are surfaced as warnings, never as blocking checks.
+        from n2odb.views_workbench import _metadata_warnings, _submit_readiness
+        sub = self._mk()
+        self.assertEqual(sorted(_metadata_warnings(sub)), ["Abstract", "Citation", "Link"])
+        self.assertTrue(all(c["ok"] for c in _submit_readiness(sub)))
+
+    def test_submit_page_shows_the_missing_details_notice(self):
+        sub = self._mk()
+        resp = self.client.get(reverse("workbench-submit", args=[sub.public_token]))
+        self.assertContains(resp, "Missing study details")
+        # The citation gap carries the licence rationale: reuse requires citing it.
+        self.assertContains(resp, "CC-BY")
+
+    def test_submit_warning_lists_each_missing_fact_once(self):
+        # One consolidated warning, and no missing fact named twice.
+        sub = self._mk()
+        resp = self.client.get(reverse("workbench-submit", args=[sub.public_token]))
+        self.assertContains(resp, "Missing study details", count=1)
+        self.assertContains(resp, "Citation, Link, Abstract", count=1)
+
+    def test_review_page_uses_per_field_markers_not_a_banner(self):
+        # The review page flags each gap in its own row; it must not also show the
+        # submit-page banner, which would double up the same warnings.
+        sub = self._mk()
+        resp = self.client.get(reverse("workbench-review", args=[sub.public_token]))
+        self.assertNotContains(resp, "Missing study details")
 
     def test_readiness_flags_missing_coordinates(self):
         from n2odb.views_workbench import _submit_readiness
@@ -810,6 +850,40 @@ class CurationTests(TestCase):
         u = get_user_model().objects.create_user("curator", password="x", is_staff=True)
         self.client.force_login(u)
         return u
+
+    def test_list_flags_and_filters_missing_metadata(self):
+        self._login_staff()
+        sub = self._mk()  # no Link/Abstract
+        lst = self.client.get(reverse("workbench-curation"))
+        self.assertContains(lst, "⚠ meta")
+        filtered = self.client.get(reverse("workbench-curation") + "?missing=1")
+        self.assertContains(filtered, str(sub.public_token))
+
+    def test_missing_filter_hides_complete_records(self):
+        self._login_staff()
+        complete = self._mk(metadata_values={
+            "pub_link": {"value": "https://doi.org/10.1234/abc", "source": "user"},
+            "pub_abstract": {"value": "An abstract.", "source": "user"},
+            "pub_citation": {"value": "Smith, J. (2019). A paper.", "source": "user"},
+        })
+        filtered = self.client.get(reverse("workbench-curation") + "?missing=1")
+        self.assertNotContains(filtered, str(complete.public_token))
+
+    def test_enrich_action_fills_the_abstract_and_citation(self):
+        from unittest import mock
+        from n2odb.services import doi_enrich
+        self._login_staff()
+        sub = self._mk(metadata_values={"pub_doi": {"value": "10.1234/abc", "source": "user"}})
+        cite = "Smith, J. (2019). A paper. Journal, 1, 2. https://doi.org/10.1234/abc"
+        with mock.patch.object(doi_enrich, "fetch_abstract", return_value="Fetched abstract."), \
+             mock.patch.object(doi_enrich, "fetch_citation", return_value=(cite, "crossref")):
+            self.client.post(
+                reverse("workbench-curation-action", args=[sub.public_token]),
+                data={"action": "enrich"},
+            )
+        sub.refresh_from_db()
+        self.assertEqual(sub.metadata_values["pub_abstract"]["value"], "Fetched abstract.")
+        self.assertEqual(sub.metadata_values["pub_citation"]["value"], cite)
 
     def test_requires_staff(self):
         sub = self._mk()

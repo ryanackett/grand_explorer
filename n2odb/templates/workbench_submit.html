@@ -97,6 +97,15 @@
             Please check the Explorer page for existing entries. If you're adding a <em>new</em> dataset from the same paper, that's fine — go ahead and submit.
         </div>
         {% endif %}
+        {% if metadata_warnings %}
+        <div class="sub-blocked" style="background:#fff6e0; border-color:#f0d9c3; color:#8a6d3b;">
+            <strong>Missing study details:</strong> {{ metadata_warnings|join:", " }}.
+            You can still submit, but please add them on the Study &amp; Site step if the
+            paper provides them.{% if 'Citation' in metadata_warnings %} A correct
+            citation credits the original authors, and anyone reusing your data is
+            required to cite it (CC-BY).{% endif %}
+        </div>
+        {% endif %}
 
         <div class="sub-summary">
             <div class="sub-stat"><div class="sub-stat__n">{{ summary.treatments }}</div>

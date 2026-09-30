@@ -280,6 +280,11 @@ AUTH_USER_MODEL = 'n2odb.User'
 # are still captured, deterministic parsers (DOI/coords) still run, and the review
 # forms simply start empty. See manuscript-extraction-implementation-plan §8.
 WORKBENCH_LLM_ENABLED = config("WORKBENCH_LLM_ENABLED", default=False, cast=bool)
+# Best-effort abstract lookup by DOI (Semantic Scholar) when the model is off,
+# capped, or comes back empty. Off by default so the test suite never touches the
+# network; the manual "Fetch abstract from DOI" actions work regardless. Lookups
+# have a short timeout and swallow all failures (see services/doi_enrich.py).
+WORKBENCH_ENRICH_ENABLED = config("WORKBENCH_ENRICH_ENABLED", default=False, cast=bool)
 WORKBENCH_DOC_MAX_MB = config("WORKBENCH_DOC_MAX_MB", default=32, cast=int)
 WORKBENCH_DOC_MAX_PAGES = config("WORKBENCH_DOC_MAX_PAGES", default=60, cast=int)
 WORKBENCH_OCR_ENABLED = config("WORKBENCH_OCR_ENABLED", default=False, cast=bool)

@@ -26,6 +26,18 @@ def _disagree(a, b) -> bool:
     return abs(fa - fb) / scale > _REL_TOLERANCE
 
 
+# Fields where the language model outranks the deterministic parser when both
+# propose a value. For every other field the deterministic number wins (§4); for
+# the abstract the module is told to copy the text verbatim, while the heading
+# parser can pick up footnote/correspondence lines, so the module value is kept
+# and the regex entry is only a fallback.
+_MODULE_PRIORITY = frozenset({"pub_abstract"})
+
+
+def _filled(entry) -> bool:
+    return isinstance(entry, dict) and entry.get("value") not in (None, "")
+
+
 def merge_metadata(regex_meta: dict, module_meta: dict) -> dict:
     """Return merged ``{field_id: entry}`` favouring deterministic values.
 
@@ -44,6 +56,12 @@ def merge_metadata(regex_meta: dict, module_meta: dict) -> dict:
             continue
         # Both propose: keep the deterministic value, borrow the module's quote if
         # the deterministic one is missing, and flag any real disagreement.
+        if field_id in _MODULE_PRIORITY and _filled(mod):
+            combined = dict(mod)
+            if not combined.get("source_quote") and det.get("source_quote"):
+                combined["source_quote"] = det["source_quote"]
+            merged[field_id] = combined
+            continue
         combined = dict(det)
         if not combined.get("source_quote") and mod.get("source_quote"):
             combined["source_quote"] = mod["source_quote"]
@@ -54,3 +72,26 @@ def merge_metadata(regex_meta: dict, module_meta: dict) -> dict:
             }
         merged[field_id] = combined
     return merged
+
+
+def derive_metadata(merged: dict) -> dict:
+    """Add values implied by other fields, leaving explicit values untouched.
+
+    A bare DOI yields its canonical resolver URL as ``pub_link``, so a paper whose
+    PDF never prints its own URL still gets a usable link. Non-destructive.
+    """
+    from .promote import doi_link
+
+    out: dict = {k: dict(v) if isinstance(v, dict) else v for k, v in (merged or {}).items()}
+    if _filled(out.get("pub_link")):
+        return out
+    doi_entry = out.get("pub_doi")
+    if _filled(doi_entry):
+        link = doi_link(doi_entry.get("value"))
+        if link:
+            out["pub_link"] = {
+                "value": link,
+                "source": "derived",
+                "confidence": 1.0,
+            }
+    return out

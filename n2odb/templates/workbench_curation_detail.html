@@ -140,6 +140,8 @@
             <h2>Curator Notes</h2>
             <textarea id="cur-note" name="note" placeholder="Note to the contributor — required when requesting changes, optional otherwise"></textarea>
             <div class="cur-actions">
+                <button name="action" value="enrich" class="cur-btn"
+                    title="Fill a missing abstract/citation from this submission's DOI (Crossref / Semantic Scholar)">Fetch Details from DOI</button>
                 <button name="action" value="reject" class="cur-btn cur-btn--danger">Reject Submission</button>
                 <button name="action" value="request_changes" class="cur-btn cur-btn--warn"
                     onclick="return document.getElementById('cur-note').value.trim() !== '' || (alert('Please add a note describing the changes needed — it will be emailed to the contributor.'), false);">Request Changes</button>

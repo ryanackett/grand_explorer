@@ -35,6 +35,8 @@ urlpatterns = [
          _lr(views_workbench.create_document), name='workbench-document'),
     path('workbench/<uuid:token>/document/extract/',
          _lr(views_workbench.extract_document), name='workbench-document-extract'),
+    path('workbench/<uuid:token>/document/enrich/',
+         _lr(views_workbench.enrich_document), name='workbench-document-enrich'),
     path('workbench/<uuid:token>/document/text/',
          _lr(views_workbench.document_text), name='workbench-document-text'),
     path('workbench/<uuid:token>/data/',

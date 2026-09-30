@@ -247,6 +247,55 @@ def find_coordinates(text: str) -> dict:
     return found
 
 
+# --- Abstract ----------------------------------------------------------------
+
+# The heading alone, optionally followed by a colon/dash and the body on the same
+# line. Requires a word boundary so "Abstracts" in a reference list is not a hit.
+_ABSTRACT_HEAD_RE = re.compile(r"(?im)^[ \t]*abstract\b[ \t]*(?:[:.\-–—][ \t]*)?")
+# Where the abstract stops: the next section heading or the keyword list. Anchored
+# to a paragraph start (paragraphs are preserved by ``_normalize``), so a sentence
+# merely mentioning "introduction" mid-paragraph doesn't truncate the capture.
+_ABSTRACT_STOP_RE = re.compile(
+    r"(?im)^[ \t]*(?:keywords?|key\s+words|introduction|highlights?|"
+    r"correspondence|e-?mail|received|accepted|published|copyright|©|"
+    r"(?:\d+(?:\.\d+)*|[IVX]+)[.)]?[ \t]+[A-Z])"
+)
+_ABSTRACT_KEYWORDS_RE = re.compile(r"\bkey\s?words?\b[ \t]*[:.]", re.IGNORECASE)
+# Below this, the "abstract" is far more likely a stray heading or footer than a
+# real abstract; leaving it out is safer than polluting the record.
+_MIN_ABSTRACT_CHARS = 200
+
+
+def find_abstract(text: str) -> dict | None:
+    """Return the paper's abstract as a §5 entry, or ``None``.
+
+    A heading-delimited slice of the extracted text: everything from an ``Abstract``
+    heading to the next section heading (or ``Keywords``). This is the deterministic
+    fallback when the language model is unavailable, capped, or returns nothing.
+    """
+    if not text:
+        return None
+    head = _ABSTRACT_HEAD_RE.search(text)
+    if not head:
+        return None
+    tail = text[head.end():]
+    stop = _ABSTRACT_STOP_RE.search(tail)
+    if stop:
+        tail = tail[:stop.start()]
+    keywords = _ABSTRACT_KEYWORDS_RE.search(tail)
+    if keywords:
+        tail = tail[:keywords.start()]
+    body = re.sub(r"\s+", " ", tail).strip()
+    if len(body) < _MIN_ABSTRACT_CHARS:
+        return None
+    return {
+        "value": body,
+        "source_quote": body[:120],
+        "source": "regex",
+        "confidence": 0.8,
+    }
+
+
 # --- aggregation -------------------------------------------------------------
 
 
@@ -257,6 +306,9 @@ def parse_all(text: str) -> dict[str, dict]:
     if doi:
         metadata["pub_doi"] = doi
     metadata.update(find_coordinates(text))
+    abstract = find_abstract(text)
+    if abstract:
+        metadata["pub_abstract"] = abstract
     return metadata
 
 

@@ -5,6 +5,8 @@ DEPLOY_REVIEW.md
 # --- Python ---
 __pycache__/
 *.pyc
+# Local, disposable test virtualenv (rebuild with: python3 -m venv .test-venv)
+.test-venv/
 
 # --- Django ---
 db.sqlite3

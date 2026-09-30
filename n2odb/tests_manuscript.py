@@ -7,6 +7,8 @@ to end through the upload/extract endpoints.
 """
 from __future__ import annotations
 
+import io
+import json
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -15,9 +17,9 @@ from n2odb.tests_common import AuthedWorkbenchTestCase
 from django.urls import reverse
 
 from n2odb.models_upload import ManuscriptSource, UploadSubmission
-from n2odb.services import manuscript_extract, manuscript_regex
+from n2odb.services import doi_enrich, manuscript_extract, manuscript_regex
 from n2odb.services.manuscript_fixtures import fake_extract_facts
-from n2odb.services.manuscript_merge import merge_metadata
+from n2odb.services.manuscript_merge import derive_metadata, merge_metadata
 from n2odb.services.manuscript_text import extract_text
 
 
@@ -245,6 +247,150 @@ class RegexParserTests(TestCase):
         self.assertLess(meta["site_longitude"]["value"], 0)
 
 
+_ABSTRACT_BODY = (
+    "Nitrous oxide (N2O) emissions were measured from two agroecosystems using "
+    "static chambers and the flux-gradient technique over two growing seasons. "
+    "High spatial variability was observed and long pulses followed fertilisation "
+    "and irrigation events at the site in eastern Washington."
+)
+
+
+class FindAbstractTests(TestCase):
+    def test_heading_delimited_slice(self):
+        text = (
+            "Title line\n\nAbstract\n\n" + _ABSTRACT_BODY
+            + "\n\nKeywords: N2O, maize\n\n1. Introduction\n\nThe rest."
+        )
+        entry = manuscript_regex.find_abstract(text)
+        self.assertIsNotNone(entry)
+        self.assertIn("Nitrous oxide", entry["value"])
+        self.assertNotIn("Introduction", entry["value"])
+        self.assertNotIn("Keywords", entry["value"])
+        self.assertEqual(entry["source"], "regex")
+
+    def test_same_line_heading_with_colon(self):
+        text = "Abstract: " + _ABSTRACT_BODY + "\n\nIntroduction\n\nBody."
+        entry = manuscript_regex.find_abstract(text)
+        self.assertIsNotNone(entry)
+        self.assertTrue(entry["value"].startswith("Nitrous oxide"))
+
+    def test_short_fragment_is_rejected(self):
+        text = "Abstract\n\nToo short.\n\nIntroduction\n\nBody."
+        self.assertIsNone(manuscript_regex.find_abstract(text))
+
+    def test_missing_abstract_returns_none(self):
+        self.assertIsNone(
+            manuscript_regex.find_abstract("Introduction\n\nNo abstract here.")
+        )
+
+    def test_parse_all_includes_abstract(self):
+        text = (
+            "DOI 10.1234/abc.\n\nAbstract\n\n" + _ABSTRACT_BODY
+            + "\n\nIntroduction\n\nRest."
+        )
+        meta = manuscript_regex.parse_all(text)
+        self.assertIn("pub_abstract", meta)
+        self.assertIn("pub_doi", meta)
+
+
+class DeriveMetadataTests(TestCase):
+    def test_doi_yields_a_link(self):
+        out = derive_metadata(
+            {"pub_doi": {"value": "10.1029/2019JG005032", "source": "regex"}}
+        )
+        self.assertEqual(out["pub_link"]["value"], "https://doi.org/10.1029/2019jg005032")
+        self.assertEqual(out["pub_link"]["source"], "derived")
+
+    def test_existing_link_is_left_alone(self):
+        out = derive_metadata({
+            "pub_doi": {"value": "10.1/x"},
+            "pub_link": {"value": "https://example.org/paper", "source": "document"},
+        })
+        self.assertEqual(out["pub_link"]["value"], "https://example.org/paper")
+
+    def test_no_doi_no_link(self):
+        out = derive_metadata({"pub_title": {"value": "x"}})
+        self.assertNotIn("pub_link", out)
+
+    def test_does_not_mutate_input(self):
+        src = {"pub_doi": {"value": "10.1/x"}}
+        derive_metadata(src)
+        self.assertNotIn("pub_link", src)
+
+
+class DoiEnrichServiceTests(TestCase):
+    def _fake_urlopen(self, payload, status=200):
+        return io.BytesIO(json.dumps(payload).encode())
+
+    def test_returns_cleaned_abstract(self):
+        payload = {"abstract": "<jats:p>Abstract: Nitrous oxide fluxes were measured.</jats:p>"}
+        with mock.patch("urllib.request.urlopen", return_value=self._fake_urlopen(payload)):
+            self.assertEqual(
+                doi_enrich.fetch_abstract("10.1234/abc"),
+                "Nitrous oxide fluxes were measured.",
+            )
+
+    def test_missing_abstract_returns_none(self):
+        with mock.patch("urllib.request.urlopen", return_value=self._fake_urlopen({})):
+            self.assertIsNone(doi_enrich.fetch_abstract("10.1234/abc"))
+
+    def test_network_error_returns_none(self):
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("boom")):
+            self.assertIsNone(doi_enrich.fetch_abstract("10.1234/abc"))
+
+    def test_blank_doi_returns_none(self):
+        self.assertIsNone(doi_enrich.fetch_abstract(""))
+
+    def test_markup_only_cleans_to_none(self):
+        self.assertIsNone(doi_enrich.clean_abstract("<jats:p></jats:p>"))
+
+    def test_fetch_citation_uses_crossref(self):
+        payload = {"status": "ok", "message": {
+            "title": ["N2O emissions from two agroecosystems"],
+            "author": [{"family": "Waldo", "given": "Sarah"},
+                       {"family": "Russell", "given": "Eric S."}],
+            "issued": {"date-parts": [[2019]]},
+            "container-title": ["Journal of Geophysical Research: Biogeosciences"],
+            "volume": "124", "page": "1887-1904", "DOI": "10.1029/2019JG005032",
+        }}
+        with mock.patch("urllib.request.urlopen", return_value=self._fake_urlopen(payload)):
+            result = doi_enrich.fetch_citation("10.1029/2019JG005032")
+        self.assertEqual(result[1], "crossref")
+        self.assertEqual(
+            result[0],
+            "Waldo, S., & Russell, E. (2019). N2O emissions from two agroecosystems. "
+            "Journal of Geophysical Research: Biogeosciences, 124, 1887-1904. "
+            "https://doi.org/10.1029/2019JG005032",
+        )
+
+    def test_fetch_citation_falls_back_to_semantic_scholar(self):
+        crossref = {"status": "ok", "message": {}}  # no title -> not usable
+        s2 = {
+            "title": "A dataset paper",
+            "authors": [{"name": "Ada Lovelace"}],
+            "year": 2020,
+            "venue": "Data Journal",
+            "externalIds": {"DOI": "10.1/abc"},
+        }
+        with mock.patch("urllib.request.urlopen", side_effect=[
+            self._fake_urlopen(crossref), self._fake_urlopen(s2),
+        ]):
+            result = doi_enrich.fetch_citation("10.1/abc")
+        self.assertEqual(result[1], "semantic_scholar")
+        self.assertEqual(
+            result[0],
+            "Lovelace, A. (2020). A dataset paper. Data Journal. "
+            "https://doi.org/10.1/abc",
+        )
+
+    def test_fetch_citation_network_error_returns_none(self):
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("boom")):
+            self.assertIsNone(doi_enrich.fetch_citation("10.1/abc"))
+
+    def test_fetch_citation_blank_doi_returns_none(self):
+        self.assertIsNone(doi_enrich.fetch_citation(""))
+
+
 class MergeTests(TestCase):
     def test_prefers_deterministic_value_keeps_module_quote(self):
         # Values disagree well beyond tolerance → flagged; deterministic wins,
@@ -272,6 +418,23 @@ class MergeTests(TestCase):
         self.assertIn("pub_doi", merged)
         self.assertIn("primary_crop", merged)
 
+    def test_abstract_prefers_the_module_value(self):
+        # Unlike every other field, the module's verbatim abstract wins over the
+        # heading slice; the regex entry is only a fallback.
+        merged = merge_metadata(
+            {"pub_abstract": {"value": "regex slice", "source": "regex"}},
+            {"pub_abstract": {"value": "module abstract", "source": "document"}},
+        )
+        self.assertEqual(merged["pub_abstract"]["value"], "module abstract")
+        self.assertEqual(merged["pub_abstract"]["source"], "document")
+
+    def test_abstract_falls_back_to_regex_when_module_empty(self):
+        merged = merge_metadata(
+            {"pub_abstract": {"value": "regex slice", "source": "regex"}},
+            {"pub_abstract": {"value": None, "source": "document"}},
+        )
+        self.assertEqual(merged["pub_abstract"]["value"], "regex slice")
+
 
 # --- the §5 seam -------------------------------------------------------------
 
@@ -297,6 +460,7 @@ class ExtractionSeamTests(TestCase):
 
 # --- endpoints (end to end, no model) ----------------------------------------
 
+@override_settings(WORKBENCH_ENRICH_ENABLED=False)  # never reach out to the network here
 class UploadEndpointTests(AuthedWorkbenchTestCase):
     def setUp(self):
         super().setUp()
@@ -434,6 +598,7 @@ class UploadEndpointTests(AuthedWorkbenchTestCase):
         self.assertIn(b"Readable body text", resp.content)
 
 
+@override_settings(WORKBENCH_ENRICH_ENABLED=False)
 class ExtractionCostGuardTests(AuthedWorkbenchTestCase):
     """Dedupe + per-account daily cap on the (billable) extract endpoint."""
 
@@ -484,6 +649,7 @@ class ExtractionCostGuardTests(AuthedWorkbenchTestCase):
         self.assertEqual(LlmExtractionCall.objects.filter(user=self.user).count(), 2)
 
 
+@override_settings(WORKBENCH_ENRICH_ENABLED=False)
 class ExtractionDailyCapTests(TestCase):
     """The cap only bites real (assist-enabled) calls and exempts staff."""
 
@@ -527,3 +693,94 @@ class ExtractionDailyCapTests(TestCase):
     def test_cap_of_zero_disables_the_ceiling(self):
         for _ in range(3):
             self.assertEqual(self._force_extract().status_code, 200)
+
+
+@override_settings(WORKBENCH_LLM_ENABLED=False, WORKBENCH_ENRICH_ENABLED=False)
+class EnrichmentEndpointTests(AuthedWorkbenchTestCase):
+    """The DOI→abstract lookup: the gated automatic path and the manual retry.
+
+    The language-model pass is disabled so the suite stays fully offline; the
+    enrichment lookups are mocked per test.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.submission = UploadSubmission.objects.create(owner=self.user)
+        self.token = self.submission.public_token
+        self.client.post(
+            reverse("workbench-document", args=[self.token]),
+            {"text": "Methods paragraph. DOI 10.1234/abc."},
+        )
+
+    @override_settings(WORKBENCH_ENRICH_ENABLED=True)
+    def test_auto_enrich_fills_a_missing_abstract_and_citation(self):
+        with mock.patch.object(
+            doi_enrich, "fetch_abstract", return_value="An abstract from Semantic Scholar."
+        ), mock.patch.object(
+            doi_enrich, "fetch_citation",
+            return_value=("Smith, J. (2019). A paper. Journal, 1, 2. https://doi.org/10.1234/abc",
+                          "crossref"),
+        ):
+            resp = self.client.post(
+                reverse("workbench-document-extract", args=[self.token])
+            )
+        self.assertEqual(resp.status_code, 200)
+        facts = resp.json()["manuscript_facts"]
+        self.assertEqual(
+            facts["metadata"]["pub_abstract"]["value"], "An abstract from Semantic Scholar."
+        )
+        self.assertEqual(facts["metadata"]["pub_abstract"]["source"], "semantic_scholar")
+        self.assertEqual(facts["enrichment"]["abstract"], "filled")
+        self.assertEqual(facts["metadata"]["pub_citation"]["source"], "crossref")
+        self.assertEqual(facts["enrichment"]["citation"], "filled")
+
+    def test_auto_enrich_off_makes_no_network_call(self):
+        with mock.patch.object(doi_enrich, "fetch_abstract") as abs_spy, \
+             mock.patch.object(doi_enrich, "fetch_citation") as cite_spy:
+            resp = self.client.post(
+                reverse("workbench-document-extract", args=[self.token])
+            )
+        self.assertEqual(resp.status_code, 200)
+        abs_spy.assert_not_called()
+        cite_spy.assert_not_called()
+
+    def test_manual_enrich_fills_the_abstract(self):
+        with mock.patch.object(
+            doi_enrich, "fetch_abstract", return_value="Manual abstract."
+        ), mock.patch.object(doi_enrich, "fetch_citation", return_value=None):
+            resp = self.client.post(
+                reverse("workbench-document-enrich", args=[self.token])
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "ok")
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.manuscript_facts["metadata"]["pub_abstract"]["value"],
+            "Manual abstract.",
+        )
+
+    def test_manual_enrich_fills_the_citation(self):
+        cite = "Smith, J. (2019). A paper. Journal, 1, 2. https://doi.org/10.1234/abc"
+        with mock.patch.object(doi_enrich, "fetch_abstract", return_value=None), \
+             mock.patch.object(doi_enrich, "fetch_citation", return_value=(cite, "crossref")):
+            resp = self.client.post(
+                reverse("workbench-document-enrich", args=[self.token])
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "ok")
+        self.assertEqual(resp.json()["citation"], cite)
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.manuscript_facts["metadata"]["pub_citation"]["value"], cite
+        )
+        self.assertEqual(
+            self.submission.manuscript_facts["metadata"]["pub_citation"]["source"], "crossref"
+        )
+
+    def test_manual_enrich_without_a_doi_explains(self):
+        sub = UploadSubmission.objects.create(owner=self.user)
+        resp = self.client.post(
+            reverse("workbench-document-enrich", args=[sub.public_token])
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["status"], "no_doi")

@@ -49,7 +49,7 @@ from .services import (
     tabular,
     units,
 )
-from .services.manuscript_merge import merge_metadata
+from .services.manuscript_merge import derive_metadata, merge_metadata
 from .services.manuscript_text import extract_text
 
 # How many sample rows to send back to the browser for the parse preview.
@@ -464,7 +464,7 @@ def create_document(request, token):
     # facts with whatever they find so DOI/coords are suggested immediately.
     regex_meta = manuscript_regex.parse_all(result.text)
     facts = submission.manuscript_facts or {}
-    facts["metadata"] = merge_metadata(regex_meta, facts.get("metadata", {}))
+    facts["metadata"] = derive_metadata(merge_metadata(regex_meta, facts.get("metadata", {})))
     facts.setdefault("events", [])
     submission.manuscript_facts = facts
     submission.save(update_fields=["manuscript_facts", "updated_at"])
@@ -527,6 +527,56 @@ def _extract_payload(facts: dict, document, regex_count: int, *, deduped: bool =
         "char_count": document.char_count,
         "word_count": len(text.split()),
     }
+
+
+def _field_value(metadata: dict, field_id: str):
+    entry = metadata.get(field_id)
+    if isinstance(entry, dict) and entry.get("value") not in (None, ""):
+        return entry.get("value")
+    return None
+
+
+def _enrich_metadata(metadata: dict) -> dict:
+    """Fill a missing abstract and/or citation from the DOI (best-effort).
+
+    Mutates ``metadata`` in place and returns a ``{field: "filled"|"miss"}`` map for
+    whatever it attempted; fields already present are left alone and omitted. Never
+    raises — network trouble leaves the deterministic results untouched.
+    """
+    from .services import doi_enrich
+
+    results: dict = {}
+    doi = _field_value(metadata, "pub_doi")
+    if not doi:
+        return results
+    doi = str(doi)
+
+    if not _field_value(metadata, "pub_abstract"):
+        abstract = doi_enrich.fetch_abstract(doi)
+        if abstract:
+            metadata["pub_abstract"] = {
+                "value": abstract,
+                "source": "semantic_scholar",
+                "confidence": 0.9,
+            }
+            results["abstract"] = "filled"
+        else:
+            results["abstract"] = "miss"
+
+    if not _field_value(metadata, "pub_citation"):
+        found = doi_enrich.fetch_citation(doi)
+        if found:
+            citation, source = found
+            metadata["pub_citation"] = {
+                "value": citation,
+                "source": source,
+                "confidence": 0.9,
+            }
+            results["citation"] = "filled"
+        else:
+            results["citation"] = "miss"
+
+    return results
 
 
 @require_POST
@@ -607,12 +657,20 @@ def extract_document(request, token):
 
     # Re-run the deterministic parsers and merge, preferring their numbers (§4).
     regex_meta = manuscript_regex.parse_all(document.extracted_text)
-    metadata = merge_metadata(regex_meta, module_result.get("metadata", {}))
+    metadata = derive_metadata(merge_metadata(regex_meta, module_result.get("metadata", {})))
+    # Last resort for a still-missing abstract/citation: ask Crossref/Semantic
+    # Scholar by DOI. Gated so extraction never reaches out to the network unless
+    # the operator opts in.
+    enrichment: dict = {}
+    if getattr(settings, "WORKBENCH_ENRICH_ENABLED", False):
+        enrichment = _enrich_metadata(metadata)
 
     facts = dict(submission.manuscript_facts or {})
     facts["status"] = status
     facts["metadata"] = metadata
     facts["events"] = module_result.get("events", [])
+    if enrichment:
+        facts["enrichment"] = enrichment
     for key in ("model", "generated_at", "usage"):
         if key in module_result:
             facts[key] = module_result[key]
@@ -631,6 +689,53 @@ def extract_document(request, token):
     )
 
     return JsonResponse(_extract_payload(facts, document, len(regex_meta)))
+
+
+@require_POST
+def enrich_document(request, token):
+    """Contributor-triggered retry: fill a missing abstract and/or citation from the DOI.
+
+    A paper not yet indexed by Crossref/Semantic Scholar at first extraction may
+    appear later, so the contributor (or curator) can re-run just the lookup.
+    """
+    submission = _owned_submission(request, token)
+    facts = dict(submission.manuscript_facts or {})
+    metadata = dict(facts.get("metadata") or {})
+    if _field_value(metadata, "pub_abstract") and _field_value(metadata, "pub_citation"):
+        return JsonResponse(
+            {"status": "already", "message": "The abstract and citation are already filled in."}
+        )
+    doi = _field_value(metadata, "pub_doi")
+    if not doi:
+        return JsonResponse(
+            {
+                "status": "no_doi",
+                "message": "Add a DOI first — there's nothing to look up. You can also "
+                           "paste the abstract and citation in yourself.",
+            },
+            status=400,
+        )
+    results = _enrich_metadata(metadata)
+    if not any(status == "filled" for status in results.values()):
+        return JsonResponse(
+            {
+                "status": "miss",
+                "message": "No extra details were found for that DOI yet. You can paste "
+                           "them in yourself.",
+            }
+        )
+    facts["metadata"] = metadata
+    enrichment = dict(facts.get("enrichment") or {})
+    enrichment.update(results)
+    facts["enrichment"] = enrichment
+    submission.manuscript_facts = facts
+    submission.save(update_fields=["manuscript_facts", "updated_at"])
+    return JsonResponse({
+        "status": "ok",
+        "filled": results,
+        "abstract": _field_value(metadata, "pub_abstract"),
+        "citation": _field_value(metadata, "pub_citation"),
+    })
 
 
 @require_GET
@@ -1051,6 +1156,23 @@ def _initial_site_values(submission: UploadSubmission, fields) -> dict:
                 "confidence": m.get("confidence"),
                 "unit": m.get("unit"),
             }
+    # A DOI implies a link, so the review panel and Site form never show "—" for
+    # Link while a DOI is known — even for drafts extracted before this fallback
+    # existed, or when the DOI was typed in by hand.
+    link_entry = values.get("pub_link")
+    if not (isinstance(link_entry, dict) and link_entry.get("value") not in (None, "")):
+        doi_entry = values.get("pub_doi")
+        if isinstance(doi_entry, dict) and doi_entry.get("value") not in (None, ""):
+            from .services.promote import doi_link
+
+            link = doi_link(doi_entry["value"])
+            if link:
+                values["pub_link"] = {
+                    "value": link,
+                    "source": "derived",
+                    "source_quote": None,
+                    "confidence": 1.0,
+                }
     return values
 
 
@@ -1087,6 +1209,7 @@ def save_site(request, token):
     global_fields = site_fields.global_fields()
     valid = {f.id for f in global_fields}
     out: dict = {}
+    warnings: list[str] = []
     for field_id, entry in incoming.items():
         if field_id not in valid or not isinstance(entry, dict):
             continue
@@ -1094,9 +1217,21 @@ def save_site(request, token):
         if value in (None, ""):
             continue
         if field_id == "pub_link":
-            parsed = urlparse(str(value).strip())
+            raw = str(value).strip()
+            parsed = urlparse(raw)
             if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-                continue
+                # A DOI (bare, or prefixed with "doi.org/") is the commonest thing
+                # typed here; resolve it rather than dropping the value silently.
+                doi_entry = manuscript_regex.find_doi(raw)
+                if not doi_entry:
+                    warnings.append(
+                        "The Link you entered isn't a web address and no DOI could "
+                        "be found in it, so it wasn't saved."
+                    )
+                    continue
+                from .services.promote import doi_link
+
+                value = doi_link(doi_entry["value"])
         src = entry.get("source")
         clean = {"value": value, "source": src if src in _VALUE_SOURCES else "user"}
         for key in ("column", "columnKey", "sheet", "source_quote"):
@@ -1110,7 +1245,12 @@ def save_site(request, token):
         fid for fid in (f.id for f in global_fields if f.required) if fid in out
     ]
     return JsonResponse(
-        {"status": "saved", "filled_count": len(out), "required_filled": filled_required}
+        {
+            "status": "saved",
+            "filled_count": len(out),
+            "required_filled": filled_required,
+            "warnings": warnings,
+        }
     )
 
 
@@ -2470,6 +2610,23 @@ def _submit_readiness(submission: UploadSubmission) -> list[dict]:
     ]
 
 
+_RECOMMENDED_META = (
+    ("pub_citation", "Citation"),
+    ("pub_link", "Link"),
+    ("pub_abstract", "Abstract"),
+)
+
+
+def _metadata_warnings(submission: UploadSubmission) -> list[str]:
+    """Labels of recommended study details still missing. Non-blocking: some papers
+    genuinely lack an abstract, so a submission is never held back for these — but the
+    contributor and curator should see the gap before it reaches the database."""
+    return [
+        label for fid, label in _RECOMMENDED_META
+        if not _resolved_global_value(submission, fid)
+    ]
+
+
 def _submit_summary(submission: UploadSubmission) -> dict:
     """A compact tally of what will be submitted, from the normalized series."""
     norm = _normalized_treatments(submission)
@@ -2515,6 +2672,7 @@ def submit(request, token):
             "checks": checks,
             "ready": all(c["ok"] for c in checks),
             "summary": _submit_summary(submission),
+            "metadata_warnings": _metadata_warnings(submission),
             "contributor_name": submission.contributor_name
             or (owner.get_full_name() if owner else ""),
             # Bound to the verified account and shown read-only (not editable/spoofable).
@@ -2612,9 +2770,13 @@ def curation_list(request):
             .exclude(status="draft")
             .defer("parsed_content")
             .order_by("-submitted_at", "-updated_at"))
+    only_missing = request.GET.get("missing") == "1"
     rows = []
     for s in subs:
         doi = _resolved_global_value(s, "pub_doi")
+        missing_meta = _metadata_warnings(s)
+        if only_missing and not missing_meta:
+            continue
         rows.append({
             "token": s.public_token,
             "title": _resolved_global_value(s, "pub_title") or "(untitled)",
@@ -2624,9 +2786,14 @@ def curation_list(request):
             "submitted_at": s.submitted_at,
             "treatments": len(_timeline_treatments(s)),
             "dup_doi": bool(promote.find_duplicate_publications(doi)),
+            "missing_meta": missing_meta,
             "trust": _email_trust(s.contributor_email),
         })
-    return render(request, "workbench_curation_list.html", {"rows": rows})
+    return render(
+        request,
+        "workbench_curation_list.html",
+        {"rows": rows, "only_missing": only_missing},
+    )
 
 
 # Consumer/free email providers — an address here carries less institutional weight
@@ -2793,6 +2960,31 @@ def curation_action(request, token):
             _email_contributor(submission, *_decision_email(submission, "promoted", note))
         except promote.PromotionError as exc:
             messages.error(request, str(exc))
+    elif action == "enrich":
+        doi = _resolved_global_value(submission, "pub_doi")
+        if not doi:
+            messages.error(request, "No DOI on this submission to look up.")
+        else:
+            values = dict(submission.metadata_values or {})
+            values.setdefault("pub_doi", {"value": doi, "source": "document"})
+            results = _enrich_metadata(values)
+            filled = [
+                label for label, status in (
+                    ("abstract", results.get("abstract")),
+                    ("citation", results.get("citation")),
+                ) if status == "filled"
+            ]
+            if filled:
+                for field_id in ("pub_abstract", "pub_citation"):
+                    if isinstance(values.get(field_id), dict):
+                        values[field_id]["source"] = "document"
+                submission.metadata_values = values
+                submission.save(update_fields=["metadata_values", "updated_at"])
+                messages.success(
+                    request, "Fetched " + " and ".join(filled) + " from the DOI."
+                )
+            else:
+                messages.error(request, "No extra details found for that DOI.")
     else:
         messages.error(request, "Unknown action.")
 

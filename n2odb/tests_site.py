@@ -137,3 +137,36 @@ class SiteViewTests(AuthedWorkbenchTestCase):
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.metadata_values["country"]["source"], "document")
         self.assertEqual(self.submission.metadata_values["site_name"]["source"], "user")
+
+    def test_derived_link_prefilled_from_doi(self):
+        # A DOI implies a link, so the Site form shows one even when no explicit
+        # Link was saved or extracted.
+        from n2odb.views_workbench import _initial_site_values
+        values = _initial_site_values(self.submission, site_fields.global_fields())
+        self.assertEqual(values["pub_link"]["value"], "https://doi.org/10.1/x")
+        self.assertEqual(values["pub_link"]["source"], "derived")
+
+    def test_save_site_normalizes_a_doi_link(self):
+        resp = self.client.post(
+            reverse("workbench-site-save", args=[self.token]),
+            data={"values": {"pub_link": {"value": "doi.org/10.1234/abc", "source": "user"}}},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["warnings"], [])
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.metadata_values["pub_link"]["value"],
+            "https://doi.org/10.1234/abc",
+        )
+
+    def test_save_site_warns_on_an_unresolvable_link(self):
+        resp = self.client.post(
+            reverse("workbench-site-save", args=[self.token]),
+            data={"values": {"pub_link": {"value": "not a link", "source": "user"}}},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["warnings"])
+        self.submission.refresh_from_db()
+        self.assertNotIn("pub_link", self.submission.metadata_values)

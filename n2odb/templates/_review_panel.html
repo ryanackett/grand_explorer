@@ -26,6 +26,7 @@ Page-agnostic: no wizard URLs here — the Review stage adds its own Continue ha
     .rv-kv__v { color:#2c3e50; font-weight:600; text-align:right; word-break:break-word; }
     .rv-kv__v a { color:#4a7c8f; word-break:break-all; }
     .rv-kv__na { color:#c4ccc7; }
+    .rv-kv__missing { color:#b9832f; font-size:1.1rem; font-weight:600; }
     .rv-kv--stack { flex-direction:column; align-items:stretch; }
     .rv-abstract { margin-top:.3rem; max-height:9rem; overflow-y:auto; text-align:left;
         font-size:1.15rem; font-weight:400; color:#3c4d45; line-height:1.4;
@@ -102,7 +103,7 @@ Page-agnostic: no wizard URLs here — the Review stage adds its own Continue ha
             {% else %}
             <div class="rv-kv">
                 <span class="rv-kv__k">{{ item.label }}</span>
-                <span class="rv-kv__v">{% if item.empty %}<span class="rv-kv__na">—</span>{% elif item.label == 'Link' %}<a href="{{ item.value }}" target="_blank" rel="noopener">{{ item.value }}</a>{% else %}{{ item.value }}{% if item.unit %} <small>{{ item.unit }}</small>{% endif %}{% endif %}</span>
+                <span class="rv-kv__v">{% if item.empty %}{% if item.label == 'Link' or item.label == 'Abstract' or item.label == 'Citation' %}<span class="rv-kv__missing">Missing — add in Study &amp; Site</span>{% else %}<span class="rv-kv__na">—</span>{% endif %}{% elif item.label == 'Link' %}<a href="{{ item.value }}" target="_blank" rel="noopener">{{ item.value }}</a>{% else %}{{ item.value }}{% if item.unit %} <small>{{ item.unit }}</small>{% endif %}{% endif %}</span>
             </div>
             {% endif %}
             {% endfor %}

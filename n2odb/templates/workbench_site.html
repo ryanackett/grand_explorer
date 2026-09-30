@@ -77,7 +77,8 @@
   <div class="workbench-container site-container"
        data-save-url="{% url 'workbench-site-save' public_token %}"
        data-back-url="{% url 'workbench-mapping' public_token %}"
-       data-next-url="{% url 'workbench-soil' public_token %}">
+       data-next-url="{% url 'workbench-soil' public_token %}"
+       data-enrich-url="{% url 'workbench-document-enrich' public_token %}">
 
     {% include '_wizard_progress.html' %}
 
@@ -91,6 +92,8 @@
     <div class="site-status">
       <span id="site-required" class="site-required--warn">…</span>
       <span id="site-saved" class="site-saved"></span>
+      <button type="button" class="wb-btn wb-btn--outline" id="site-enrich"
+              style="display:none;">Fetch details from DOI</button>
     </div>
 
     <div class="site-grid">
@@ -156,6 +159,7 @@
   const grid       = document.querySelector('.site-grid');
   const saveUrl    = root.dataset.saveUrl;
   const nextUrl    = root.dataset.nextUrl;
+  const enrichUrl  = root.dataset.enrichUrl;
   const fieldGroups= JSON.parse(document.getElementById('fields-data').textContent);
   const initial    = JSON.parse(document.getElementById('values-data').textContent);
   const columns    = JSON.parse(document.getElementById('columns-data').textContent);
@@ -184,6 +188,7 @@
   const search   = document.getElementById('cloud-search');
   const siteReq  = document.getElementById('site-required');
   const siteSaved= document.getElementById('site-saved');
+  const enrichBtn= document.getElementById('site-enrich');
   let armed = null;
 
   function el(tag, attrs, text) {
@@ -226,6 +231,49 @@
     }
   }
 
+  // Offer the DOI lookup while there's a DOI and an abstract/citation still missing.
+  function renderEnrich() {
+    const hasDoi = state.pub_doi && (state.pub_doi.value || state.pub_doi.value === 0);
+    const hasAbs = state.pub_abstract && (state.pub_abstract.value || state.pub_abstract.value === 0);
+    const hasCit = state.pub_citation && (state.pub_citation.value || state.pub_citation.value === 0);
+    enrichBtn.style.display = (hasDoi && (!hasAbs || !hasCit)) ? '' : 'none';
+  }
+
+  enrichBtn.addEventListener('click', async () => {
+    enrichBtn.disabled = true;
+    const label = enrichBtn.textContent;
+    enrichBtn.textContent = 'Looking up…';
+    try {
+      const resp = await fetch(enrichUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify({}),
+      });
+      const data = await resp.json().catch(() => ({}));
+      const filled = data.filled || {};
+      if (data.status === 'ok') {
+        const got = [];
+        if (filled.abstract === 'filled' && data.abstract) {
+          setField('pub_abstract', data.abstract, 'document', { source_quote: 'DOI lookup' });
+          got.push('abstract');
+        }
+        if (filled.citation === 'filled' && data.citation) {
+          setField('pub_citation', data.citation, 'document', { source_quote: 'DOI lookup' });
+          got.push('citation');
+        }
+        if (got.length) showToast('Filled in ' + got.join(' and ') + ' from the DOI.', 'success');
+        else showToast('No extra details were found for that DOI.', 'warning');
+      } else {
+        showToast(data.message || 'No extra details found for that DOI.', 'warning');
+      }
+    } catch (e) {
+      showToast('Lookup failed — you can paste the details in yourself.', 'warning');
+    }
+    enrichBtn.disabled = false;
+    enrichBtn.textContent = label;
+    renderEnrich();
+  });
+
   function setInput(fid) {
     const input = document.getElementById('in-' + fid);
     if (input) input.value = (state[fid].value == null ? '' : state[fid].value);
@@ -237,6 +285,7 @@
     renderProvenance(fid);
     renderCloud();
     renderStatus();
+    renderEnrich();
     scheduleSave();
   }
 
@@ -366,7 +415,12 @@
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
         body: JSON.stringify(payload),
       });
-      siteSaved.textContent = resp.ok ? 'Saved' : 'Save failed';
+      if (!resp.ok) { siteSaved.textContent = 'Save failed'; return; }
+      const data = await resp.json().catch(() => ({}));
+      if (data.warnings && data.warnings.length) {
+        showToast(data.warnings.join(' '), 'warning');
+      }
+      siteSaved.textContent = 'Saved';
     } catch (e) { siteSaved.textContent = 'Save failed'; }
   }
 
@@ -393,6 +447,7 @@
   Object.keys(state).forEach(fid => { setInput(fid); renderProvenance(fid); });
   renderCloud();
   renderStatus();
+  renderEnrich();
 })();
 </script>
 {% endblock %}

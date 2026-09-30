@@ -16,6 +16,10 @@
     table.cur-tbl a:hover { color:#4a7c8f; text-decoration:underline; }
     .cur-empty { color:#9aa8a0; font-style:italic; padding:2rem 0; }
     .cur-dup { color:#b9832f; font-weight:700; font-size:1.15rem; }
+    .cur-missing { display:inline-block; padding:.05rem .5rem; border-radius:20px;
+        background:#fff6e0; color:#8a6d3b; font-size:1rem; font-weight:700; }
+    .cur-filter { margin:-1rem 0 1.25rem; font-size:1.2rem; }
+    .cur-filter a { color:#4a7c8f; }
     .cur-trust { display:inline-block; padding:.05rem .5rem; border-radius:20px; font-size:1rem;
         font-weight:700; }
     .cur-trust--academic { background:#e7f3ec; color:#2c7a4b; }
@@ -34,6 +38,10 @@
 <section class="cur-sec">
     <div class="cur-wrap">
         <h1>Contribution queue</h1>
+        <p class="cur-filter">
+            {% if only_missing %}<a href="{% url 'workbench-curation' %}">Show all contributions</a>
+            {% else %}<a href="?missing=1">Show only those missing Link/Abstract</a>{% endif %}
+        </p>
         <table class="cur-tbl">
             <thead>
                 <tr>
@@ -52,6 +60,7 @@
                     <td>
                         {% if r.trust %}<span class="cur-trust cur-trust--{{ r.trust.kind }}" title="{{ r.trust.domain }}">{{ r.trust.kind }}</span> {% endif %}
                         {% if r.dup_doi %}<span class="cur-dup" title="This DOI already exists in the database">⚠ DOI</span>{% endif %}
+                        {% if r.missing_meta %}<span class="cur-missing" title="Missing: {{ r.missing_meta|join:', ' }}">⚠ meta</span>{% endif %}
                     </td>
                 </tr>
                 {% empty %}
