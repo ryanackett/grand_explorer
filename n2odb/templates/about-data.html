@@ -53,8 +53,8 @@
         .about-card h2:first-child { margin-top: 0.5rem; }
         .about-card p { font-size: 1.65rem; margin: 0 0 1.1rem; }
         .about-card strong { color: var(--grand-green); }
-        .about-card a { color: #2e7d5b; font-weight: 600; text-decoration: underline; }
-        .about-card a:hover { color: var(--grand-green); }
+        .about-card a:not(.about-btn) { color: #2e7d5b; font-weight: 600; text-decoration: underline; }
+        .about-card a:not(.about-btn):hover { color: var(--grand-green); }
 
         /* Pipeline / timeline */
         .pipeline { margin: 1.6rem 0 0.5rem; }
@@ -133,7 +133,7 @@
             The GRAND database brings together temporally-resolved N<sub>2</sub>O flux measurements and their covariates from several major public sources — <strong>GRACEnet</strong>, <strong>Ag Data Commons</strong>, the <strong>NANORP N<sub>2</sub>O Network</strong>, and the <a href="https://ecoapps.nrel.colostate.edu/global_n2o/" target="_blank" rel="noopener">Global N<sub>2</sub>O Database</a> — plus roughly <strong>45 additional peer-reviewed publications</strong>. Every record carries its original source citation, delivered with each download.
         </p>
         <p>
-            Getting that data into one consistent, queryable form takes several careful steps:
+            Getting that data into one consistent, queryable form took several steps:
         </p>
 
         <div class="pipeline">
@@ -146,12 +146,12 @@
             <div class="step">
                 <div class="num">2</div>
                 <h3>Harmonization</h3>
-                <p>Source datasets rarely agree on units, names, or structure. Python pipelines convert every measurement to common units and map inconsistent terminology onto a single vocabulary — crops as <em>Scientific (Common)</em> names, instruments as Static Chamber / Automatic Chamber / Eddy Covariance, and so on.</p>
+                <p>Source datasets rarely agree on units, names, or structure. Python pipelines convert every measurement to common units and map inconsistent terminology onto a single vocabulary: crops as <em>Scientific (Common)</em> names, and so on.</p>
             </div>
             <div class="step">
                 <div class="num">3</div>
                 <h3>Treatment averaging</h3>
-                <p>Replicate plots within a treatment are averaged to a single daily value, so each record represents a treatment's <strong>mean</strong> flux on a given date (with the replicate spread retained alongside it), rather than one individual chamber reading.</p>
+                <p>Measurements from multiple replicate plots within an experimental treatment are averaged to a single value, so each record represents a treatment's <strong>mean</strong> flux (and soil moisture, etc) on a given date, rather than one individual chamber reading. We capture the variance of N2O flux measurements by computing the standard error, which we also provide when possible to compute.</p>
             </div>
             <div class="step">
                 <div class="num">4</div>
@@ -165,15 +165,15 @@
         <div class="caveats">
             <h3><i class="fas fa-circle-info"></i> Before you model</h3>
             <ul>
-                <li><strong>Measurement gaps.</strong> Most data comes from static chambers, which typically sample every 1–2 weeks. GRAND fills the calendar so dates are continuous, but it <strong>never invents flux values</strong> — there is no gap-filling.</li>
+                <li><strong>Measurement gaps.</strong> Most data comes from static chambers, which typically sample every 1–2 weeks. GRAND fills the calendar so dates are continuous, but it <strong>never invents flux values</strong>. There is no gap-filling by default (though this feature could optionally be added if the community requests it).</li>
                 <li><strong>Treatment-averaged.</strong> Records are treatment means, not raw replicate-level data.</li>
-                <li><strong>Measured vs. modeled.</strong> Some soil and climate covariates are gridded estimates where the original study was silent — always flagged as such, so you can include or exclude them as your model requires.</li>
+                <li><strong>Measured vs. modeled.</strong> Where a study didn't report soil pH, bulk density, organic carbon, or site climate (MAP/MAT), we fill the gap from gridded datasets (SoilGrids, NASA POWER). Every download includes <code>MODELED_VALUES.md</code>, listing which sites and treatments carry estimates so you can exclude them.</li>
                 <li><strong>Figure-digitized values</strong> carry a small uncertainty from reading points off a plot.</li>
             </ul>
         </div>
 
         <p class="closing-note">
-            Full column definitions and complete per-record citations ship in the README bundled with every download. For the complete methodology, see <strong>Ackett et&nbsp;al. (2026)</strong>.
+            Full column definitions and complete per-record citations ship in the README bundled with every download. For the complete methodology, see <a href="https://doi.org/10.1016/j.agrformet.2026.111287" target="_blank" rel="noopener"><strong>Ackett et&nbsp;al. (2026)</strong></a>.
         </p>
 
         <div class="about-cta">
