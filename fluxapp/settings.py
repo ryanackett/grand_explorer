@@ -124,6 +124,8 @@ ACCOUNT_LOGOUT_REDIRECT_URL = 'home'
 # DATABASES block below (they depend on whether the read-only connection exists).
 EXPLORER_PERMISSION_VIEW = lambda request: request.user.is_superuser
 EXPLORER_PERMISSION_CHANGE = lambda request: request.user.is_superuser
+# Anonymous visitors get allauth's rate-limited login, not Django's unthrottled form.
+EXPLORER_NO_PERMISSION_VIEW = 'n2odb.views.staff_login_redirect'
 
 ROOT_URLCONF = 'fluxapp.urls'
 

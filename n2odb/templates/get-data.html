@@ -649,9 +649,9 @@
                 var html = `
                     <div class="info-panel">
                         <div class="exp-header">
-                            <div class="exp-title">${displayTitle}</div>
+                            <div class="exp-title">${escHtml(displayTitle)}</div>
                             <div style="font-size: 1.3rem; color: #6c757d; ">
-                                <i class="fas fa-map-marker-alt"></i> ${displaySite}
+                                <i class="fas fa-map-marker-alt"></i> ${escHtml(displaySite)}
                             </div>
 
                             <div class="btn-read-abstract" onclick='ReadAbstract("${p.ExperimentID}")'>
@@ -668,7 +668,7 @@
                             </div>
                             
                             <div style="margin-top:12px; font-size:1.3rem; color:#888; border-top:1px solid #eee; padding-top:8px; line-height:1.4;">
-                                <strong>Citation:</strong> ${p.Citation}
+                                <strong>Citation:</strong> ${escHtml(p.Citation)}
                             </div>
 
                             <div class="btn-add-all" onclick='CartManager.add(${JSON.stringify(allTreatmentIds)})'>
@@ -694,7 +694,7 @@
                             <div class="treatment-card" id="card-${tID}">
                                 
                                 <div class="t-header">
-                                    <div class="t-name">${t.name}</div>
+                                    <div class="t-name">${escHtml(t.name)}</div>
                                     
                                     <div class="t-actions">
                                         <i id="graph-${tID}" 
@@ -711,19 +711,19 @@
 
                                 <div class="t-detail">
                                     <span class="icon-width"><i class="fas fa-seedling text-success"></i></span>
-                                    <strong>Crop:</strong>&nbsp; ${t.crop}
+                                    <strong>Crop:</strong>&nbsp; ${escHtml(t.crop)}
                                 </div>
                                 <div class="t-detail">
                                     <span class="icon-width"><i class="fas fa-tools text-secondary"></i></span>
-                                    <strong>Mgmt:</strong>&nbsp; ${t.mgmt}
+                                    <strong>Mgmt:</strong>&nbsp; ${escHtml(t.mgmt)}
                                 </div>
                                 <div class="t-detail">
                                     <span class="icon-width"><i class="fas fa-calendar-alt text-info"></i></span>
-                                    <strong>Start Date:</strong>&nbsp; ${t.first_date || 'N/A'}
+                                    <strong>Start Date:</strong>&nbsp; ${escHtml(t.first_date || 'N/A')}
                                 </div>
                                 <div class="t-detail">
                                     <span class="icon-width"><i class="fas fa-calendar-check text-info"></i></span>
-                                    <strong>End Date:</strong>&nbsp; ${t.last_date || 'N/A'}
+                                    <strong>End Date:</strong>&nbsp; ${escHtml(t.last_date || 'N/A')}
                                 </div>
                                 
                             </div>
@@ -769,10 +769,10 @@
                 pointFormatter: function () {
                     var p = this;
                     var html = '<div style="font-size: 14px; font-weight: bold; margin-bottom: 4px; color: #333; max-width: 250px; white-space: normal;">' + 
-                            (p.pub_title || 'Untitled Publication') + 
+                            escHtml(p.pub_title || 'Untitled Publication') + 
                             '</div>';
                     html += '<div style="font-size: 12px; color: #666;">' + 
-                            (p.site_name || 'Site') + ', ' + 
+                            escHtml(p.site_name || 'Site') + ', ' + 
                             p.real_lat + ', ' + p.real_lon + 
                             '</div>';
                     return html;

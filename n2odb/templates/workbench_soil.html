@@ -353,7 +353,7 @@
       listEl.appendChild(row);
     });
     trtNote.innerHTML = trtColumn
-      ? 'Detected from your <code>' + trtColumn + '</code> column — the identifiers match your '
+      ? 'Detected from your <code>' + escHtml(trtColumn) + '</code> column — the identifiers match your '
         + 'raw rows, so they can\'t be renamed or removed. Optionally give each a readable '
         + 'name and a description.'
       : 'No treatment column was mapped. Go back to the Map step and map your treatment column.';

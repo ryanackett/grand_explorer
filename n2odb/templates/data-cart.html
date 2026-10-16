@@ -390,7 +390,7 @@
             loadingDiv.innerHTML = `
                 <div style="color:#cc5555; text-align:center;">
                     <i class="fas fa-exclamation-triangle fa-2x"></i>
-                    <p><strong>Error loading analytics</strong><br>${e.message}</p>
+                    <p><strong>Error loading analytics</strong><br>${escHtml(e.message)}</p>
                     <button onclick="location.reload()" style="padding:5px 10px; cursor:pointer;">Try Again</button>
                 </div>`;
         }
@@ -407,10 +407,10 @@
             const div = document.createElement('div');
             div.className = 'cart-item';
             div.innerHTML = `
-                <div class="item-title">${item.publication}</div>
+                <div class="item-title">${escHtml(item.publication)}</div>
                 <div class="item-meta">
-                    <i class="fas fa-map-marker-alt"></i> ${item.location} <br>
-                    <span style="color:#888;">${item.name} • ${item.crop} • ${item.mgmt}</span>
+                    <i class="fas fa-map-marker-alt"></i> ${escHtml(item.location)} <br>
+                    <span style="color:#888;">${escHtml(item.name)} • ${escHtml(item.crop)} • ${escHtml(item.mgmt)}</span>
                 </div>
                 <i class="fas fa-trash btn-remove" onclick="removeCartItem('${item.id}')" title="Remove"></i>
             `;

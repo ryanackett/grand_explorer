@@ -20,6 +20,10 @@ from n2odb import views
 from n2odb import views_workbench
 from django.contrib.auth.decorators import login_required as _lr
 
+# Admin logins go through allauth's rate-limited login (SQL Explorer's are routed
+# the same way via EXPLORER_NO_PERMISSION_VIEW in settings).
+admin.site.login = views.staff_login_redirect
+
 urlpatterns = [
     # --- Assisted-upload workbench --- (contributor views are login-required (_lr) here; the
     # per-view owner check lives in the view. Curation *views* carry @staff_member_required.)

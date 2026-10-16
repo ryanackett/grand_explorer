@@ -33,6 +33,20 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/icons8-plant-doodle-32.png' %}">
     <link rel="icon" type="image/x-icon" sizes="16x16" href="{% static 'images/icons8-plant-doodle-16.png' %}">
 
+    <script>
+    // Escape database text before it goes into innerHTML. Contributor-submitted and
+    // Crossref-enriched values are untrusted; only a few bare formatting tags that
+    // real citations use (N<sub>2</sub>O, <i>, Crossref's <scp>) are restored, and
+    // never with attributes, so no script or event handler can get through.
+    function escHtml(value) {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+            .replace(/&lt;(\/?)(sub|sup|i|b|em|strong|scp)&gt;/gi, '<$1$2>');
+    }
+    </script>
+
     <style>
         /* --- New Footer Styles --- */
         .site-footer {

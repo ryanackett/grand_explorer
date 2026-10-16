@@ -342,7 +342,7 @@ def get_data(request):
     # PART 2: INITIAL LOAD (GET/POST Request for Dropdowns)
     # -------------------------------------------------------------------------
     elif request.method == 'POST':
-        selectedList = request.POST['selected']
+        selectedList = request.POST.get('selected', '')
         dropdown_dict = {}
         labels = []
         if 'ins' in selectedList:
@@ -519,6 +519,10 @@ def get_data(request):
         dropdown_dict['json_experiments'] = dumps(experiment_data)        
         
         return render(request, 'get-data.html', dropdown_dict)
+
+    # A plain GET (bookmark, shared link, refresh) has no filter selection to build
+    # the page from — send it to the filter picker instead of erroring.
+    return redirect('query-filters')
 
 
 def get_graph_json(treatment_id):
@@ -986,6 +990,27 @@ def download_zip(request):
     response['Content-Disposition'] = 'attachment; filename="n2odb_export.zip"'
     
     return response
+
+def staff_login_redirect(request, extra_context=None):
+    """Login for the admin and SQL Explorer, via allauth's rate-limited login.
+
+    Django's admin login form (which SQL Explorer also renders) has no throttling,
+    so it would be a brute-force target. Staff never reach this view (they're
+    already let in); a signed-in user without access gets a 403 rather than a
+    password form to guess against.
+    """
+    from django.contrib.auth.views import redirect_to_login
+    from django.core.exceptions import PermissionDenied
+    from django.urls import reverse
+
+    if request.user.is_authenticated:
+        raise PermissionDenied
+    if request.path == reverse('admin:login'):
+        next_url = request.GET.get('next') or reverse('admin:index')
+    else:
+        next_url = request.get_full_path()   # SQL Explorer: come back to the page asked for
+    return redirect_to_login(next_url, login_url=reverse('account_login'))
+
 
 def robots_txt(request):
     """Let crawlers index public pages; keep them out of admin/data endpoints."""
