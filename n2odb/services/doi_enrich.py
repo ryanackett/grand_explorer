@@ -1,8 +1,7 @@
 """Best-effort metadata enrichment from a DOI.
 
-Ports the DOI lookups the offline ETL enrichment uses (``ETL/enrichment/
-resolve_cite.py`` and ``fill_meta.py``) into a small, failure-tolerant service the
-upload workbench can call. Network work is only a *fallback*: the deterministic
+Ports the DOI lookups from the original one-time ETL enrichment into a small,
+failure-tolerant service the upload workbench can call. Network work is only a *fallback*: the deterministic
 parsers and the DOI→link derivation already cover the common case, and every
 exception here is swallowed so an unavailable API never breaks an upload or a
 curator action.

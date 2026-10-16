@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 
 from django.conf import settings
 
-# Cells that mean "empty" for dtype inference (mirrors import_rawdata's _NULLISH).
+# Cells that mean "empty" for dtype inference.
 _NULLISH = {"", "na", "nan", "none", "null", "-", "—"}
 # Date formats we recognise when inferring a column's dtype.
 _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y", "%d.%m.%Y")

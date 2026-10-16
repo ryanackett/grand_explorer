@@ -25,8 +25,7 @@ GRACEnet, Ag Data Commons, the NANORP N2O Network and the Global N2O Database â€
 additional peer-reviewed publications. Every record keeps its original source citation, which is
 included with each download.
 
-The database contents are **not** part of this repository; it contains the platform code and the
-enrichment worksheets used by the ETL steps (see [`ETL/README.md`](ETL/README.md)).
+The database contents are **not** part of this repository, which contains only the platform code.
 
 ## Tech stack
 
@@ -41,13 +40,7 @@ enrichment worksheets used by the ETL steps (see [`ETL/README.md`](ETL/README.md
 The development setup is a VS Code Dev Container with two services: `app` (Django) and `db`
 (MySQL 8.0). You need Docker and VS Code with the Dev Containers extension.
 
-**1. On the host**, create the shared Docker network the compose file expects (once):
-
-```bash
-docker network create n2o_net
-```
-
-**2. Create a `.env` file** in the repository root. It is read by both containers and is
+**1. Create a `.env` file** in the repository root. It is read by both containers and is
 gitignored â€” never commit it. Minimal development values:
 
 ```ini
@@ -64,9 +57,9 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 DATABASE_URL=mysql://flux:change-me@db:3306/fluxapp
 ```
 
-**3. Open the folder in VS Code** and choose **Reopen in Container**.
+**2. Open the folder in VS Code** and choose **Reopen in Container**.
 
-**4. Inside the `app` container** (VS Code's terminal, `/workspaces/fluxapp`):
+**3. Inside the `app` container** (VS Code's terminal, `/workspaces/fluxapp`):
 
 ```bash
 python manage.py migrate
@@ -118,8 +111,7 @@ With `DEBUG=False` the app refuses to start unless HTTPS and host settings are c
 |---|---|
 | `fluxapp/` | Django project settings and URLs |
 | `n2odb/` | The application: models, views, upload workbench, templates, tests |
-| `n2odb/management/commands/` | ETL, enrichment and analysis commands |
-| `ETL/` | Enrichment worksheets and the ETL runbook |
+| `n2odb/management/commands/` | Geography backfill and flux analysis commands |
 | `docs/` | Deployment checklist and design notes |
 | `sample-data/` | Synthetic files for testing the upload workbench |
 

@@ -21,14 +21,8 @@ debug_log.txt
 # auto-generated SSL keys (*.pem), and binlogs. Must never be versioned.
 .devcontainer/db_data/
 
-# --- ETL: large inputs & run-specific artifacts ---
-# RawData.csv is the 82 MB denormalized export consumed by import_rawdata.
-ETL/RawData.csv
-# Undo manifests written by load_tables / apply_enrichment (keep locally for
-# rollback, but they are run-specific and shouldn't be committed).
-ETL/*_manifest_*.json
-# Per-site SoilGrids/NASA POWER response cache (re-derivable from build_soil.py).
-ETL/_grid_cache.json
+# --- ETL: one-time data load (removed from the repo 2026-10-16); local leftovers only ---
+ETL/
 
 # LibreOffice lock files
 .~lock.*#
