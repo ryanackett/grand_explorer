@@ -32,3 +32,9 @@ ETL/_grid_cache.json
 
 # LibreOffice lock files
 .~lock.*#
+
+# Local/editor files (untracked 2026-10-16)
+.idea/
+.claude/settings.local.json
+feature_importance.png
+hot_moments_dry_run.csv
