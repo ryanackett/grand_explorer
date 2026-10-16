@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use GRAND Explorer, please cite it as below, and also cite the original data sources."
+title: "The Global Repository for Agricultural N2O Data (GRAND) Explorer"
+type: software
+authors:
+  - family-names: Ackett
+    given-names: Ryan
+    orcid: "https://orcid.org/0009-0008-6446-2614"
+  - family-names: Saha
+    given-names: Debasish
+    orcid: "https://orcid.org/0000-0001-9425-675X"
+repository-code: "https://github.com/ryanackett/grand_explorer"
+url: "https://grandexplorer.org"
+license: AGPL-3.0-or-later
