@@ -127,3 +127,20 @@ of the License, or (at your option) any later version. See [`LICENSE`](LICENSE).
 
 In short: you may use, modify and share this code, but if you run a modified version — including
 as a website — you must make your source code available under the same license.
+
+### Third-party components
+
+The AGPL covers this project's own code only. Third-party components keep their own licenses:
+
+- **[Highcharts](https://www.highcharts.com/)** (charts and maps, loaded from CDN) is **not open
+  source**. It is free for non-commercial use (personal, academic, non-profit); commercial use
+  requires a [Highcharts license](https://shop.highcharts.com/). If you deploy a fork commercially,
+  license Highcharts or swap it out.
+- **Calvin site template** by [StyleShout](https://www.styleshout.com/) — the base stylesheets and
+  scripts in `n2odb/static/css/styles.css`, `vendor.css`, `n2odb/static/js/main.js` and
+  `plugins.js` (which bundles jQuery plugins under their own licenses).
+- Loaded from CDN under permissive licenses: [Bootstrap](https://getbootstrap.com/) (MIT),
+  [jQuery](https://jquery.com/) (MIT), [Font Awesome Free](https://fontawesome.com/license/free)
+  (icons CC BY 4.0, fonts SIL OFL 1.1, code MIT), [Choices.js](https://github.com/Choices-js/Choices)
+  (MIT), [driver.js](https://driverjs.com/) (MIT), [Grid.js](https://gridjs.io/) (MIT),
+  [Plotly.js](https://plotly.com/javascript/) (MIT) and [proj4js](http://proj4js.org/) (MIT).
