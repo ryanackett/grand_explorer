@@ -31,30 +31,62 @@
         }
     </style>
     <style>
-        /* Replace .class-name-of-random-ul with the actual class you found */
-        .slick-dots {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            height: 0 !important;
-            width: 0 !important;
-            pointer-events: none !important;
+        /* --- Hero: full-screen panel with the artwork behind the copy --- */
+        .hero-frame { position: relative; }
+
+        .hero-slide {
+            position: relative;
+            height: 100vh;
+            min-height: calc(var(--unit) * 25.5);
         }
-    </style>
-    <style>
-        .s-hero__slide-text {
-            font-size: 3.8rem !important;
+
+        .hero-bg {
+            position: absolute;
+            inset: 0;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
         }
-        .s-hero__slide-bg::before {
-            /* The 0.2 means 20% opacity. 
-            Default is usually 0.5 or 0.8 (much darker). */
-            background-color: rgba(0, 0, 0, 0.0); 
+
+        /* faint darkening toward the bottom edge */
+        .hero-bg::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.2) linear-gradient(rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.78) 100%);
+            opacity: 0.2;
         }
-        
-        .s-hero__slide-bg::after {
-            /* The 0.2 means 20% opacity. 
-            Default is usually 0.5 or 0.8 (much darker). */
-            background-color: rgba(0, 0, 0, 0.2); 
+
+        .hero-content {
+            position: relative;
+            height: 100%;
+            max-width: 1400px;
+            padding-top: var(--unit);
+            padding-bottom: 20vh;
+        }
+
+        .hero-content > .hero-col {
+            flex: 0 0 55%;
+            max-width: 55%;
+            align-self: flex-end;
+            padding: 0 2.4rem;
+        }
+
+        @media screen and (max-width: 1600px) {
+            .hero-content > .hero-col { flex-basis: 50vw; max-width: 50vw; }
+        }
+        @media screen and (max-width: 1200px) {
+            .hero-content > .hero-col { flex-basis: 55vw; max-width: 55vw; padding: 0 2rem; }
+        }
+        @media screen and (max-width: 1000px) {
+            .hero-content > .hero-col { flex-basis: 70vw; max-width: 70vw; }
+        }
+        @media screen and (max-width: 600px) {
+            .hero-content > .hero-col { flex-basis: 75vw; max-width: 75vw; padding: 0 1rem; }
+        }
+        @media screen and (max-width: 400px) {
+            .hero-content { padding-bottom: 24vh; }
+            .hero-content > .hero-col { flex-basis: 100%; max-width: 100%; margin: 0; padding: 0; }
         }
     </style>
     
@@ -144,7 +176,7 @@
                the artwork's flat cream field matches the hero background-color,
                so it blends seamlessly and the plant reads as a corner
                illustration tucked below the copy, not a backdrop behind it. */
-            .s-hero__slide-bg {
+            .hero-bg {
                 background-size: auto 42vh;
                 background-position: right bottom;
             }
@@ -158,7 +190,7 @@
 
             /* Fill the VISIBLE viewport (svh, not vh which ignores the URL bar),
                but let the hero GROW when the copy is taller than one screen —
-               a fixed height plus .s-hero's overflow:hidden is what clipped the
+               a fixed height plus the hero's overflow:hidden is what clipped the
                big G-R-A-N-D caps under the navbar. (vh lines are fallbacks for
                browsers without svh.) */
             #hero {
@@ -166,7 +198,7 @@
                 min-height: 100vh;
                 min-height: 100svh;
             }
-            .s-hero__slider .s-hero__slide {
+            .hero-slide {
                 height: auto;
                 min-height: 100vh;
                 min-height: 100svh;
@@ -177,14 +209,14 @@
                on this element adds negative side margins that shift everything
                ~12px left of center. Flow top-down instead, clearing the fixed
                navbar, and zero the row margins. */
-            .s-hero__slide-content {
+            .hero-content {
                 margin-left: 0;
                 margin-right: 0;
                 height: auto;
                 padding-top: 10rem;   /* clear the fixed navbar */
                 padding-bottom: 5vh;
             }
-            .s-hero__slide-content > .column {
+            .hero-content > .hero-col {
                 align-self: auto;     /* was flex-end (bottom-anchored) */
                 flex: 0 0 100%;
                 max-width: 100%;
@@ -273,6 +305,8 @@
         /* --- Hero intro paragraph: fluid so it scales with the viewport,
                filling the width on large monitors (laptop stays original) --- */
         .hero-lead {
+            font-weight: 300;
+            line-height: calc(var(--unit) * 1.125);
             font-size: clamp(1.125rem, 1.125vw, 1.875rem);
             max-width: clamp(600px, 40vw, 1100px);
         }
@@ -286,13 +320,13 @@
     <!-- hero
     ================================================== -->
 <section id="hero" class="container-fluid" style="height:105vh">
-    <div class="s-hero__slider">
-        <div class="s-hero__slide">
+    <div class="hero-frame">
+        <div class="hero-slide">
             
-            <div class="s-hero__slide-bg" style="background-color: #f2ede5; background-image: url('{% static 'images/FluxappBackground.webp' %}');"></div>
-            <div class="row s-hero__slide-content ">
+            <div class="hero-bg" style="background-color: #f2ede5; background-image: url('{% static 'images/FluxappBackground.webp' %}');"></div>
+            <div class="row hero-content">
 
-                <div class="column col-lg-10"> 
+                <div class="hero-col col-lg-10"> 
                     <div class="grand-acrostic-wrapper">
                         <h1 class="grand-title-flex">
                             <span class="letter-column">
@@ -320,7 +354,7 @@
                         </h1>
                     </div>
 
-                    <p class="lead hero-lead mt-4 mb-5" style="color: black; font-family: 'Georgia', serif;">
+                    <p class="hero-lead mt-4 mb-5" style="color: black; font-family: 'Georgia', serif;">
                         An open-access data platform for researchers and scientists.
                         Explore over 400 rich soil flux datasets across 80 unique locations around the globe.
                         Visualize, curate, and download near model-ready data in minutes.
