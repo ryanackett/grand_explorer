@@ -958,17 +958,9 @@
     </style>
 
     <style>
-        * {
+        /* Skip the shared navbar so it matches every other page. */
+        *:not(.navbar-glass):not(.navbar-glass *) {
         font-family: sans-serif;
-        }
-
-        /* Keep the shared navbar cart label consistent with the rest of the site. */
-        .data-cart > span.d-none.d-sm-inline {
-            font-family: 'Georgia', 'Times New Roman', serif !important;
-            font-weight: 400 !important;
-        }
-        #cart-count {
-            font-family: 'Georgia', 'Times New Roman', serif !important;
         }
 
         #wrapper {
