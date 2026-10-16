@@ -43,7 +43,7 @@
         body { margin: 0; padding: 0; overflow-x: hidden; }
 
         /* Buttons & Inputs (the navbar toggler keeps its base.html styling) */
-        button:not(.navbar-toggler) {
+        button:where(:not(.navbar-toggler)) {
             display: inline-block; margin: 5px 5px 0 0; padding: 10px 30px;
             outline: 0; border: 0; cursor: pointer; background: #5185a8;
             color: #fff; text-decoration: none; font-family: arial, sans-serif;
@@ -958,7 +958,7 @@
 
     <style>
         /* Skip the shared navbar so it matches every other page. */
-        *:not(.navbar-glass):not(.navbar-glass *) {
+        :where(*:not(.navbar-glass, .navbar-glass *)) {
         font-family: sans-serif;
         }
         .navbar-glass { font-family: var(--font-1); }
