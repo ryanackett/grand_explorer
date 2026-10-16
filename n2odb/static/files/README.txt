@@ -29,8 +29,8 @@ Using this data in a publication requires citing BOTH the GRAND database AND the
 original primary sources for the rows you use.
 
 Suggested citation for GRAND:
-    Ackett, R., Saha, D. (2026). GRAND: The Global Repository for
-    Agricultural N2O Data.
+    Ackett, R. & Saha, D. (2026). The Global Repository for Agricultural N2O
+    Data (GRAND) Explorer [Software]. Zenodo. https://doi.org/10.5281/zenodo.23426861
 
 Every row carries its original source in the "Citation" column (and a link in
 the "DOI" column where available). Please cite the primary studies accordingly.

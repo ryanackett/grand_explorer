@@ -9,6 +9,7 @@ authors:
   - family-names: Saha
     given-names: Debasish
     orcid: "https://orcid.org/0000-0001-9425-675X"
+doi: "10.5281/zenodo.23426861"
 repository-code: "https://github.com/ryanackett/grand_explorer"
 url: "https://grandexplorer.org"
 license: AGPL-3.0-or-later

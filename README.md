@@ -1,10 +1,12 @@
 # GRAND Explorer
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23426861.svg)](https://doi.org/10.5281/zenodo.23426861)
+
 The **Global Repository for Agricultural N2O Data (GRAND) Explorer** is a web platform for
 exploring, inspecting and exporting harmonized soil nitrous oxide (N2O) flux measurements and
 their covariates (soil, climate, crop and management).
 
-Live site: [grandexplorer.org](https://grandexplorer.org) (currently in private preview)
+Live site: [grandexplorer.org](https://grandexplorer.org)
 
 ## What it does
 
@@ -113,9 +115,10 @@ If you use GRAND Explorer, please cite both the platform and the original data s
 downloaded row includes its source citation):
 
 > Ackett, R. & Saha, D. (2026). The Global Repository for Agricultural N2O Data (GRAND)
-> Explorer. Available at grandexplorer.org.
+> Explorer [Software]. Zenodo. https://doi.org/10.5281/zenodo.23426861
 
-A DOI will be added with the first archived release.
+This DOI always resolves to the latest release; each release also has its own version DOI
+on Zenodo.
 
 ## License
 
