@@ -40,22 +40,14 @@ The database contents are **not** part of this repository, which contains only t
 The development setup is a VS Code Dev Container with two services: `app` (Django) and `db`
 (MySQL 8.0). You need Docker and VS Code with the Dev Containers extension.
 
-**1. Create a `.env` file** in the repository root. It is read by both containers and is
-gitignored — never commit it. Minimal development values:
+**1. Create your `.env` file** in the repository root by copying the template, then replace the
+placeholder passwords and secret key:
 
-```ini
-# MySQL container
-MYSQL_DATABASE=fluxapp
-MYSQL_USER=flux
-MYSQL_PASSWORD=change-me
-MYSQL_ROOT_PASSWORD=change-me-too
-
-# Django
-SECRET_KEY=any-long-random-string
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-DATABASE_URL=mysql://flux:change-me@db:3306/fluxapp
+```bash
+cp .env.example .env
 ```
+
+`.env` is read by both containers and is gitignored — never commit it.
 
 **2. Open the folder in VS Code** and choose **Reopen in Container**.
 
