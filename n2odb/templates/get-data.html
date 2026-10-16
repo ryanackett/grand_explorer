@@ -165,6 +165,13 @@
             color: #2c3e50;
             transform: scale(1.15);
         }
+        .treatment-card.in-cart { border-left-color: #28a745; }
+        .treatment-card.in-cart .cart-toggle { color: #28a745; position: relative; }
+        /* Free Font Awesome has no cart-minus: draw a minus into the basket, mirroring fa-cart-plus. */
+        .treatment-card.in-cart .cart-toggle::after {
+            content: ''; position: absolute; left: 34%; top: 28%;
+            width: 38%; height: 12%; border-radius: 1px; background: #fff;
+        }
 
         .t-detail {
             font-size: 1.3rem; color: #555; margin-top: 6px; /* A bit more breathing room */
@@ -700,9 +707,9 @@
                                         onclick="openGraphViz('${tID}')"></i>
                                         
                                         <i id="cart-${tID}" 
-                                        class="fas fa-cart-plus action-icon" 
+                                        class="fas fa-cart-plus action-icon cart-toggle" 
                                         title="Add to Cart" 
-                                        onclick="CartManager.add('${tID}')"></i>
+                                        onclick="CartManager.toggle('${tID}')"></i>
                                     </div>
                                 </div>
 
@@ -1106,6 +1113,19 @@
                 }
             },
 
+            // Remove a single ID (the card's cart icon toggles between add and remove)
+            remove: function(rawId) {
+                const id = String(rawId);
+                localStorage.setItem(this.key, JSON.stringify(this.getCart().filter(c => c !== id)));
+                this.updateBadge();
+                this.updateCardBorders();
+                showToast('Removed 1 dataset from cart.', 'success');
+            },
+
+            toggle: function(rawId) {
+                this.getCart().includes(String(rawId)) ? this.remove(rawId) : this.add(rawId);
+            },
+
             // 3. Update the Navbar Badge
             updateBadge: function() {
                 const cart = this.getCart();
@@ -1125,14 +1145,17 @@
                 this.updateBadge();
             },
 
-            // 5. Update Card Border color
+            // 5. Sync each card's accent and cart icon with the cart (green + minus when in cart)
             updateCardBorders: function() {
                 const cart = this.getCart();
-                console.log("Updating card borders for cart items:", cart);
-                cart.forEach(id => {
-                    const card = document.getElementById(`card-${id}`);
-                    if (card) {
-                        card.style.borderLeft = '2rem solid #28a745'; // Green border for items in cart
+                document.querySelectorAll('.treatment-card').forEach(card => {
+                    const inCart = cart.includes(card.id.slice('card-'.length));
+                    card.classList.toggle('in-cart', inCart);
+                    const icon = card.querySelector('.cart-toggle');
+                    if (icon) {
+                        icon.classList.toggle('fa-cart-plus', !inCart);
+                        icon.classList.toggle('fa-cart-shopping', inCart);
+                        icon.title = inCart ? 'Remove from Cart' : 'Add to Cart';
                     }
                 });
             }
