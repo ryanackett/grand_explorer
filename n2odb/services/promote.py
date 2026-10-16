@@ -299,4 +299,15 @@ def promote(submission) -> dict:
     submission.promotion = result
     submission.status = "promoted"
     submission.submitted_at = locked.submitted_at
+
+    # Fill HMMAD/HMMCD for the new rows. Runs after commit so a detection failure
+    # never undoes the promotion; the caller surfaces the error and the
+    # hot_moment_detection command can fill them later.
+    from . import hot_moments
+    try:
+        _, failed = hot_moments.detect(treatment_ids)
+        if failed:
+            result["hot_moment_error"] = "; ".join(f"treatment {t}: {e}" for t, e in failed.items())
+    except Exception as exc:  # noqa: BLE001 — pyod/sklearn can fail on odd series
+        result["hot_moment_error"] = str(exc)
     return result

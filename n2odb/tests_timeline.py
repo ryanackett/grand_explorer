@@ -701,9 +701,39 @@ class PromoteTests(AuthedWorkbenchTestCase):
             self.assertEqual(trt.PrimaryCrop, "maize")
             self.assertTrue(RawMeasurementTreatment.objects
                             .filter(treatmentid=trt).exists())
+        # Hot-moment flags are filled at promote time, not left blank.
+        self.assertNotIn("hot_moment_error", result)
+        self.assertFalse(RawMeasurementTreatment.objects
+                         .filter(treatmentid__in=result["treatmentids"], n2oflux__isnull=False)
+                         .filter(hmmad__isnull=True).exists())
         sub.refresh_from_db()
         self.assertEqual(sub.status, "promoted")
         self.assertEqual(sub.promotion["raw_count"], result["raw_count"])
+
+    def test_promote_flags_hot_moment_spike(self):
+        from n2odb.services import promote
+        from n2odb.models import RawMeasurementTreatment
+        fluxes = [2.0, 2.4, 1.8, 2.2, 2.1, 1.9, 2.3, 500.0, 2.0, 2.2]
+        rows = [[f"2018-05-{d:02d}", str(f), "NT"] for d, f in enumerate(fluxes, start=1)]
+        sub = self._mk(
+            parsed_content={
+                "source": "file", "source_name": "s.csv",
+                "sheets": [{
+                    "name": "s.csv", "headers": ["date", "n2o_flux", "PlotID"], "rows": rows,
+                    "dtypes": ["date", "float", "string"],
+                    "n_rows": len(rows), "n_rows_stored": len(rows), "header_row": 0, "truncated": False,
+                }],
+            },
+            treatment_details={"treatments": ["NT"],
+                               "global": {"primary_crop": {"value": "maize", "source": "user"}}},
+        )
+        result = promote.promote(sub)
+        self.assertNotIn("hot_moment_error", result)
+        flagged = RawMeasurementTreatment.objects.filter(
+            treatmentid__in=result["treatmentids"], hmmad=True)
+        self.assertEqual([r.n2oflux for r in flagged], [500.0])
+        self.assertFalse(RawMeasurementTreatment.objects.filter(
+            treatmentid__in=result["treatmentids"], hmmad__isnull=True).exists())
 
     def test_promote_derives_continent_and_country_from_coords(self):
         # (42.4, -85.4) is Michigan, USA — offline reverse-geocode should fill

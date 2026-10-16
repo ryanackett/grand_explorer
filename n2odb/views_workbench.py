@@ -2957,6 +2957,12 @@ def curation_action(request, token):
                 f"Promoted to the live database — {result['raw_count']} measurement rows "
                 f"across {len(result['treatmentids'])} treatment(s).",
             )
+            if result.get("hot_moment_error"):
+                messages.warning(
+                    request,
+                    "Hot-moment flags (HMMAD/HMMCD) could not be computed for these rows: "
+                    f"{result['hot_moment_error']}. Run `manage.py hot_moment_detection` to fill them.",
+                )
             _email_contributor(submission, *_decision_email(submission, "promoted", note))
         except promote.PromotionError as exc:
             messages.error(request, str(exc))
