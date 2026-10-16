@@ -3,24 +3,6 @@
 {% block content %}
 {% csrf_token %}
 
-<script src="/static/js/jquery-3.5.0.min.js"></script>
-<script src="/static/js/plugins.js"></script>
-<script src="/static/js/main.js"></script>
-
-<script>
-    // This forcibly deletes the old Highcharts loaded by plugins.js
-    if (window.Highcharts) { 
-        console.warn("Old Highcharts detected in plugins.js - Nuking it.");
-        delete window.Highcharts; 
-    }
-    
-    // This kills any module loaders (like AMD/RequireJS) that templates use 
-    // which often hide Highcharts from the global scope.
-    if (window.define && window.define.amd) { 
-        window.define.amd = null; 
-    }
-</script>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highcharts@11/highmaps.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highcharts@11/modules/exporting.js"></script>

@@ -1,0 +1,536 @@
+/* GRAND Explorer — site-wide base stylesheet.
+ *
+ * Loaded by base.html right after Bootstrap, so equal-specificity rules here
+ * win over Bootstrap's. Page-specific styling lives in each template.
+ *
+ * Sizing: the root font-size is 10px, so 1rem = 10px across the site.
+ * --unit is the vertical rhythm step and --fs the body text size; both
+ * shrink a little on phones.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Serif+Text&family=Inter:wght@300;400;500;600;700&display=swap");
+
+:root {
+    --font-1: "Inter", sans-serif;
+    --font-2: "DM Serif Text", serif;
+    --font-mono: Consolas, "Andale Mono", Courier, "Courier New", monospace;
+
+    --unit: 3.2rem;
+    --fs: 1.8rem;
+
+    /* type sizes, each step x1.2 */
+    --fs-xs: calc(var(--fs) / 1.44);
+    --fs-sm: calc(var(--fs) / 1.2);
+    --fs-md: calc(var(--fs) * 1.2);
+    --fs-lg: calc(var(--fs) * 1.44);
+    --fs-xl: calc(var(--fs) * 1.728);
+    --fs-2xl: calc(var(--fs) * 2.0736);
+    --fs-3xl: calc(var(--fs) * 2.48832);
+    --fs-4xl: calc(var(--fs) * 2.985984);
+
+    --ink: #000;
+    --text: #282828;
+    --rule: #eee;
+    --soft-bg: #eff0f0;
+    --soft-line: #d0d1d1;
+    --field-line: #828484;
+    --hint: #929393;
+    --link: hsl(222, 88%, 33%);
+    --link-hover: hsl(358, 65%, 46%);
+}
+
+@media screen and (max-width: 600px) {
+    :root {
+        --unit: 2.8rem;
+        --fs: 1.7rem;
+    }
+}
+
+/* ---- document ---------------------------------------------------- */
+
+html {
+    font-size: 62.5%;
+    line-height: 1.15;
+    box-sizing: border-box;
+    -webkit-text-size-adjust: 100%;
+}
+
+*, *::before, *::after {
+    box-sizing: inherit;
+}
+
+html, body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--soft-bg);
+    color: var(--text);
+    font-family: var(--font-1);
+    font-size: var(--fs);
+    font-weight: normal;
+    line-height: var(--unit);
+    overflow-wrap: break-word;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: none;
+}
+
+main, details { display: block; }
+summary { display: list-item; }
+template, [hidden] { display: none; }
+
+svg, img, iframe, object {
+    max-width: 100%;
+    height: auto;
+}
+
+img { border-style: none; }
+
+/* Form controls take the page font. */
+button, input, optgroup, select, textarea {
+    margin: 0;
+    font-family: inherit;
+    font-size: 100%;
+    line-height: 1.15;
+}
+
+/* ---- spacing reset: block text elements start flush ---------------- */
+
+div, dl, dt, dd, ul, ol, li, h1, h2, h3, h4, h5, h6,
+pre, form, p, blockquote, th, td, fieldset {
+    margin: 0;
+    padding: 0;
+}
+
+p, ul, ol, dl, pre, blockquote, figure, figcaption, table, form, img,
+input, textarea, select {
+    margin-bottom: var(--unit);
+}
+
+/* ---- headings ---------------------------------------------------- */
+
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+    color: var(--ink);
+    font-family: var(--font-2);
+    font-style: normal;
+    font-weight: 400;
+    font-variant-ligatures: common-ligatures;
+    text-rendering: optimizeLegibility;
+    margin-top: calc(var(--unit) * 2.5);
+    margin-bottom: calc(var(--unit) / 2);
+}
+
+h1, .h1 {
+    font-size: var(--fs-4xl);
+    line-height: calc(var(--unit) * 1.875);
+    margin-top: calc(var(--unit) * 3);
+    margin-bottom: calc(var(--unit) * 0.75);
+}
+
+h2, .h2 { font-size: var(--fs-2xl); line-height: calc(var(--unit) * 1.375); }
+h3, .h3 { font-size: var(--fs-xl);  line-height: calc(var(--unit) * 1.25); }
+h4, .h4 { font-size: var(--fs-lg);  line-height: var(--unit); }
+
+h5, .h5, h6, .h6 { margin-top: calc(var(--unit) * 1.5); }
+h5, .h5 { font-size: var(--fs-md); line-height: calc(var(--unit) * 0.875); }
+
+h6, .h6 {
+    font-family: var(--font-1);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    line-height: calc(var(--unit) * 0.75);
+    letter-spacing: .2em;
+    text-transform: uppercase;
+}
+
+@media screen and (max-width: 600px) {
+    h1, .h1 {
+        font-size: var(--fs-3xl);
+        line-height: calc(var(--unit) * 1.75);
+    }
+}
+
+/* ---- inline text ------------------------------------------------- */
+
+p {
+    font-size: inherit;
+    text-rendering: optimizeLegibility;
+}
+
+a {
+    color: var(--link);
+    background-color: transparent;
+    text-decoration: none;
+    line-height: inherit;
+    transition: all .3s ease-in-out;
+}
+
+a:hover, a:focus, a:active { color: var(--link-hover); }
+a:hover, a:active { outline: 0; }
+
+em, i, strong, b {
+    font-family: var(--font-1);
+    font-size: inherit;
+    line-height: inherit;
+}
+
+em, i { font-style: italic; }
+
+strong, b {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+small {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    line-height: calc(var(--unit) / 2);
+}
+
+sub, sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+}
+
+sub { bottom: -.25em; }
+sup { top: -.5em; }
+
+abbr {
+    font-family: var(--font-1);
+    font-weight: 400;
+    font-variant: small-caps;
+    text-transform: lowercase;
+    letter-spacing: .1em;
+}
+
+abbr[title], dfn[title] {
+    border-bottom: 1px dotted;
+    text-decoration: none;
+    cursor: help;
+}
+
+del { text-decoration: line-through; }
+
+mark {
+    background: hsl(51, 100%, 80%);
+    color: var(--ink);
+}
+
+code, kbd, samp, var, pre {
+    font-family: var(--font-mono);
+}
+
+/* Bootstrap shrinks these to .875em; keep them at the surrounding size. */
+pre, kbd, samp { font-size: 1em; }
+
+code {
+    margin: 0 .2rem;
+    padding: calc((var(--unit) - 1.6rem) / 2 - .1rem) .7rem;
+    border: 1px solid var(--soft-line);
+    border-radius: 3px;
+    background: var(--soft-bg);
+    color: var(--text);
+    font-size: var(--fs-sm);
+    line-height: 1.6rem;
+    white-space: nowrap;
+}
+
+pre {
+    padding: calc(var(--unit) * 0.75) var(--unit) var(--unit);
+    background: var(--soft-bg);
+    overflow-x: auto;
+}
+
+pre > code {
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: none;
+    line-height: var(--unit);
+    white-space: pre;
+}
+
+blockquote {
+    position: relative;
+    padding: var(--unit) calc(var(--unit) * 1.5);
+    border-left: 4px solid black;
+}
+
+blockquote p {
+    color: var(--ink);
+    font-family: var(--font-1);
+    font-size: var(--fs-lg);
+    font-style: normal;
+    font-weight: 400;
+    line-height: calc(var(--unit) * 1.25);
+}
+
+blockquote cite {
+    display: block;
+    color: var(--hint);
+    font-family: var(--font-1);
+    font-size: var(--fs-sm);
+    font-style: normal;
+    font-weight: 400;
+    line-height: calc(var(--unit) * 0.75);
+}
+
+blockquote cite::before { content: "\2014 \0020"; }
+blockquote cite a { color: var(--hint); }
+
+@media screen and (max-width: 400px) {
+    blockquote { padding: calc(var(--unit) * 0.75); }
+}
+
+figure {
+    display: block;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+figure img, p img {
+    margin: 0;
+    vertical-align: bottom;
+}
+
+figure img + figcaption { margin-top: var(--unit); }
+
+figcaption {
+    font-size: var(--fs-sm);
+    text-align: center;
+}
+
+hr {
+    clear: both;
+    box-sizing: content-box;
+    height: 0;
+    overflow: visible;
+    margin: calc(var(--unit) * 2) 0 calc(var(--unit) * 2 - .1rem);
+    border: solid var(--rule);
+    border-width: .1rem 0 0;
+}
+
+/* ---- lists ------------------------------------------------------- */
+
+ul { list-style: disc; }
+ol { list-style: decimal; }
+li { display: list-item; }
+
+ul, ol { margin-left: 1.6rem; }
+ul li { padding-left: .4rem; }
+
+ul ul, ul ol, ol ol, ol ul {
+    margin: 1.6rem 0 1.6rem 1.6rem;
+}
+
+dt { margin: 0; color: var(--link); }
+dd { margin: 0 0 0 2rem; }
+
+/* ---- tables ------------------------------------------------------ */
+
+table {
+    width: 100%;
+    max-width: 100%;
+    border-width: 0;
+    border-collapse: collapse;
+    font-family: var(--font-1);
+}
+
+th, td {
+    padding: calc(var(--unit) / 2) 3.2rem calc(var(--unit) / 2 - .1rem);
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+}
+
+th {
+    padding-bottom: calc(var(--unit) / 2);
+    color: var(--ink);
+    font-family: var(--font-1);
+    font-weight: 600;
+}
+
+th:first-child, td:first-child { padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+
+/* ---- forms ------------------------------------------------------- */
+
+button, input { overflow: visible; }
+button, select { text-transform: none; }
+textarea { overflow: auto; }
+
+button, [type="button"], [type="reset"], [type="submit"] {
+    -webkit-appearance: button;
+}
+
+::-webkit-file-upload-button {
+    -webkit-appearance: button;
+    font: inherit;
+}
+
+fieldset {
+    margin-bottom: calc(var(--unit) / 2);
+    border: none;
+}
+
+legend {
+    display: table;
+    max-width: 100%;
+    padding: 0;
+    white-space: normal;
+}
+
+progress { vertical-align: baseline; }
+
+[type="checkbox"], [type="radio"] {
+    padding: 0;
+}
+
+input[type="checkbox"], input[type="radio"] { display: inline; }
+
+[type="number"]::-webkit-inner-spin-button,
+[type="number"]::-webkit-outer-spin-button {
+    height: auto;
+}
+
+[type="search"] {
+    -webkit-appearance: textfield;
+    outline-offset: -2px;
+}
+
+[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+
+/* Text fields: borderless with an underline. */
+input[type="email"], input[type="number"], input[type="search"],
+input[type="text"], input[type="tel"], input[type="url"],
+input[type="password"], textarea, select {
+    display: block;
+    height: calc(var(--unit) * 2);
+    max-width: 100%;
+    padding: calc(var(--unit) / 2) 0 calc(var(--unit) / 2 - .1rem);
+    border: 0;
+    border-bottom: 1px solid var(--field-line);
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-1);
+    font-size: calc(var(--fs) * 0.7778);
+    line-height: var(--unit);
+    transition: all .3s ease-in-out;
+}
+
+input[type="email"], input[type="number"], input[type="search"],
+input[type="text"], input[type="tel"], input[type="url"],
+input[type="password"], textarea {
+    appearance: none;
+}
+
+textarea { min-height: 25.6rem; }
+
+input[type="email"]:focus, input[type="number"]:focus, input[type="search"]:focus,
+input[type="text"]:focus, input[type="tel"]:focus, input[type="url"]:focus,
+input[type="password"]:focus, textarea:focus, select:focus {
+    color: var(--ink);
+    border-bottom: 2px solid var(--ink);
+}
+
+label, legend {
+    display: block;
+    margin-bottom: calc(var(--unit) / 2);
+    color: var(--ink);
+    font-family: var(--font-1);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    line-height: calc(var(--unit) / 2);
+}
+
+label > input[type="checkbox"], label > input[type="radio"] {
+    position: relative;
+    top: .2rem;
+    margin: 0;
+}
+
+::placeholder { color: var(--hint); }
+
+/* Keep Chrome's autofill from repainting fields yellow. */
+input:-webkit-autofill, input:-webkit-autofill:hover,
+textarea:-webkit-autofill,
+select:-webkit-autofill, select:-webkit-autofill:hover, select:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--link);
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ---- buttons ----------------------------------------------------- */
+
+.btn, button, input[type="submit"], input[type="reset"], input[type="button"] {
+    display: inline-block;
+    height: calc(var(--unit) * 2);
+    margin: 0 .4rem 1.6rem 0;
+    padding: 0 3.2rem;
+    border: .2rem solid var(--soft-line);
+    background-color: var(--soft-line);
+    color: var(--ink);
+    font-family: var(--font-1);
+    font-size: var(--fs-xs);
+    font-weight: 400;
+    line-height: calc(var(--unit) * 2 - .4rem);
+    letter-spacing: .4em;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all .3s;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.btn:hover, button:hover, input[type="submit"]:hover,
+input[type="reset"]:hover, input[type="button"]:hover,
+.btn:focus-visible, button:focus-visible, input[type="submit"]:focus-visible,
+input[type="reset"]:focus-visible, input[type="button"]:focus-visible {
+    border-color: var(--ink);
+    background-color: var(--ink);
+    color: #fff;
+    outline: 0;
+}
+
+/* ---- layout ------------------------------------------------------ */
+
+/* Full-width, centred flex row (also tames Bootstrap's .row gutters). */
+.row {
+    display: flex;
+    flex-flow: row wrap;
+    width: 100%;
+    margin: 0 auto;
+}
+
+@media screen and (max-width: 800px) {
+    .row { width: 90%; }
+}
+
+@media screen and (max-width: 600px) {
+    .row {
+        width: 100%;
+        padding-left: 6vw;
+        padding-right: 6vw;
+    }
+}
+
+/* White content band below the fixed navbar. */
+.page-section {
+    background-color: white;
+    padding-top: calc(var(--unit) * 3);
+}
+
+@media screen and (max-width: 1200px) {
+    .page-section { padding-top: calc(var(--unit) * 5); }
+}
+
+@media screen and (max-width: 400px) {
+    .page-section { padding-top: calc(var(--unit) * 4.5); }
+}
