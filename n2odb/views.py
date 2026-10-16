@@ -530,7 +530,7 @@ def get_graph_json(treatment_id):
 
         # 2. Define All Possible Columns
         fields_map = {
-            'n2oflux': 'N2O Flux',
+            'n2oflux': 'N₂O Flux',
             'nitrogenapplied': 'Nitrogen Applied',
             'wfps': 'WFPS',
             'vwc': 'Volumetric Water Content',
@@ -574,7 +574,7 @@ def get_graph_json(treatment_id):
         # --- A. Top Graph (Flux + Nitrogen) ---
         if any(p[1] is not None for p in raw_series['n2oflux']):
             final_series.append({
-                'name': 'N2O Flux',
+                'name': 'N₂O Flux',
                 'data': raw_series['n2oflux'],
                 'type': 'scatter',  # Already scatter
                 'yAxis': 0,

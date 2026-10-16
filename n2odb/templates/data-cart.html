@@ -307,7 +307,7 @@
             </div>
 
             <div class="widget w-full">
-                <div class="widget-title">N2O Flux Magnitude Distribution</div>
+                <div class="widget-title">N<sub>2</sub>O Flux Magnitude Distribution</div>
                 <div id="hist-chart" style="height: 300px;"></div>
             </div>
         </div>
@@ -416,7 +416,7 @@
 
     function renderSidebar(list, totalRows) {
         document.getElementById('sidebar-stats').innerText = `${list.length} Treatments | ~${(totalRows * 0.0021).toFixed(1)} MB`;
-        document.getElementById('total-rows-display').innerText = totalRows.toLocaleString() + " N2O Flux Measurements";
+        document.getElementById('total-rows-display').innerHTML = totalRows.toLocaleString() + " N<sub>2</sub>O Flux Measurements";
 
         const container = document.getElementById('cart-list-container');
         container.innerHTML = '';
@@ -745,7 +745,7 @@
                     
                     xAxis: { 
                         categories: categories,
-                        title: { text: 'N2O Flux (g N ha-1 day-1)',
+                        title: { text: 'N₂O Flux (g N ha-1 day-1)',
                             style: { fontSize: '1.5rem' } 
                         },
                         labels: {

@@ -818,7 +818,7 @@
             const tourObj = driver({
                 showProgress: true,
                 steps: [
-                    { element: '.data-cart', popover: { title: 'Data Cart', description: 'Use this page to curate a dataset from N2O experiments across the globe. Data can be added by experimental treatment, full experiment, or everything shown on the map below. All datasets you add will be available here in your Data Cart for review and download.' } },
+                    { element: '.data-cart', popover: { title: 'Data Cart', description: 'Use this page to curate a dataset from N<sub>2</sub>O experiments across the globe. Data can be added by experimental treatment, full experiment, or everything shown on the map below. All datasets you add will be available here in your Data Cart for review and download.' } },
                     { element: '.filter-row', popover: { title: 'Filter', description: 'Use these filters to find datasets that match your criteria.' } },
                     { element: '#add-all-cart-btn', popover: { title: 'Bulk Add', description: 'Add all currently filtered points on the map directly to your data cart.' } },
                     { element: '#container', popover: { title: 'Interactive Map', description: 'Click any point on the map to see its specific details about the publication, site, and treatments in the sidebar.' } }
@@ -1242,7 +1242,7 @@
 
                     // 3. COLOR MAPPING
                     const colorMap = {
-                        'N2O Flux': '#000000',               
+                        'N₂O Flux': '#000000',               
                         'Nitrogen Applied': '#28a745',       
                         'Water Filled Pore Space': '#00008B',
                         'Volumetric Water Content': '#00008B',
@@ -1324,7 +1324,7 @@
                         yAxis: [
                             // --- TOP PANE ---
                             { // 0: Flux (Left)
-                                title: { text: 'N2O Flux (g N/ha/d)', style: titleStyle },
+                                title: { text: 'N₂O Flux (g N/ha/d)', style: titleStyle },
                                 labels: { format: '{value}', style: labelStyle },
                                 height: '45%',
                                 lineWidth: 1, lineColor: AXIS_COLOR, tickColor: AXIS_COLOR, tickWidth: 1
