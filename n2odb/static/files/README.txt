@@ -69,6 +69,10 @@ Columns appear in the CSV in the order listed below. Missing values are blank.
 -- MICROMETEOROLOGY / SOIL STATE --
   VWC (%)                      Volumetric water content
   WFPS (%)                     Water-filled pore space
+  VWC Calculated (from WFPS + BD)   VWC derived by GRAND from the row's WFPS and
+                               the treatment's bulk density (see section 5)
+  WFPS Calculated (from VWC + BD)   WFPS derived by GRAND from the row's VWC and
+                               the treatment's bulk density (see section 5)
   Soil Temp (°C)               Soil temperature
   Mean Daily Air Temp (°C)     Mean daily air temperature
   Max Daily Air Temp (°C)      Maximum daily air temperature
@@ -142,6 +146,24 @@ pH/BD/SOM).
   * FIGURE-DIGITIZED VALUES: where data was published only inside a figure, it
     was digitized point-by-point and carries the small reading uncertainty
     inherent to that process.
+
+  * CALCULATED SOIL MOISTURE: many studies report only one moisture metric.
+    GRAND derives the other from it and the treatment's bulk density (BD), and
+    exports it in its own column so reported and derived values stay distinct:
+
+        porosity        = 1 - BD / 2.65
+        VWC Calculated  = WFPS x porosity
+        WFPS Calculated = VWC / porosity
+
+    BD is "Bulk Density (g/cm3)" (which may itself be modeled, see section 4);
+    2.65 g/cm3 is the standard mineral particle density. A calculated value is
+    present only where the other metric and BD exist and 0 < porosity < 1, and it
+    is on the same scale as the value it was derived from. Where a study reported
+    both metrics, the reported and calculated values can differ. The Explorer's
+    filters count a treatment as having VWC (or WFPS) if either the reported or
+    the calculated column is present. To use one column, take the reported value
+    and fall back to the calculated one, e.g. in pandas:
+        df["VWC (%)"].fillna(df["VWC Calculated (from WFPS + BD)"])
 
   * SOM vs SOC: the "Soil Organic Carbon (%)" column is sourced from the soil
     organic matter field; treat the organic-matter/organic-carbon distinction

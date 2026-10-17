@@ -32,3 +32,6 @@ ETL/
 .claude/settings.local.json
 feature_importance.png
 hot_moments_dry_run.csv
+
+# Manuscript analysis (scripts, outputs, DB snapshots with user data) — kept out of GitHub
+analysis/

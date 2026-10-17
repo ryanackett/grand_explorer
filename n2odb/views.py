@@ -905,6 +905,9 @@ def download_zip(request):
             'N2O Flux (g N/ha/d)': 'n2oflux',
             'VWC (%)':          'vwc',
             'WFPS (%)':         'wfps',
+            # Derived by the soil_moisture_calculation command; README explains the equation.
+            'VWC Calculated (from WFPS + BD)':  'vwccalculated',
+            'WFPS Calculated (from VWC + BD)':  'wfpscalculated',
             'Soil Temp (°C)':   'soilt',
             'Mean Daily Air Temp (°C)':  'airt',
             'Max Daily Air Temp (°C)':   'airtmax',
