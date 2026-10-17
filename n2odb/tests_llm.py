@@ -199,7 +199,7 @@ class EnabledTests(TestCase):
             out = extract_facts("The KBS LTER site (42°24' N, 85°24' W)...", ["n2oflux", "vwc"])
 
         self.assertEqual(out["status"], "ok")
-        self.assertEqual(out["model"], "claude-sonnet-4-6")
+        self.assertEqual(out["model"], "claude-haiku-5-5")
         self.assertIn("generated_at", out)
 
         meta = out["metadata"]
@@ -239,7 +239,9 @@ class EnabledTests(TestCase):
         self.assertIn("MANUSCRIPT BODY TEXT HERE", content_text)
         # structured output + configured model.
         self.assertIs(kwargs["output_format"], ManuscriptFacts)
-        self.assertEqual(kwargs["model"], "claude-sonnet-4-6")
+        self.assertEqual(kwargs["model"], "claude-haiku-5-5")
+        self.assertEqual(kwargs["output_config"], {"effort": "medium"})
+        self.assertEqual(kwargs["max_tokens"], 16000)
 
     def test_cache_ttl_opt_in_tags_blocks(self, _en):
         # Setting a TTL re-enables prompt caching on both blocks.

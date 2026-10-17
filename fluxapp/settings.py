@@ -296,9 +296,12 @@ WORKBENCH_DATA_MAX_ROWS = config("WORKBENCH_DATA_MAX_ROWS", default=50000, cast=
 # Model-call settings for the manuscript fact-extraction module
 # (manuscript-llm-module.md §6). ANTHROPIC_API_KEY is read from the environment by
 # the SDK — keep it out of code. Model is a config knob, never a hardcoded downgrade.
-# Sonnet is the default: it handles structured fact extraction well and costs ~5×
-# less per token than Opus. Override with WORKBENCH_LLM_MODEL to escalate.
-WORKBENCH_LLM_MODEL = config("WORKBENCH_LLM_MODEL", default="claude-sonnet-4-6")
+# Haiku 5.5 is the default: built for high-volume structured extraction, at a tenth of
+# Haiku 4.5's per-token price. Override with WORKBENCH_LLM_MODEL to escalate.
+WORKBENCH_LLM_MODEL = config("WORKBENCH_LLM_MODEL", default="claude-haiku-5-5")
+# How much the model thinks before answering (low | medium | high | xhigh | max).
+# Haiku 5.5 thinks by default; effort is the knob (its own default is medium).
+WORKBENCH_LLM_EFFORT = config("WORKBENCH_LLM_EFFORT", default="medium")
 WORKBENCH_LLM_PDF_NATIVE = config("WORKBENCH_LLM_PDF_NATIVE", default=False, cast=bool)
 WORKBENCH_MANUSCRIPT_MAX_TOKENS = config(
     "WORKBENCH_MANUSCRIPT_MAX_TOKENS", default=60000, cast=int

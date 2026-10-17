@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # for a 5m TTL and 2× for 1h; cache reads at 0.1× input. Used only to annotate
 # the usage log — approximate.
 _PRICES = {
+    "claude-haiku-5-5": (0.10, 0.50),  # prompts <=100K tokens; $0.50/$2.50 above
     "claude-opus-4-8": (15.0, 75.0),
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-haiku-4-5-20251001": (1.0, 5.0),
@@ -122,7 +123,7 @@ def parse_structured(
     content: list,
     output_model: type,
     model: str,
-    max_tokens: int = 8000,
+    max_tokens: int = 16000,  # thinking counts toward this, so leave room beyond the JSON
 ) -> Any:
     """One structured-output call → a validated ``output_model`` instance.
 
@@ -138,11 +139,15 @@ def parse_structured(
             system=[text_block(system)],
             messages=[{"role": "user", "content": content}],
             output_format=output_model,
+            output_config={"effort": settings.WORKBENCH_LLM_EFFORT},
         )
     except anthropic.APIError as exc:  # network, rate-limit, 4xx/5xx, etc.
         raise LLMUnavailable(str(exc)) from exc
 
     _log_usage(model, getattr(resp, "usage", None))
+    # Safety classifiers can decline (HTTP 200, no parsed output); say so in the log.
+    if getattr(resp, "stop_reason", None) == "refusal":
+        raise LLMUnavailable(f"model declined the request: {getattr(resp, 'stop_details', None)}")
     parsed = resp.parsed_output
     if parsed is None:
         raise LLMUnavailable("model returned no parseable structured output")

@@ -254,15 +254,18 @@ Tell the model, plainly:
 ## 6. Settings (add alongside the plumbing's)
 
 ```python
-WORKBENCH_LLM_MODEL             = config("WORKBENCH_LLM_MODEL", default="claude-opus-4-8")
+WORKBENCH_LLM_MODEL             = config("WORKBENCH_LLM_MODEL", default="claude-haiku-5-5")
+WORKBENCH_LLM_EFFORT            = config("WORKBENCH_LLM_EFFORT", default="medium")
 WORKBENCH_LLM_PDF_NATIVE        = config("WORKBENCH_LLM_PDF_NATIVE", default=False, cast=bool)
 WORKBENCH_MANUSCRIPT_MAX_TOKENS = config("WORKBENCH_MANUSCRIPT_MAX_TOKENS", default=60000, cast=int)
 # ANTHROPIC_API_KEY is read from the environment by the SDK — keep it out of code.
 ```
 
-Model choice: default `claude-opus-4-8` (accuracy on a hard, once-per-submission
-task). `claude-sonnet-4-6` and `claude-haiku-4-5` are valid cheaper knobs — expose
-via `WORKBENCH_LLM_MODEL`, don't hardcode a downgrade.
+Model choice: default `claude-haiku-5-5` (fast, cheap structured extraction; thinks
+by default, depth set by `WORKBENCH_LLM_EFFORT`). `claude-sonnet-5-5` or
+`claude-opus-5-5` are the escalation knobs — expose via `WORKBENCH_LLM_MODEL`,
+don't hardcode a change. Haiku 5.5 can decline a request (`stop_reason: "refusal"`),
+which surfaces as a "failed" extraction.
 
 ---
 
@@ -287,6 +290,6 @@ with no change to the plumbing's contract or GUI.
 
 ## 8. Cost (per submission, one call)
 
-Full paper ≈ 7k–20k input tokens; small output. `claude-opus-4-8` ≈ 10–15¢,
-`claude-sonnet-4-6` ≈ 6¢, `claude-haiku-4-5` ≈ 2¢ — once per submission,
-human-in-the-loop. Negligible at expected volume; the model is a config knob.
+Full paper ≈ 7k–20k input tokens; small output (plus thinking). `claude-haiku-5-5`
+(≤100K-token prompts: $0.10 / $0.50 per MTok) is well under 1¢ per paper — once per
+submission, human-in-the-loop. Negligible at expected volume; the model is a config knob.
