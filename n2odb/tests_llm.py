@@ -407,3 +407,55 @@ class TreatmentScopeTests(TestCase):
             kw = client.messages.parse.call_args.kwargs
             self.assertIs(kw["output_format"], mx.ScopedManuscriptFacts if scoped else ManuscriptFacts)
             self.assertEqual("TREATMENTS." in kw["system"][0]["text"], scoped)
+
+
+@patch("n2odb.services.llm_assist.is_enabled", return_value=True)
+class EventsPassTests(TestCase):
+    """WORKBENCH_LLM_EVENTS_PASS: a second, events-only call supplies the events."""
+
+    def _client(self, events_error=None):
+        def parse(**kw):
+            if kw["output_format"] is mx.EventsOnly:
+                if events_error:
+                    raise events_error
+                resp = MagicMock()
+                resp.parsed_output = mx.EventsOnly(events=_canned().events * 2)
+                resp.usage.input_tokens, resp.usage.output_tokens = 100, 20
+                return resp
+            resp = MagicMock()
+            resp.parsed_output = _canned()
+            resp.usage.input_tokens, resp.usage.output_tokens = 100, 50
+            return resp
+        client = MagicMock()
+        client.messages.parse.side_effect = parse
+        return client
+
+    def test_events_come_from_the_events_call(self, _en):
+        client = self._client()
+        with patch("n2odb.services.llm_assist._client", return_value=client), \
+                self.settings(WORKBENCH_LLM_EVENTS_PASS=True):
+            out = extract_facts("text", [])
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(len(out["events"]), 2)
+        self.assertEqual(out["events_status"], "ok")
+        self.assertEqual(out["usage"], {"calls": 2, "input_tokens": 200, "output_tokens": 70})
+        systems = [c.kwargs["system"][0]["text"] for c in client.messages.parse.call_args_list]
+        self.assertTrue(any("SEPARATE PASS" in t for t in systems))
+
+    def test_events_call_gets_a_larger_output_cap(self, _en):
+        client = self._client()
+        with patch("n2odb.services.llm_assist._client", return_value=client), \
+                self.settings(WORKBENCH_LLM_EVENTS_PASS=True):
+            extract_facts("text", [])
+        caps = {c.kwargs["output_format"].__name__: c.kwargs["max_tokens"]
+                for c in client.messages.parse.call_args_list}
+        self.assertEqual(caps, {"EventsOnly": 32000, "ManuscriptFacts": 16000})
+
+    def test_metadata_survives_a_failed_events_call(self, _en):
+        client = self._client(events_error=anthropic.APIConnectionError(request=httpx.Request("POST", "http://x")))
+        with patch("n2odb.services.llm_assist._client", return_value=client), \
+                self.settings(WORKBENCH_LLM_EVENTS_PASS=True):
+            out = extract_facts("text", [])
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["metadata"]["ph"]["value"], "6.4")
+        self.assertEqual((out["events"], out["events_status"]), ([], "failed"))

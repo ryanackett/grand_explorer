@@ -22,8 +22,10 @@ provenance-tagged suggestions the contributor confirms — nothing is saved here
 from __future__ import annotations
 
 import base64
+import contextvars
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Literal, get_args
 
@@ -148,6 +150,13 @@ class ScopedManuscriptFacts(BaseModel):
     facts: list[ScopedFact] = PydField(default_factory=list)
     events: list[ScopedEventFact] = PydField(default_factory=list)
     other_notes: str | None = None
+
+
+_EVENTS_MAX_TOKENS = 32000  # the cap costs nothing unless used; avoids truncated event lists
+
+
+class EventsOnly(BaseModel):
+    events: list[EventFact] = PydField(default_factory=list)
 
 
 # --- flatten to the plumbing contract ----------------------------------------
@@ -431,8 +440,42 @@ _SCOPE_RULES = (
 )
 
 
+_EVENTS_ELSEWHERE = (
+    "- EVENTS ARE HANDLED BY A SEPARATE PASS: return `events` as an empty list and spend "
+    "your effort on the facts.\n"
+)
+
+
+def _events_system_prompt() -> str:
+    """Focused prompt for the events-only pass (WORKBENCH_LLM_EVENTS_PASS)."""
+    return (
+        "You are a meticulous data-entry assistant for GRAND, a public database of "
+        "agricultural soil nitrous-oxide (N2O) flux studies. Your ONLY job is to list every "
+        "dated field operation the paper reports: fertiliser / nutrient-input application, "
+        "irrigation, planting/sowing, harvest and tillage.\n\n"
+        "Rules:\n"
+        "- Read the whole paper, including EVERY ROW of schedule tables (dates x treatments "
+        "or dates x operations), table footnotes, the methods and figure captions. Schedule "
+        "tables are the main source - do not summarise them, list each dated row.\n"
+        "- One entry per operation per date. If the same operation on the same date applies "
+        "to several treatments, list it once (put the treatment detail in `notes`); different "
+        "amounts on the same date for different treatments may be separate entries.\n"
+        "- `date_text`: the timing exactly as printed. `date_iso` (YYYY-MM-DD): fill it when "
+        "the day is printed and the year is either printed or unambiguous from the stated "
+        "study period or season (e.g. '17 May' in a study that ran March-October 2010); "
+        "otherwise null. Never invent a day.\n"
+        "- Fertiliser: `amount` + `unit` as printed (prefer kg N/ha), product in "
+        "`nitrogen_form`, source category in `nitrogen_type`. Irrigation: `amount` + `unit` "
+        "(e.g. mm). Planting: `crop`. Tillage: `tillage_instrument`.\n"
+        "- Extract, do not infer operations that are not stated. Every key must be present; "
+        "use null where the paper is silent. Put a verbatim snippet in `source_quote` and a "
+        "self-assessed `confidence` in 0..1.\n"
+        "- Each event's `type` MUST be exactly one of: " + ", ".join(_EVENT_TYPES) + "."
+    )
+
+
 def _system_prompt(already_have: list[str], option_choices: dict | None = None,
-                   scoped: bool = False) -> str:
+                   scoped: bool = False, events_elsewhere: bool = False) -> str:
     have = ", ".join(_label_for(fid) for fid in already_have) if already_have else "none"
     return (
         "You are a meticulous data-entry assistant for GRAND, a public research "
@@ -468,6 +511,7 @@ def _system_prompt(already_have: list[str], option_choices: dict | None = None,
         "`nitrogen_form`/`nitrogen_type`. For a planting, set `crop` to the crop sown; "
         "for a tillage pass, set `tillage_instrument` to the implement used "
         "(e.g. moldboard plough, disk harrow, chisel).\n"
+        + (_EVENTS_ELSEWHERE if events_elsewhere else "")
         + (_SCOPE_RULES if scoped else
            "- A study may report several treatments; capture the soil/crop values that "
            "characterise the site and note treatment context in `notes`/`source_quote`.\n")
@@ -652,6 +696,10 @@ def _empty(status: str) -> dict:
 
 # --- the call ----------------------------------------------------------------
 
+def _int(v) -> int:
+    return v if isinstance(v, int) else 0
+
+
 def extract_facts(
     text: str, already_have: list[str], option_choices: dict | None = None,
     pdf_bytes: bytes | None = None,
@@ -670,23 +718,60 @@ def extract_facts(
         return _empty("skipped")
     if not (text or "").strip():
         return _empty("skipped")
-    try:
-        scoped = getattr(settings, "WORKBENCH_LLM_TREATMENT_SCOPE", False)
-        facts = llm_assist.parse_structured(
-            system=_system_prompt(already_have, option_choices, scoped),
-            content=_build_content(text, pdf_bytes),
+    scoped = getattr(settings, "WORKBENCH_LLM_TREATMENT_SCOPE", False)
+    events_pass = getattr(settings, "WORKBENCH_LLM_EVENTS_PASS", False)
+    content = _build_content(text, pdf_bytes)
+    usage: list = []
+
+    def facts_call():
+        return llm_assist.parse_structured(
+            system=_system_prompt(already_have, option_choices, scoped, events_pass),
+            content=content,
             output_model=ScopedManuscriptFacts if scoped else ManuscriptFacts,
             model=settings.WORKBENCH_LLM_MODEL,
+            usage_out=usage,
         )
+
+    def events_call():
+        return llm_assist.parse_structured(
+            system=_events_system_prompt(), content=content, output_model=EventsOnly,
+            model=settings.WORKBENCH_LLM_MODEL, usage_out=usage,
+            # Long schedules need room: the cap costs nothing unless used.
+            max_tokens=_EVENTS_MAX_TOKENS,
+        )
+
+    try:
+        events_future = None
+        if events_pass:  # both calls run at once, so the user waits for one, not two
+            pool = ThreadPoolExecutor(max_workers=1)
+            events_future = pool.submit(contextvars.copy_context().run, events_call)
+            pool.shutdown(wait=False)
+        facts = facts_call()
+        events_status = None
+        if events_future is not None:
+            try:
+                facts.events = events_future.result().events
+                events_status = "ok"
+            except Exception:  # noqa: BLE001 — keep the metadata even if events fail
+                logger.exception("events pass failed")
+                facts.events, events_status = [], "failed"
         facts = _validate(facts, option_choices)
         out = _to_contract(facts)
         _derive_texture(out["metadata"])  # particle-size split wins over text
-        return {
+        result = {
             "status": "ok",
             **out,
             "model": settings.WORKBENCH_LLM_MODEL,
             "generated_at": _now_iso(),
+            "usage": {
+                "calls": len(usage),
+                "input_tokens": sum(_int(getattr(u, "input_tokens", 0)) for u in usage),
+                "output_tokens": sum(_int(getattr(u, "output_tokens", 0)) for u in usage),
+            },
         }
+        if events_status:
+            result["events_status"] = events_status
+        return result
     except Exception:  # noqa: BLE001 — the seam must never raise into the request
         logger.exception("manuscript extraction failed")
         return _empty("failed")

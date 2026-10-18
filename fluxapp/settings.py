@@ -309,6 +309,9 @@ WORKBENCH_LLM_PDF_NATIVE = config("WORKBENCH_LLM_PDF_NATIVE", default=False, cas
 # whole-site or treatment-specific (adds `treatments`, `treatment_metadata` and an
 # event `treatment` key to the extraction result; site-level metadata is unchanged).
 WORKBENCH_LLM_TREATMENT_SCOPE = config("WORKBENCH_LLM_TREATMENT_SCOPE", default=False, cast=bool)
+# Extract dated field operations in a second, focused call run alongside the metadata
+# call (same document; roughly doubles input tokens, not wait time).
+WORKBENCH_LLM_EVENTS_PASS = config("WORKBENCH_LLM_EVENTS_PASS", default=False, cast=bool)
 WORKBENCH_MANUSCRIPT_MAX_TOKENS = config(
     "WORKBENCH_MANUSCRIPT_MAX_TOKENS", default=60000, cast=int
 )

@@ -124,12 +124,13 @@ def parse_structured(
     output_model: type,
     model: str,
     max_tokens: int = 16000,  # thinking counts toward this, so leave room beyond the JSON
+    usage_out: list | None = None,
 ) -> Any:
     """One structured-output call → a validated ``output_model`` instance.
 
     The ``system`` block (stable instructions + field catalogue) is sent as a
     cacheable text block; ``content`` is the per-request user content (the delimited
-    manuscript). Raises ``LLMUnavailable`` on any API failure or if the model
+    manuscript). If ``usage_out`` is given, the response's token usage is appended to it. Raises ``LLMUnavailable`` on any API failure or if the model
     returns nothing parseable — it never returns ``None``.
     """
     try:
@@ -145,6 +146,8 @@ def parse_structured(
         raise LLMUnavailable(str(exc)) from exc
 
     _log_usage(model, getattr(resp, "usage", None))
+    if usage_out is not None and getattr(resp, "usage", None) is not None:
+        usage_out.append(resp.usage)
     # Safety classifiers can decline (HTTP 200, no parsed output); say so in the log.
     if getattr(resp, "stop_reason", None) == "refusal":
         raise LLMUnavailable(f"model declined the request: {getattr(resp, 'stop_details', None)}")
