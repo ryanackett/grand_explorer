@@ -243,6 +243,18 @@ class EnabledTests(TestCase):
         self.assertEqual(kwargs["output_config"], {"effort": "medium"})
         self.assertEqual(kwargs["max_tokens"], 16000)
 
+    def test_pdf_native_sends_document_block_only_when_enabled(self, _en):
+        for native, expect_doc in ((False, False), (True, True)):
+            client = _mock_client(parsed=_canned())
+            with patch("n2odb.services.llm_assist._client", return_value=client), \
+                    self.settings(WORKBENCH_LLM_PDF_NATIVE=native):
+                extract_facts("TEXT BODY", ["n2oflux"], pdf_bytes=b"%PDF-1.4 fake")
+            content = client.messages.parse.call_args.kwargs["messages"][0]["content"]
+            self.assertEqual(content[0]["type"] == "document", expect_doc)
+            if expect_doc:
+                self.assertEqual(content[0]["source"]["media_type"], "application/pdf")
+                self.assertNotIn("TEXT BODY", content[1]["text"])
+
     def test_cache_ttl_opt_in_tags_blocks(self, _en):
         # Setting a TTL re-enables prompt caching on both blocks.
         client = _mock_client(parsed=_canned())
@@ -355,3 +367,43 @@ class EnabledTests(TestCase):
         with patch("n2odb.services.llm_assist._client", return_value=client):
             out = extract_facts("text", [])
         self.assertEqual(out["status"], "failed")
+
+
+class TreatmentScopeTests(TestCase):
+    """WORKBENCH_LLM_TREATMENT_SCOPE: whole-site values stay in `metadata`; per-treatment ones
+    go to `treatment_metadata`; events carry their treatment scope."""
+
+    def _fact(self, field, value, treatment):
+        return mx.ScopedFact(field=field, value=value, unit=None, source_quote=None, confidence=0.9,
+                             treatment=treatment)
+
+    def _event(self, date, treatment):
+        return mx.ScopedEventFact(type="fertilisation", date_iso=date, date_text=None, amount=50.0,
+                                  unit="kg N/ha", nitrogen_form="urea", nitrogen_type=None, crop=None,
+                                  tillage_instrument=None, notes=None, source_quote=None, confidence=0.9,
+                                  treatment=treatment)
+
+    def test_scoped_contract(self):
+        facts = mx.ScopedManuscriptFacts(
+            treatments=["N0", "N150"],
+            facts=[self._fact("ph", "6.1", "N150"), self._fact("ph", "6.0", None),
+                   self._fact("ph", "5.9", "N0")],
+            events=[self._event("2020-05-01", None), self._event("2020-06-01", "N150")],
+        )
+        out = mx._to_contract(facts)
+        self.assertEqual(out["treatments"], ["N0", "N150"])
+        self.assertEqual(out["metadata"]["ph"]["value"], "6.0")  # whole-site value wins
+        self.assertEqual(out["treatment_metadata"]["N0"]["ph"]["value"], "5.9")
+        self.assertEqual(out["treatment_metadata"]["N150"]["ph"]["value"], "6.1")
+        self.assertEqual([e["treatment"] for e in out["events"]], [None, "N150"])
+
+    @patch("n2odb.services.llm_assist.is_enabled", return_value=True)
+    def test_flag_switches_schema_and_prompt(self, _en):
+        for scoped in (False, True):
+            client = _mock_client(parsed=_canned())
+            with patch("n2odb.services.llm_assist._client", return_value=client), \
+                    self.settings(WORKBENCH_LLM_TREATMENT_SCOPE=scoped):
+                extract_facts("text", [])
+            kw = client.messages.parse.call_args.kwargs
+            self.assertIs(kw["output_format"], mx.ScopedManuscriptFacts if scoped else ManuscriptFacts)
+            self.assertEqual("TREATMENTS." in kw["system"][0]["text"], scoped)

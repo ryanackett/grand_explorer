@@ -302,7 +302,13 @@ WORKBENCH_LLM_MODEL = config("WORKBENCH_LLM_MODEL", default="claude-haiku-5-5")
 # How much the model thinks before answering (low | medium | high | xhigh | max).
 # Haiku 5.5 thinks by default; effort is the knob (its own default is medium).
 WORKBENCH_LLM_EFFORT = config("WORKBENCH_LLM_EFFORT", default="medium")
+# Send the uploaded PDF itself (not the extracted text) to the model, so two-column
+# layouts, tables and figure labels arrive intact. Text-only uploads are unaffected.
 WORKBENCH_LLM_PDF_NATIVE = config("WORKBENCH_LLM_PDF_NATIVE", default=False, cast=bool)
+# Ask the model to name the paper's treatments and mark each soil value / event as
+# whole-site or treatment-specific (adds `treatments`, `treatment_metadata` and an
+# event `treatment` key to the extraction result; site-level metadata is unchanged).
+WORKBENCH_LLM_TREATMENT_SCOPE = config("WORKBENCH_LLM_TREATMENT_SCOPE", default=False, cast=bool)
 WORKBENCH_MANUSCRIPT_MAX_TOKENS = config(
     "WORKBENCH_MANUSCRIPT_MAX_TOKENS", default=60000, cast=int
 )

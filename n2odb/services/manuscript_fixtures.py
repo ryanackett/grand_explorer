@@ -49,7 +49,8 @@ SAMPLE_FACTS: dict = {
 
 
 def fake_extract_facts(
-    text: str, already_have: list[str], option_choices: dict | None = None
+    text: str, already_have: list[str], option_choices: dict | None = None,
+    pdf_bytes: bytes | None = None,
 ) -> dict:
     """Return a copy of the canned contract, minus any ``already_have`` fields."""
     import copy

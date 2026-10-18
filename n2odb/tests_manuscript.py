@@ -317,6 +317,34 @@ class DeriveMetadataTests(TestCase):
         derive_metadata(src)
         self.assertNotIn("pub_link", src)
 
+    def test_coordinates_become_signed_decimals(self):
+        out = derive_metadata({
+            "site_latitude": {"value": "26°58′16.8″ S", "unit": "°"},
+            "site_longitude": {"value": "85°24′", "unit": "°"},  # paper's W dropped
+        })
+        self.assertAlmostEqual(out["site_latitude"]["value"], -26.971333)
+        self.assertEqual(out["site_latitude"]["original_value"], "26°58′16.8″ S")
+        self.assertEqual(out["site_longitude"]["value"], 85.4)
+        self.assertIn("check the sign", out["site_longitude"]["note"])
+
+    def test_impossible_dms_is_left_as_written(self):
+        out = derive_metadata({"site_longitude": {"value": "151°82′85.3″ E", "unit": "°"}})
+        self.assertEqual(out["site_longitude"]["value"], "151°82′85.3″ E")
+
+    def test_soil_and_climate_units_convert_to_canonical(self):
+        out = derive_metadata({
+            "sand": {"value": "365", "unit": "g kg−1"},
+            "bulk_density": {"value": "1450", "unit": "kg m-3"},
+            "map": {"value": "89.0", "unit": "cm"},
+            "mat": {"value": "50", "unit": "°F"},
+            "clay": {"value": "33 (0–10 cm), 31 (10–20 cm)", "unit": "%"},  # profile: untouched
+        })
+        self.assertEqual((out["sand"]["value"], out["sand"]["unit"]), ("36.5", "%"))
+        self.assertEqual(out["bulk_density"]["value"], "1.45")
+        self.assertEqual(out["map"]["value"], "890")
+        self.assertEqual((out["mat"]["value"], out["mat"]["unit"]), ("10", "°C"))
+        self.assertEqual(out["clay"]["value"], "33 (0–10 cm), 31 (10–20 cm)")
+
 
 class DoiEnrichServiceTests(TestCase):
     def _fake_urlopen(self, payload, status=200):

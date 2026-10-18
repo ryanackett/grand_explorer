@@ -643,8 +643,9 @@ def extract_document(request, token):
                 status=429,
             )
 
+    pdf_bytes = bytes(document.file_bytes) if document.kind == "pdf" and document.file_bytes else None
     module_result = manuscript_extract.extract_facts(
-        document.extracted_text, _already_have(submission), _option_choices()
+        document.extracted_text, _already_have(submission), _option_choices(), pdf_bytes=pdf_bytes
     )
     status = module_result.get("status", "skipped")
 
