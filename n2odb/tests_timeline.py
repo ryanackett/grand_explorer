@@ -1113,7 +1113,7 @@ class UnitsConvertTests(TestCase):
     def test_noop_and_incompatible_pass_through(self):
         from n2odb.services import units
         self.assertEqual(units.convert("soilt", 20, "°C"), 20)      # already canonical
-        self.assertEqual(units.convert("vwc", 30, "%"), 30)         # field has no unit concept
+        self.assertAlmostEqual(units.convert("vwc", 30, "%"), 0.3)  # moisture is stored as a fraction
         self.assertEqual(units.convert("soilnh4", 5, "kg N/ha"), 5)  # dimensionally incompatible
         self.assertIsNone(units.convert("n2oflux", None, "kg N/ha/d"))
 

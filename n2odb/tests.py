@@ -24,7 +24,7 @@ class ExportCalculatedMoistureTests(TestCase):
         rows = list(csv.DictReader(io.StringIO(
             zipfile.ZipFile(io.BytesIO(zbytes)).read('n2odb_data_export.csv').decode('utf-8'))))
 
-        self.assertEqual(rows[0]['VWC (%)'], '')  # reported VWC stays blank
+        self.assertEqual(rows[0]['VWC (m3/m3)'], '')  # reported VWC stays blank
         self.assertEqual(rows[0]['VWC Calculated (from WFPS + BD)'], '0.3')
-        self.assertEqual(rows[0]['WFPS (%)'], '0.6')
+        self.assertEqual(rows[0]['WFPS (fraction)'], '0.6')
         self.assertEqual(rows[0]['WFPS Calculated (from VWC + BD)'], '')

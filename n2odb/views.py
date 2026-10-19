@@ -903,8 +903,8 @@ def download_zip(request):
             'Treatment ID':     'treatmentid',
             'Date':             'date',
             'N2O Flux (g N/ha/d)': 'n2oflux',
-            'VWC (%)':          'vwc',
-            'WFPS (%)':         'wfps',
+            'VWC (m3/m3)':      'vwc',
+            'WFPS (fraction)':  'wfps',
             # Derived by the soil_moisture_calculation command; README explains the equation.
             'VWC Calculated (from WFPS + BD)':  'vwccalculated',
             'WFPS Calculated (from VWC + BD)':  'wfpscalculated',

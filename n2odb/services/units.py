@@ -20,11 +20,11 @@ _FLUX_UNITS = [
 _TEMP_UNITS = ["°C", "°F", "K"]
 _CONC_UNITS = ["mg N/kg", "µg N/g", "mg/kg", "ppm", "kg N/ha"]
 _DEPTH_UNITS = ["mm", "cm", "in"]
+_MOISTURE_UNITS = ["fraction (0–1)", "%"]
 
 # field id -> ordered unit choices (canonical first). Fields not listed here have
-# no unit concept (dates, day-of-year, categorical/text fields) — or are reported
-# consistently enough that a unit choice is unnecessary (VWC/WFPS are effectively
-# always %, so no conversion is needed).
+# no unit concept (dates, day-of-year, categorical/text fields). GRAND stores VWC and WFPS as fractions; papers
+# report both fractions and percent, so the contributor says which.
 UNIT_OPTIONS: dict[str, list[str]] = {
     "n2oflux": _FLUX_UNITS,
     "fluxstandarderror": _FLUX_UNITS,
@@ -37,6 +37,8 @@ UNIT_OPTIONS: dict[str, list[str]] = {
     "soilno3": _CONC_UNITS,
     "nitrogenapplied": ["kg N/ha", "g N/m²", "lb N/acre"],
     "irrigationapplied": ["mm", "cm", "in", "L/m²"],
+    "vwc": _MOISTURE_UNITS,
+    "wfps": _MOISTURE_UNITS,
 }
 
 
@@ -71,6 +73,8 @@ _FACTORS: dict[str, dict[str, float]] = {
     "mm": {"mm": 1.0, "cm": 10.0, "in": 25.4, "L/m²": 1.0},
     # nitrogen applied → kg N/ha
     "kg N/ha": {"kg N/ha": 1.0, "g N/m²": 10.0, "lb N/acre": 1.120851},
+    # soil moisture → fraction
+    "fraction (0–1)": {"fraction (0–1)": 1.0, "%": 0.01},
 }
 
 

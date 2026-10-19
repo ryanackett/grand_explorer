@@ -215,7 +215,7 @@ Page-agnostic: no wizard URLs here — the Review stage adds its own Continue ha
             addAxis('mgmt', band('top', { title:{ text:'Fertilizer Applied' + (fertU ? ' (' + fertU + ')' : ''), style:titleStyle }, opposite:true, gridLineWidth:0 }));
         }
         if (panes.includes('mid')) {
-            addAxis('moist',  band('mid', { title:{ text:'Moisture (%)', style:titleStyle } }));
+            addAxis('moist',  band('mid', { title:{ text:'Moisture (fraction)', style:titleStyle } }));
             addAxis('temp',   band('mid', { title:{ text:'Temp (°C)', style:titleStyle }, opposite:true, gridLineWidth:0,
                                             visible: nonEmpty(series, ['soilt','airt']) }));
             addAxis('precip', band('mid', { title:{ text:'Precip (mm)', style:titleStyle }, opposite:true, gridLineWidth:0,

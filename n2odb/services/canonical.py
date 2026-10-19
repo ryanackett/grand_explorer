@@ -75,12 +75,12 @@ CANONICAL_FIELDS: list[CanonicalField] = [
 
     # --- Soil & climate covariates (Plane A) ---
     CanonicalField(
-        "vwc", "Volumetric water content (VWC)", "Soil & climate", unit="%",
+        "vwc", "Volumetric water content (VWC)", "Soil & climate", unit="m³/m³",
         aliases=("vwc", "volumetric water content", "soil moisture", "moisture",
                  "water content", "swc", "theta", "soil water content"),
     ),
     CanonicalField(
-        "wfps", "Water-filled pore space (WFPS)", "Soil & climate", unit="%",
+        "wfps", "Water-filled pore space (WFPS)", "Soil & climate", unit="fraction",
         aliases=("wfps", "water filled pore space", "water-filled pore space",
                  "pore space", "percent wfps"),
     ),

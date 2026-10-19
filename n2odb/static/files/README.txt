@@ -67,8 +67,9 @@ Columns appear in the CSV in the order listed below. Missing values are blank.
   Soil NO3 (mg/kg)             Soil nitrate
 
 -- MICROMETEOROLOGY / SOIL STATE --
-  VWC (%)                      Volumetric water content
-  WFPS (%)                     Water-filled pore space
+  VWC (m3/m3)                  Volumetric water content, as a fraction (0-1)
+  WFPS (fraction)              Water-filled pore space, as a fraction (0-1;
+                               can slightly exceed 1 where bulk density is off)
   VWC Calculated (from WFPS + BD)   VWC derived by GRAND from the row's WFPS and
                                the treatment's bulk density (see section 5)
   WFPS Calculated (from VWC + BD)   WFPS derived by GRAND from the row's VWC and
@@ -157,13 +158,13 @@ pH/BD/SOM).
 
     BD is "Bulk Density (g/cm3)" (which may itself be modeled, see section 4);
     2.65 g/cm3 is the standard mineral particle density. A calculated value is
-    present only where the other metric and BD exist and 0 < porosity < 1, and it
-    is on the same scale as the value it was derived from. Where a study reported
+    present only where the other metric and BD exist and 0 < porosity < 1. Like
+    the reported values, it is a fraction (0-1); multiply by 100 for percent. Where a study reported
     both metrics, the reported and calculated values can differ. The Explorer's
     filters count a treatment as having VWC (or WFPS) if either the reported or
     the calculated column is present. To use one column, take the reported value
     and fall back to the calculated one, e.g. in pandas:
-        df["VWC (%)"].fillna(df["VWC Calculated (from WFPS + BD)"])
+        df["VWC (m3/m3)"].fillna(df["VWC Calculated (from WFPS + BD)"])
 
   * SOM vs SOC: the "Soil Organic Carbon (%)" column is sourced from the soil
     organic matter field; treat the organic-matter/organic-carbon distinction
