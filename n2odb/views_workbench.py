@@ -47,6 +47,7 @@ from .services import (
     site_fields,
     suggest,
     tabular,
+    treatment_match,
     units,
 )
 from .services.manuscript_merge import derive_metadata, merge_metadata
@@ -670,6 +671,14 @@ def extract_document(request, token):
     facts["status"] = status
     facts["metadata"] = metadata
     facts["events"] = module_result.get("events", [])
+    # Treatment-aware extraction: the paper's treatments and the values specific to some of
+    # them, run through the same unit/coordinate normalisation as the site-wide metadata.
+    facts["treatments"] = module_result.get("treatments") or []
+    facts.pop("treatment_map", None)  # labels may have changed: re-link on the next soil/timeline visit
+    facts["treatment_metadata"] = {
+        tag: derive_metadata(dict(values))
+        for tag, values in (module_result.get("treatment_metadata") or {}).items()
+    }
     if enrichment:
         facts["enrichment"] = enrichment
     for key in ("model", "generated_at", "usage"):
@@ -1362,6 +1371,41 @@ def _paper_facts(submission: UploadSubmission, fields) -> dict:
     return out
 
 
+def _treatment_map(submission: UploadSubmission, data_names: list[str]) -> dict | None:
+    """The LLM's links from the extraction's treatment labels to the data's treatment names, cached on the
+    submission and recomputed only when the names or labels change. None -> deterministic matcher only."""
+    facts = submission.manuscript_facts or {}
+    labels = treatment_match.labels_in(facts)
+    if not (labels and data_names):
+        return None
+    cached = facts.get("treatment_map") or {}
+    if cached.get("names") == list(data_names) and cached.get("labels") == labels:
+        return cached.get("map")
+    mapping = manuscript_extract.map_treatments(labels, facts.get("treatments") or [], list(data_names))
+    facts["treatment_map"] = {"names": list(data_names), "labels": labels, "map": mapping}
+    submission.manuscript_facts = facts
+    submission.save(update_fields=["manuscript_facts", "updated_at"])
+    return mapping
+
+
+def _paper_facts_per_treatment(submission: UploadSubmission, fields, detected: list[str]) -> dict:
+    """Data treatment -> {field id -> paper value} for values the paper gives per treatment,
+    matched to the data's treatment names (treatment_match.resolve). Fields not listed fall
+    back to the site-wide paper value."""
+    facts = submission.manuscript_facts or {}
+    paper_trts = facts.get("treatments") or []
+    mapping = _treatment_map(submission, detected)
+    ids = {f.id for f in fields}
+    out: dict = {}
+    for tag, values in (facts.get("treatment_metadata") or {}).items():
+        for name in treatment_match.resolve_with(mapping, tag, detected, paper_trts):
+            for fid, m in values.items():
+                if fid in ids and m.get("value") not in (None, ""):
+                    out.setdefault(name, {}).setdefault(
+                        fid, {"value": m.get("value"), "source_quote": m.get("source_quote")})
+    return out
+
+
 def _sheet_treatment_column_idx(sheet: dict, detected: list[str]) -> int | None:
     """Index of the column in ``sheet`` that best identifies treatments — the one whose
     distinct values overlap the detected treatment set most. Lets a static soil sheet be
@@ -1444,6 +1488,7 @@ def soil_mgmt(request, token):
             "saved_details": saved,
             "leftover_columns": _soil_leftover_columns(submission),
             "paper_facts": _paper_facts(submission, fields),
+            "paper_facts_per_treatment": _paper_facts_per_treatment(submission, fields, detected),
             "required_ids": [f.id for f in fields if f.required],
             **_wizard_context(current_step=4, submission=submission),
         },
@@ -1583,10 +1628,13 @@ def _timeline_treatments(submission: UploadSubmission) -> list[str]:
     return _detected_treatments(submission, _treatment_column(submission))
 
 
-def _paper_events(submission: UploadSubmission, options: dict) -> dict:
+def _paper_events(submission: UploadSubmission, options: dict, treatments: list[str] | None = None) -> dict:
     """Group the module's extracted events by timeline section, as pre-fill cards.
 
-    Returns ``{section_id: [ {fields, source, source_quote, confidence}, ... ]}``.
+    Returns ``{section_id: [ {fields, source, source_quote, confidence}, ... ]}``, plus
+    ``"_per_treatment": {section_id: {treatment: [...]}}`` for sections where the paper ties
+    some events to particular treatments (matched to the data's names): each treatment then
+    gets the whole-site events and its own.
     A fertiliser *type* is resolved to the DB vocabulary (off-list → left blank, so a
     strict dropdown never shows an unlisted value).
     """
@@ -1594,7 +1642,14 @@ def _paper_events(submission: UploadSubmission, options: dict) -> dict:
     out: dict = {et.id: [] for et in event_fields.types()}
     nvocab = options.get("nitrogen_type", [])
 
-    for ev in (submission.manuscript_facts or {}).get("events", []):
+    facts = submission.manuscript_facts or {}
+    mapping = _treatment_map(submission, treatments or [])
+    # If none of the paper's labels links to any data treatment, the names are unlinkable (not extra
+    # treatments), so tagged events are treated as whole-site.
+    linked = any(treatment_match.resolve_with(mapping, t, treatments or [], facts.get("treatments"))
+                 for t in treatment_match.labels_in(facts))
+    tagged: list = []  # (section, record, matched data treatments)
+    for ev in facts.get("events", []):
         et = by_contract.get(ev.get("type"))
         if et is None:
             continue
@@ -1639,7 +1694,22 @@ def _paper_events(submission: UploadSubmission, options: dict) -> dict:
             }
             if date_hint and date_hint != real_date:
                 rec["date_hint"] = date_hint
-            out[et.id].append(rec)
+            if not ev.get("treatment") or not linked:  # whole-site: applies to every treatment
+                out[et.id].append(rec)
+            elif treatments:
+                # A tag no data treatment matches belongs to a treatment the contributor isn't
+                # submitting (papers often report more treatments than a dataset holds): dropped.
+                hits = treatment_match.resolve_with(mapping, ev["treatment"], treatments, facts.get("treatments"))
+                if hits:
+                    tagged.append((et.id, rec, hits))
+            else:  # no treatment column mapped: one bucket for the whole site
+                out[et.id].append(rec)
+    per: dict = {}
+    for section, rec, hits in tagged:
+        sec = per.setdefault(section, {t: list(out[section]) for t in treatments or []})
+        for t in hits:
+            sec[t].append(rec)
+    out["_per_treatment"] = per
     return out
 
 
@@ -1668,7 +1738,7 @@ def timeline(request, token):
             "public_token": submission.public_token,
             "event_types": event_types,
             "treatments": _timeline_treatments(submission),
-            "paper_events": _paper_events(submission, options),
+            "paper_events": _paper_events(submission, options, _timeline_treatments(submission)),
             "saved_events": saved,
             **_wizard_context(current_step=5, submission=submission),
         },

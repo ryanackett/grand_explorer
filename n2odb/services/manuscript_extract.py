@@ -145,8 +145,14 @@ class ScopedEventFact(EventFact):
     treatment: str | None     # null = applied to every treatment; else name(s) as in `treatments`
 
 
+class TreatmentInfo(BaseModel):
+    name: str                  # as the paper labels it, e.g. 'Conventional tillage + urea'
+    abbreviation: str | None   # as printed, e.g. 'CT-U'; null if none
+    description: str | None    # its factor levels (tillage, N source/rate, crop, irrigation...)
+
+
 class ScopedManuscriptFacts(BaseModel):
-    treatments: list[str] = PydField(default_factory=list)
+    treatments: list[TreatmentInfo] = PydField(default_factory=list)
     facts: list[ScopedFact] = PydField(default_factory=list)
     events: list[ScopedEventFact] = PydField(default_factory=list)
     other_notes: str | None = None
@@ -159,7 +165,22 @@ class EventsOnly(BaseModel):
     events: list[EventFact] = PydField(default_factory=list)
 
 
+class ScopedEventsOnly(BaseModel):
+    treatments: list[TreatmentInfo] = PydField(default_factory=list)
+    events: list[ScopedEventFact] = PydField(default_factory=list)
+
+
 # --- flatten to the plumbing contract ----------------------------------------
+
+# Text the model sometimes writes instead of leaving a field null. Shown in a form it is a value the
+# contributor has to delete, so it is treated as no value.
+_PLACEHOLDERS = {"none", "null", "n/a", "na", "not reported", "not explicitly reported", "not stated",
+                 "not specified", "not given", "not available", "not applicable", "-"}  # not "Unknown": a DB category
+
+
+def _is_placeholder(value) -> bool:
+    return value is None or str(value).strip().strip(".").lower() in _PLACEHOLDERS | {""}
+
 
 def _to_contract(facts: ManuscriptFacts | ScopedManuscriptFacts) -> dict:
     metadata: dict = {}
@@ -169,7 +190,7 @@ def _to_contract(facts: ManuscriptFacts | ScopedManuscriptFacts) -> dict:
     for f in ordered:
         if f.field not in _VALID_FIELD_IDS:
             continue
-        if f.value is None or str(f.value).strip() == "":
+        if _is_placeholder(f.value):
             continue
         entry = {
             "value": f.value,
@@ -187,6 +208,9 @@ def _to_contract(facts: ManuscriptFacts | ScopedManuscriptFacts) -> dict:
     events: list = []
     for e in facts.events:
         fields: list = []
+        for attr in ("nitrogen_form", "nitrogen_type", "crop", "tillage_instrument", "date_text"):
+            if _is_placeholder(getattr(e, attr)):
+                setattr(e, attr, None)
         if e.amount is not None:
             fields.append({"key": "amount", "label": "Amount", "value": e.amount, "unit": e.unit})
         if e.nitrogen_form:
@@ -210,7 +234,7 @@ def _to_contract(facts: ManuscriptFacts | ScopedManuscriptFacts) -> dict:
         })
     out = {"metadata": metadata, "events": events}
     if isinstance(facts, ScopedManuscriptFacts):
-        out["treatments"] = facts.treatments
+        out["treatments"] = [t.model_dump() for t in facts.treatments]
         out["treatment_metadata"] = by_treatment
     return out
 
@@ -427,16 +451,36 @@ def _vocab_section(option_choices: dict | None) -> str:
 
 
 _SCOPE_RULES = (
-    "- TREATMENTS. First list every experimental treatment in `treatments`, named exactly as "
-    "the paper labels them (e.g. 'N0', 'Urea 150', 'no-till'). Then, for EVERY soil property "
-    "and EVERY event, decide whether it applies to the whole site (all treatments) or only to "
-    "some treatments, and set `treatment` accordingly: null when it applies to the whole "
-    "site/all treatments; otherwise the treatment name(s) from `treatments`, comma-separated "
-    "if several. When a soil property differs between treatments, emit one fact per treatment. "
-    "When an operation applies to every treatment, emit it ONCE with `treatment` null (do not "
-    "repeat it per treatment); when it applies to several but not all, emit it once naming "
-    "those treatments. Schedule tables (dates x treatments) and per-treatment soil tables are "
-    "the usual source for this - read them row by row.\n"
+    "- TREATMENTS. First list every experimental treatment in `treatments`: its `name` as the "
+    "paper labels it, its `abbreviation` exactly as printed (e.g. 'CT', 'NT-U'; null if none), "
+    "and a short `description` of its factor levels (tillage, N source and rate, crop, "
+    "irrigation...). Then, for EVERY soil property, crop/management field and event, make a "
+    "judgement: is it the same for all treatments, or does it differ between treatments?\n"
+    "  * Same for all (or the paper gives one value for the site): emit it ONCE with "
+    "`treatment` null.\n"
+    "  * Differs: emit one entry per treatment that has its own value, with `treatment` set to "
+    "that treatment's name or abbreviation. When a value belongs to a factor level shared by "
+    "several treatments (e.g. all conventional-tillage treatments), set `treatment` to that "
+    "level as the paper writes it (e.g. 'CT'), or list the names comma-separated.\n"
+    "  * When a table reports values per field, block or site and every treatment spans those "
+    "fields/blocks, the treatment-level value is the mean across them: report that mean (say "
+    "so in `notes`) instead of copying the first row.\n"
+    "  Per-treatment soil tables and schedule tables (dates x treatments) are the usual source - "
+    "read them row by row. Do not repeat a whole-site operation once per treatment.\n"
+    "  * Completeness beats brevity: when operations differ by treatment (e.g. an irrigation schedule "
+    "per treatment), list EVERY date of EVERY treatment - one entry per date, naming all the treatments "
+    "that share it. Never stop after a few dates or summarise a schedule.\n"
+)
+
+
+# Facts call only: under the treatment judgement the model tended to leave out fields it saw as site-wide.
+_ALWAYS_FILL = (
+    "- ALWAYS report every one of these the paper gives, even when it is the same for all treatments: "
+    "the soil properties (sand, silt, clay, texture_class, ph, bulk_density, som - soil organic carbon "
+    "counts as som), mean annual precipitation and temperature (map, mat), and management (management "
+    "style), tillage, flux_instrument and primary_crop. Same for all treatments: one fact with `treatment` "
+    "null. Different: one fact per treatment. Never leave a field out because it is uniform or because "
+    "you are focusing on treatment differences.\n"
 )
 
 
@@ -446,7 +490,7 @@ _EVENTS_ELSEWHERE = (
 )
 
 
-def _events_system_prompt() -> str:
+def _events_system_prompt(scoped: bool = False) -> str:
     """Focused prompt for the events-only pass (WORKBENCH_LLM_EVENTS_PASS)."""
     return (
         "You are a meticulous data-entry assistant for GRAND, a public database of "
@@ -471,6 +515,8 @@ def _events_system_prompt() -> str:
         "use null where the paper is silent. Put a verbatim snippet in `source_quote` and a "
         "self-assessed `confidence` in 0..1.\n"
         "- Each event's `type` MUST be exactly one of: " + ", ".join(_EVENT_TYPES) + "."
+        + ("\n" + _SCOPE_RULES.replace("EVERY soil property, crop/management field and event",
+                                        "EVERY event") if scoped else "")
     )
 
 
@@ -512,7 +558,7 @@ def _system_prompt(already_have: list[str], option_choices: dict | None = None,
         "for a tillage pass, set `tillage_instrument` to the implement used "
         "(e.g. moldboard plough, disk harrow, chisel).\n"
         + (_EVENTS_ELSEWHERE if events_elsewhere else "")
-        + (_SCOPE_RULES if scoped else
+        + (_SCOPE_RULES + _ALWAYS_FILL if scoped else
            "- A study may report several treatments; capture the soil/crop values that "
            "characterise the site and note treatment context in `notes`/`source_quote`.\n")
         + "- Each event's `type` MUST be exactly one of: "
@@ -734,7 +780,8 @@ def extract_facts(
 
     def events_call():
         return llm_assist.parse_structured(
-            system=_events_system_prompt(), content=content, output_model=EventsOnly,
+            system=_events_system_prompt(scoped), content=content,
+            output_model=ScopedEventsOnly if scoped else EventsOnly,
             model=settings.WORKBENCH_LLM_MODEL, usage_out=usage,
             # Long schedules need room: the cap costs nothing unless used.
             max_tokens=_EVENTS_MAX_TOKENS,
@@ -750,7 +797,11 @@ def extract_facts(
         events_status = None
         if events_future is not None:
             try:
-                facts.events = events_future.result().events
+                ev = events_future.result()
+                facts.events = ev.events
+                if scoped:  # treatments the events pass names that the facts call didn't
+                    known = {t.name for t in facts.treatments}
+                    facts.treatments += [t for t in ev.treatments if t.name not in known]
                 events_status = "ok"
             except Exception:  # noqa: BLE001 — keep the metadata even if events fail
                 logger.exception("events pass failed")
@@ -758,6 +809,8 @@ def extract_facts(
         facts = _validate(facts, option_choices)
         out = _to_contract(facts)
         _derive_texture(out["metadata"])  # particle-size split wins over text
+        for values in (out.get("treatment_metadata") or {}).values():
+            _derive_texture(values)
         result = {
             "status": "ok",
             **out,
@@ -775,3 +828,47 @@ def extract_facts(
     except Exception:  # noqa: BLE001 — the seam must never raise into the request
         logger.exception("manuscript extraction failed")
         return _empty("failed")
+
+
+# --- treatment mapping (WORKBENCH_LLM_TREATMENT_SCOPE) -------------------------------------------------
+# Once the data's treatment column is known (Soil & Management / Timeline), one short call links the
+# extraction's treatment labels to the data file's treatment names. Names often only connect by meaning
+# ('HI' = 'KT_85%_irrigation', 'Urea + DMPP' = 'Entec'), which string matching can't see.
+class TagLink(BaseModel):
+    label: str
+    data_treatments: list[str]
+
+
+class TreatmentLinks(BaseModel):
+    links: list[TagLink] = PydField(default_factory=list)
+
+
+_MAP_SYSTEM = (
+    "You link treatment labels from a scientific paper to the treatment names in a contributor's data "
+    "file for the same experiment. Data files often use short codes ('CT_soy', 'P-218', 'grass.0n'); the "
+    "paper may use full names, abbreviations or factor levels ('HI' for high irrigation, 'CT' for every "
+    "conventional-tillage treatment, 'L0, L70' for two treatments).\n"
+    "For EACH label, list every data treatment it applies to, using the paper's treatment descriptions to "
+    "connect them (rates, products, brand names, factor levels). Copy data treatment names exactly as "
+    "given. A label naming a factor level applies to every data treatment with that level. If nothing "
+    "indicates which data treatment a label refers to, return an empty list - do not guess. Return one "
+    "link per label, in the order given."
+)
+
+
+def map_treatments(labels: list[str], paper_treatments: list[dict], data_names: list[str]) -> dict | None:
+    """label -> [data treatment names], or None if the assist is off or the call fails (callers then fall
+    back to treatment_match.resolve). Names not in ``data_names`` are dropped."""
+    if not (labels and data_names and llm_assist.is_enabled()):
+        return None
+    import json
+    content = [{"type": "text", "text": json.dumps(
+        {"paper_treatments": paper_treatments, "labels": labels, "data_treatments": data_names}, ensure_ascii=False)}]
+    try:
+        out = llm_assist.parse_structured(system=_MAP_SYSTEM, content=content, output_model=TreatmentLinks,
+                                          model=settings.WORKBENCH_LLM_MODEL, max_tokens=4000)
+    except Exception:  # noqa: BLE001 — mapping is an aid; the deterministic matcher takes over
+        logger.exception("treatment mapping failed")
+        return None
+    valid, wanted = set(data_names), set(labels)
+    return {lk.label: [n for n in lk.data_treatments if n in valid] for lk in out.links if lk.label in wanted}

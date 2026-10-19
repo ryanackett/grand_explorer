@@ -188,6 +188,11 @@
         } else {
           state.global[s.id] = Object.values(pt).reduce((a, l) => a.concat(clone(l)), []);
         }
+      } else if (treatments.length && (paper._per_treatment || {})[s.id]) {
+        // The paper ties some of these events to particular treatments: each treatment gets
+        // the whole-site events plus its own.
+        state.scopes[s.id] = 'per_treatment';
+        treatments.forEach(t => { state.per[t][s.id] = clone(paper._per_treatment[s.id][t] || []); });
       } else {
         state.global[s.id] = clone(paper[s.id]);
       }

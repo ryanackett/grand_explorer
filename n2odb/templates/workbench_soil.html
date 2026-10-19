@@ -205,6 +205,7 @@
 {{ detected_treatments|json_script:"detected-data" }}
 {{ saved_details|json_script:"saved-data" }}
 {{ paper_facts|json_script:"paper-data" }}
+{{ paper_facts_per_treatment|json_script:"paper-per-data" }}
 {{ required_ids|json_script:"required-data" }}
 {{ treatment_column|json_script:"trtcol-data" }}
 {{ leftover_columns|json_script:"columns-data" }}
@@ -219,6 +220,8 @@
   const detected    = JSON.parse(document.getElementById('detected-data').textContent);
   const saved       = JSON.parse(document.getElementById('saved-data').textContent) || {};
   const paper       = JSON.parse(document.getElementById('paper-data').textContent) || {};
+  // Values the paper gives for particular treatments, already matched to the data's names.
+  const paperPer    = JSON.parse(document.getElementById('paper-per-data').textContent) || {};
   const requiredIds = JSON.parse(document.getElementById('required-data').textContent);
   const trtColumn   = JSON.parse(document.getElementById('trtcol-data').textContent);
   const columns     = JSON.parse(document.getElementById('columns-data').textContent) || [];
@@ -269,7 +272,14 @@
     global: Object.assign({}, saved.global || {}),
     per: {},
   };
-  groupNames.forEach(g => { state.scopes[g] = (saved.scopes && saved.scopes[g]) || 'global'; });
+  // A group with treatment-specific paper values opens per-treatment so those values show.
+  const paperScoped = new Set();
+  Object.values(paperPer).forEach(vals => Object.keys(vals).forEach(fid => {
+    if (groupOfField[fid]) paperScoped.add(groupOfField[fid]);
+  }));
+  groupNames.forEach(g => {
+    state.scopes[g] = (saved.scopes && saved.scopes[g]) || (paperScoped.has(g) ? 'per_treatment' : 'global');
+  });
   Object.keys(saved.per_treatment || {}).forEach(t => { state.per[t] = Object.assign({}, saved.per_treatment[t]); });
 
   // Discard any saved value that is no longer a legal option (e.g. free text saved
@@ -284,15 +294,15 @@
   markConfirmed(state.global);
   Object.keys(state.per).forEach(t => markConfirmed(state.per[t]));
 
-  function paperEntry(fid) {
-    const p = paper[fid];
+  function paperEntry(fid, t) {
+    const p = (t && paperPer[t] && paperPer[t][fid]) || paper[fid];  // this treatment's value first
     return p ? { value: p.value, source: 'document', source_quote: p.source_quote } : null;
   }
   function ensureTreatment(t, seedPaper) {
     if (!state.per[t]) state.per[t] = {};
     if (seedPaper) fieldGroups.forEach(g => g.fields.forEach(f => {
       if (!state.per[t][f.id]) {
-        const p = paperEntry(f.id);
+        const p = paperEntry(f.id, t);
         if (p && validForField(f.id, p.value)) state.per[t][f.id] = p;
       }
     }));

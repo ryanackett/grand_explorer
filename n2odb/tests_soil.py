@@ -1,12 +1,15 @@
 """Tests for Stage 4 — soil & management (global or per-treatment)."""
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from n2odb.tests_common import AuthedWorkbenchTestCase
 from django.urls import reverse
 
 from n2odb.models_upload import UploadSubmission
-from n2odb.views_workbench import _detected_treatments, _treatment_column
+from n2odb.services import site_fields
+from n2odb.views_workbench import _detected_treatments, _paper_facts_per_treatment, _treatment_column
 
 
 def _submission(**overrides):
@@ -37,6 +40,42 @@ def _submission(**overrides):
     )
     data.update(overrides)
     return UploadSubmission.objects.create(**data)
+
+
+@patch("n2odb.services.manuscript_extract.map_treatments", return_value=None)  # no live API in tests
+class PaperFactsPerTreatmentTests(TestCase):
+    def test_tagged_values_reach_matching_data_treatments(self, _map):
+        """A paper value tagged 'Conventional tillage' fills the data's 'CT' treatment only; an
+        unmatched tag fills nothing (the site-wide value applies)."""
+        sub = _submission(manuscript_facts={
+            "treatments": [{"name": "Conventional tillage", "abbreviation": "CT", "description": None}],
+            "treatment_metadata": {"Conventional tillage": {"ph": {"value": "5.9", "source_quote": "pH 5.9"}},
+                                   "Fallow": {"ph": {"value": "7.0"}}},
+        })
+        per = _paper_facts_per_treatment(sub, site_fields.treatment_fields(), ["NT", "CT"])
+        self.assertEqual(per, {"CT": {"ph": {"value": "5.9", "source_quote": "pH 5.9"}}})
+
+
+class TreatmentMapTests(TestCase):
+    def test_llm_links_are_used_and_cached(self):
+        """'HI' only connects to 'KT_85%' by meaning: the LLM link is used, and asked for once."""
+        from unittest.mock import patch
+        from n2odb.views_workbench import _treatment_map
+        sub = _submission(manuscript_facts={
+            "treatments": [{"name": "High irrigation", "abbreviation": "HI", "description": "85% of ETc"}],
+            "treatment_metadata": {"HI": {"ph": {"value": "6.1"}}}})
+        with patch("n2odb.services.manuscript_extract.map_treatments", return_value={"HI": ["KT_85%"]}) as m:
+            per = _paper_facts_per_treatment(sub, site_fields.treatment_fields(), ["KT_50%", "KT_85%"])
+            _treatment_map(sub, ["KT_50%", "KT_85%"])
+        self.assertEqual(per, {"KT_85%": {"ph": {"value": "6.1", "source_quote": None}}})
+        self.assertEqual(m.call_count, 1)
+
+    def test_no_mapping_falls_back_to_matcher(self):
+        from unittest.mock import patch
+        sub = _submission(manuscript_facts={"treatments": [], "treatment_metadata": {"CT": {"ph": {"value": "5.9"}}}})
+        with patch("n2odb.services.manuscript_extract.map_treatments", return_value=None):
+            per = _paper_facts_per_treatment(sub, site_fields.treatment_fields(), ["NT", "CT"])
+        self.assertEqual(list(per), ["CT"])
 
 
 class TreatmentDetectionTests(TestCase):

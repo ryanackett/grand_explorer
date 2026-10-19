@@ -1,6 +1,8 @@
 """Tests for Stage 5 — timeline of dated events (global or per-treatment)."""
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from n2odb.tests_common import AuthedWorkbenchTestCase
 from django.urls import reverse
@@ -100,6 +102,40 @@ class PaperEventsTests(TestCase):
         self.assertEqual(grouped["tillage"][0]["date_hint"], "spring")
         # irrigation has no section, so it never appears.
         self.assertNotIn("irrigation", grouped)
+
+
+@patch("n2odb.services.manuscript_extract.map_treatments", return_value=None)  # no live API in tests
+class PaperEventsPerTreatmentTests(TestCase):
+    def test_tagged_events_go_to_their_treatments(self, _map):
+        """Whole-site events go to every treatment; a 'CT'-tagged one only to CT."""
+        events = [{"type": "tillage", "date_iso": "2018-04-01", "fields": [], "treatment": None},
+                  {"type": "tillage", "date_iso": "2018-04-15", "fields": [], "treatment": "CT"}]
+        sub = _submission(manuscript_facts={"events": events, "treatments": []})
+        grouped = _paper_events(sub, {}, ["NT", "CT"])
+        self.assertEqual([e["fields"]["date"] for e in grouped["tillage"]], ["2018-04-01"])
+        per = grouped["_per_treatment"]["tillage"]
+        self.assertEqual([e["fields"]["date"] for e in per["NT"]], ["2018-04-01"])
+        self.assertEqual([e["fields"]["date"] for e in per["CT"]], ["2018-04-01", "2018-04-15"])
+
+    def test_tag_matching_no_data_treatment_is_dropped(self, _map):
+        events = [{"type": "tillage", "date_iso": "2018-04-15", "fields": [], "treatment": "Fallow"},
+                  {"type": "tillage", "date_iso": "2018-04-20", "fields": [], "treatment": "CT"}]
+        sub = _submission(manuscript_facts={"events": events, "treatments": []})
+        grouped = _paper_events(sub, {}, ["NT", "CT"])
+        self.assertEqual(grouped["tillage"], [])  # 'Fallow' (no such data treatment) is dropped
+        self.assertEqual([e["fields"]["date"] for e in grouped["_per_treatment"]["tillage"]["CT"]], ["2018-04-20"])
+
+    def test_unlinkable_names_fall_back_to_whole_site(self, _map):
+        """No label links to any data treatment: tagged events apply to every treatment."""
+        events = [{"type": "tillage", "date_iso": "2018-04-15", "fields": [], "treatment": "Corn high N"}]
+        sub = _submission(manuscript_facts={"events": events, "treatments": []})
+        grouped = _paper_events(sub, {}, ["B2", "A2"])
+        self.assertEqual([e["fields"]["date"] for e in grouped["tillage"]], ["2018-04-15"])
+        self.assertEqual(grouped["_per_treatment"], {})
+
+    def test_untagged_paper_has_no_per_treatment_sections(self, _map):
+        sub = _submission(manuscript_facts={"events": _EVENTS})
+        self.assertEqual(_paper_events(sub, {}, ["NT", "CT"])["_per_treatment"], {})
 
 
 class TimelineTreatmentsTests(TestCase):

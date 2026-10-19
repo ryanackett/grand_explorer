@@ -384,14 +384,16 @@ class TreatmentScopeTests(TestCase):
                                   treatment=treatment)
 
     def test_scoped_contract(self):
+        trts = [mx.TreatmentInfo(name="N0", abbreviation=None, description="unfertilised"),
+                mx.TreatmentInfo(name="N150", abbreviation=None, description="150 kg N/ha")]
         facts = mx.ScopedManuscriptFacts(
-            treatments=["N0", "N150"],
+            treatments=trts,
             facts=[self._fact("ph", "6.1", "N150"), self._fact("ph", "6.0", None),
                    self._fact("ph", "5.9", "N0")],
             events=[self._event("2020-05-01", None), self._event("2020-06-01", "N150")],
         )
         out = mx._to_contract(facts)
-        self.assertEqual(out["treatments"], ["N0", "N150"])
+        self.assertEqual([t["name"] for t in out["treatments"]], ["N0", "N150"])
         self.assertEqual(out["metadata"]["ph"]["value"], "6.0")  # whole-site value wins
         self.assertEqual(out["treatment_metadata"]["N0"]["ph"]["value"], "5.9")
         self.assertEqual(out["treatment_metadata"]["N150"]["ph"]["value"], "6.1")
@@ -407,6 +409,62 @@ class TreatmentScopeTests(TestCase):
             kw = client.messages.parse.call_args.kwargs
             self.assertIs(kw["output_format"], mx.ScopedManuscriptFacts if scoped else ManuscriptFacts)
             self.assertEqual("TREATMENTS." in kw["system"][0]["text"], scoped)
+
+
+    @patch("n2odb.services.llm_assist.is_enabled", return_value=True)
+    def test_scoped_events_pass_tags_events_and_adds_treatments(self, _en):
+        """With scope + events pass, the events call uses the scoped schema; treatments it names
+        that the facts call didn't are added."""
+        def parse(**kw):
+            resp = MagicMock()
+            resp.usage.input_tokens, resp.usage.output_tokens = 10, 5
+            if kw["output_format"] is mx.ScopedEventsOnly:
+                resp.parsed_output = mx.ScopedEventsOnly(
+                    treatments=[mx.TreatmentInfo(name="CT", abbreviation="CT", description=None)],
+                    events=[self._event("2020-06-01", "CT")])
+            else:
+                resp.parsed_output = mx.ScopedManuscriptFacts(
+                    treatments=[mx.TreatmentInfo(name="NT", abbreviation="NT", description=None)],
+                    facts=[self._fact("ph", "6.0", None)], events=[])
+            return resp
+        client = MagicMock()
+        client.messages.parse.side_effect = parse
+        with patch("n2odb.services.llm_assist._client", return_value=client), \
+                self.settings(WORKBENCH_LLM_TREATMENT_SCOPE=True, WORKBENCH_LLM_EVENTS_PASS=True):
+            out = extract_facts("text", [])
+        self.assertEqual([t["name"] for t in out["treatments"]], ["NT", "CT"])
+        self.assertEqual([e["treatment"] for e in out["events"]], ["CT"])
+
+
+class PlaceholderTextTests(TestCase):
+    def test_placeholder_text_is_no_value(self):
+        """'None' / 'Not explicitly reported' instead of null would sit in the form as text to delete."""
+        facts = ManuscriptFacts(
+            facts=[_fact(field="clay", value="Not explicitly reported"), _fact(field="cover_crop", value="None"),
+                   _fact(field="ph", value="6.4")],
+            events=[_event(type="fertilisation", date_iso=None, date_text="not stated", amount=50.0, unit="kg N/ha",
+                           nitrogen_form="N/A")])
+        out = mx._to_contract(facts)
+        self.assertEqual(set(out["metadata"]), {"ph"})
+        ev = out["events"][0]
+        self.assertIsNone(ev["date_text"])
+        self.assertEqual([f["key"] for f in ev["fields"]], ["amount"])
+
+
+class MapTreatmentsTests(TestCase):
+    @patch("n2odb.services.llm_assist.is_enabled", return_value=True)
+    def test_links_filtered_to_known_names_and_labels(self, _en):
+        links = mx.TreatmentLinks(links=[mx.TagLink(label="HI", data_treatments=["KT_85%", "invented"]),
+                                         mx.TagLink(label="ZZ", data_treatments=["KT_50%"])])
+        client = _mock_client(parsed=links)
+        with patch("n2odb.services.llm_assist._client", return_value=client):
+            out = mx.map_treatments(["HI"], [], ["KT_50%", "KT_85%"])
+        self.assertEqual(out, {"HI": ["KT_85%"]})
+
+    def test_off_or_nothing_to_map_returns_none(self):
+        self.assertIsNone(mx.map_treatments([], [], ["A"]))
+        with patch("n2odb.services.llm_assist.is_enabled", return_value=False):
+            self.assertIsNone(mx.map_treatments(["HI"], [], ["A"]))
 
 
 @patch("n2odb.services.llm_assist.is_enabled", return_value=True)
