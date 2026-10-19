@@ -182,6 +182,20 @@ def _is_placeholder(value) -> bool:
     return value is None or str(value).strip().strip(".").lower() in _PLACEHOLDERS | {""}
 
 
+# The tillage fields hold the implement. No-till uses none (it is recorded as Management = No-till), so a
+# value that only says no-till is no value. 'Conventional tillage and no-till' names other tillage: kept.
+_NO_TILL = re.compile(r"\b(?:no[\s-]?till(?:age|ed)?|zero[\s-]?till(?:age)?|direct[\s-]?(?:drill|seed|sow)\w*|untilled|undisturbed|(?:not|never)[\s-]?tilled|nt)\b",
+                      re.I)
+_OTHER_TILLAGE = re.compile(r"conventional|conservation|reduced|minimum|plou?gh|plow|chisel|dis[ck]|harrow|cultivat"
+                            r"|mou?ldboard|rotary|rotavat|tine|ripp|subsoil|strip|\btill", re.I)
+
+
+def is_no_till(value) -> bool:
+    """True when a tillage-implement value describes only no-till."""
+    v = str(value or "")
+    return bool(_NO_TILL.search(v)) and not _OTHER_TILLAGE.search(_NO_TILL.sub(" ", v))
+
+
 def _to_contract(facts: ManuscriptFacts | ScopedManuscriptFacts) -> dict:
     metadata: dict = {}
     by_treatment: dict = {}
@@ -190,7 +204,7 @@ def _to_contract(facts: ManuscriptFacts | ScopedManuscriptFacts) -> dict:
     for f in ordered:
         if f.field not in _VALID_FIELD_IDS:
             continue
-        if _is_placeholder(f.value):
+        if _is_placeholder(f.value) or (f.field == "tillage" and is_no_till(f.value)):
             continue
         entry = {
             "value": f.value,
@@ -211,6 +225,8 @@ def _to_contract(facts: ManuscriptFacts | ScopedManuscriptFacts) -> dict:
         for attr in ("nitrogen_form", "nitrogen_type", "crop", "tillage_instrument", "date_text"):
             if _is_placeholder(getattr(e, attr)):
                 setattr(e, attr, None)
+        if is_no_till(e.tillage_instrument):
+            e.tillage_instrument = None
         if e.amount is not None:
             fields.append({"key": "amount", "label": "Amount", "value": e.amount, "unit": e.unit})
         if e.nitrogen_form:

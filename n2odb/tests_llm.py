@@ -451,6 +451,23 @@ class PlaceholderTextTests(TestCase):
         self.assertEqual([f["key"] for f in ev["fields"]], ["amount"])
 
 
+class NoTillTests(TestCase):
+    def test_no_till_is_no_implement(self):
+        """No-till is recorded as Management; in the tillage-implement fields it is a value to delete."""
+        for v in ("No-till", "no till", "No-tillage", "Zero tillage", "Continuous no-till corn; No-till (continuous corn)",
+                  "No-till (direct sowing on untilled soil, residue retention)", "NT", "Direct drilling",
+                  "None (undisturbed)", "never tilled"):
+            self.assertTrue(mx.is_no_till(v), v)
+        for v in ("Chisel plow", "Conventional tillage (CT) and no-till (NT)", "Tillage to a depth of 25 cm", None, ""):
+            self.assertFalse(mx.is_no_till(v), v)
+        facts = ManuscriptFacts(
+            facts=[_fact(field="tillage", value="No-till"), _fact(field="ph", value="6.4")],
+            events=[_event(type="tillage", date_iso="2020-04-01", date_text=None, tillage_instrument="no-till drill")])
+        out = mx._to_contract(facts)
+        self.assertEqual(set(out["metadata"]), {"ph"})
+        self.assertEqual(out["events"][0]["fields"], [])
+
+
 class MapTreatmentsTests(TestCase):
     @patch("n2odb.services.llm_assist.is_enabled", return_value=True)
     def test_links_filtered_to_known_names_and_labels(self, _en):
