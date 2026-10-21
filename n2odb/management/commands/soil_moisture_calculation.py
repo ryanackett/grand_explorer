@@ -10,7 +10,7 @@ PARTICLE_DENSITY = 2.65
 class Command(BaseCommand):
     help = ('Calculates VWCCalculated and WFPSCalculated from the treatment '
             'bulk density and the alternate measured soil-moisture metric. '
-            'VWC and WFPS are both stored as percentages; bulk density is g/cm3.')
+            'VWC and WFPS are both stored as fractions (0-1); bulk density is g/cm3.')
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -49,11 +49,11 @@ class Command(BaseCommand):
         wfps = pd.to_numeric(df['wfps'], errors='coerce')
 
         # VWCCalculated comes from the *alternate* metric (WFPS):
-        #   VWC(%) = WFPS(%) * porosity
+        #   VWC = WFPS * porosity
         df['vwccalculated'] = (wfps * porosity).round(4)
 
         # WFPSCalculated comes from the *alternate* metric (VWC):
-        #   WFPS(%) = VWC(%) / porosity
+        #   WFPS = VWC / porosity
         df['wfpscalculated'] = (vwc / porosity).round(4)
 
         # Normalise inf -> NaN. NaN is converted to None at object-build time
